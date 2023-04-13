@@ -250,7 +250,7 @@ C11 finally introduced standard support for most threading operations, however t
 
 ### CThreads
 
-CThreads.h includes the correct header based on the compiler, either PosixCTrheads.h or WinCThreads.h.  The corresponding C libraries have the standard C functions for threading.  The libraries ensure functionality that conforms to the C specification.
+CThreads.h includes the correct header based on the compiler, either PosixCTheads.h or WinCThreads.h.  The corresponding C libraries have the standard C functions for threading.  The libraries ensure functionality that conforms to the C specification.
 
 ### Coroutines
 
