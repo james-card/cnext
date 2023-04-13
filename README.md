@@ -6,6 +6,14 @@ I use C in my own work day in and day out.  Over the years, I've developed many 
 
 I'm now releasing this work to the public in the hopes that other people find it useful.
 
+## StringLib
+
+C's string.h really only supports charcter arrays.  For doing anything practical with strings, you really need dynamic memory.  I created StringLib for this purpose.  This library contains utilities for dynamically resizing and appending to string, getting text within a string, etc.
+
+### Bytes Objects
+
+The problem with strings is that they're slow.  When repeatedly concatenating strings, calculating the amout of memory currently used requries traversing each string repeatedly.  To address this, I created a Bytes type that is a pointer to an unsigned char value with metadata about the string stored *BEFORE* the pointer.  This allows for quick computation of the amount of memory a string is currently using and also where to do concatenations.  This also allows for optimizing allocations to reduce the total number of calls to realloc.  Bytes objects can be used anywhere a regular C string can be used, except with a call to `free()`.  All of my data types have their own destructors that return NULL, including strings and Bytes objects.  Use of `free()` is *HIGHLY DISCOURAGED* with these libraries.  You should always use the appropriate destructor for an object instead.
+
 ## Scope
 
 Unlike C++, variables that go out of scope aren't automatically destructed.  The classic way of handling this in C is to use goto statements that point to the end of the function where the code responsible for teardown is.  However, since C99, it's been possible to declare variables other than at the beginning of functions and putting a goto before a variable declaration won't work.  So, we've been left to either continue to declare all our variables at the tops of our functions or painstakingly destroy all our allocated variables on every return statement.  I finally got fed up with this and created a Scope object to handle this problem.  This allows for tracking of variables that are to be destroyed before the function exits.  Having this as an independent object gives the programmer control over what gets cleaned up in this way and what does not.  Just put `scopeBegin();` at the beginning of your function, add pointers to it with `scopeAdd(pointer, destructor);`, and call `scopeEnd();` to cleanup everyting before a return statement.  *MUCH* cleaner.  If you add something to scope that you later want to remove from tracking and keep a valid pointer for, just call `scopeRemove(pointer);`.  If you want to remove it from tracking *AND* call its destructor, call `scopeRelease(pointer);`.
@@ -236,4 +244,27 @@ int myFunction(int lastArgument, ...) {
 
 I will not claim this is an optimized implementation of a data structures library.  I know there are things that could be done to make these libraries more efficient.  My goal was generic functionality and safety, not optimization.  My expectation is that the implementation will be optimized over time.
 
+## Systems Libraries
+
+C11 finally introduced standard support for most threading operations, however there are several other standard systems functions that it has ignored.  Even with the specification providing standardized thread support, there are still compilers that don't support it (most notably MSVC).  I finally gave up waiting for the language and compiler vendors to create what I needed and made my own libraries, both for the missing threads support and other things.
+
+### CThreads
+
+CThreads.h includes the correct header based on the compiler, either PosixCTrheads.h or WinCThreads.h.  The corresponding C libraries have the standard C functions for threading.  The libraries ensure functionality that conforms to the C specification.
+
+### Coroutines
+
+It's not clear to me why support for coroutines was never added to the C specification considering their use in cooperative multitasking operating systems.  To fill this void, I have created a pure C coroutines library that works by subdividing the main stack.  This approach removes the need for dynamic memory of any kind and is well-suited to embedded environments, which is the primary audience of C.
+
+### Processes
+
+For whatever reason, C has never come up with standard functions for processes that allow both stdin and stdout/stderr of a process to be captured.  This is not acceptable to me as a systems language.  I created a Processes.h header that automatically includes either PosixProcess.h or WinProcesses.h and provides basic functionality for interacting with external processes.  The libraries provide consistent functionality across systems.
+
+### Sockets
+
+Despite the fact that networking has existed since the 1960s, C has never standardized network operations.  Each operating system has its own definitions of how socket connections work.  Even worse, there's no support for security which is a must in today's world.  So, I created a Sockets library to provide consistent operations across platforms.  To get secure sockets, define `TLS_SOCKETS_ENABLED` and link with RsaLib, SslKey, SslCertificate, and OpenSSL.
+
+### DirectoryLib
+
+Every major filesystem supports directories, but support for them has never been standardized in C.  To fix that, I created DirectoryLib that provides cross-platform functionality for interacting with directories, most notably creating and removing them.
 
