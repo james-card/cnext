@@ -1,5 +1,4 @@
-# C.next
-# *What C++ should have been.*
+# C.next *What C++ should have been.*
 
 C is an incomplete language.  It lacks standard mechanisms for doing several systems operations and it lacks standadized data structures.  Bjarne Stroustrup recognized this and was driven to create C++.  C++ was a good idea, but the most recent versions have evolved syntax that has gotten away from C.  C++ is also notoriously difficult to debug.
 
