@@ -49,11 +49,15 @@ extern "C"
 #define MAX_SCOPE_VARS 512 // The minimum maximum number of variables per block.
 #endif
 
+typedef struct VariableAndDestructor {
+  volatile void* variable;
+  Destructor     destructor;
+} VariableAndDestructor;
+
 typedef struct Scope {
-  volatile void* variables[MAX_SCOPE_VARS];
-  Destructor     destructors[MAX_SCOPE_VARS];
   u64            numVars;
   u64            maxVars;
+  VariableAndDestructor variablesAndDestructors[MAX_SCOPE_VARS];
 } Scope;
 
 #define scopeBegin() \

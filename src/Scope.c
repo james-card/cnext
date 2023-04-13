@@ -118,8 +118,8 @@ void* scopeAdd_(Scope *scope, volatile void *pointer, ...) {
     return (void*) pointer;
   }
   
-  scope->variables[scope->numVars] = pointer;
-  scope->destructors[scope->numVars] = destructor;
+  scope->variablesAndDestructors[scope->numVars].variable = pointer;
+  scope->variablesAndDestructors[scope->numVars].destructor = destructor;
   scope->numVars++;
   
   printLog(TRACE, "EXIT scopeAdd(scope=%p, pointer=%p, destructor=%p) = {%p}\n",
@@ -159,8 +159,10 @@ void scopePop_(Scope *scope, u64 numEntries) {
   // NULL nodes, just the number of iterations.
   for (u64 iteration = 0; iteration < numEntries; iteration++) {
     u64 index = maxIndex - iteration;
-    if (scope->variables[index] != NULL) {
-      scope->destructors[index]((void*) scope->variables[index]);
+    void *variable = (void*) scope->variablesAndDestructors[index].variable;
+    Destructor destructor = scope->variablesAndDestructors[index].destructor;
+    if (variable != NULL) {
+      destructor(variable);
     }
   }
   
@@ -192,8 +194,10 @@ void* scopeRelease_(Scope *scope, volatile void *pointer) {
   
   u64 numVars = scope->numVars;
   u64 index = 0;
+  void *variable = NULL;
   for (; index < numVars; index++) {
-    if (scope->variables[index] == pointer) {
+    variable = (void*) scope->variablesAndDestructors[index].variable;
+    if (variable == pointer) {
       break;
     }
   }
@@ -206,14 +210,15 @@ void* scopeRelease_(Scope *scope, volatile void *pointer) {
   }
   
   // Call the destructor.
-  scope->destructors[index]((void*) scope->variables[index]);
+  Destructor destructor = scope->variablesAndDestructors[index].destructor;
+  destructor(variable);
   pointer = NULL;
   
   // Scoot everything down.
   numVars--; // Stop one before the last index.
   for (; index < numVars; index++) {
-    scope->variables[index] = scope->variables[index + 1];
-    scope->destructors[index] = scope->destructors[index + 1];
+    scope->variablesAndDestructors[index]
+      = scope->variablesAndDestructors[index + 1];
   }
   scope->numVars = numVars;
   
@@ -254,8 +259,10 @@ void* scopeUpdate_(Scope *scope, volatile void *oldPointer, volatile void *newPo
   
   u64 numVars = scope->numVars;
   u64 index = 0;
+  void *variable = NULL;
   for (; index < numVars; index++) {
-    if (scope->variables[index] == oldPointer) {
+    variable = (void*) scope->variablesAndDestructors[index].variable;
+    if (variable == oldPointer) {
       break;
     }
   }
@@ -271,14 +278,14 @@ void* scopeUpdate_(Scope *scope, volatile void *oldPointer, volatile void *newPo
   // *DO NOT* call the destructor.
   
   // Update the pointer the node tracks.
-  scope->variables[index] = newPointer;
+  scope->variablesAndDestructors[index].variable = newPointer;
   
   if (newPointer == NULL) {
     // Scoot everything down.
     numVars--; // Stop one before the last index.
     for (; index < numVars; index++) {
-      scope->variables[index] = scope->variables[index + 1];
-      scope->destructors[index] = scope->destructors[index + 1];
+      scope->variablesAndDestructors[index]
+        = scope->variablesAndDestructors[index + 1];
     }
     scope->numVars = numVars;
   }
