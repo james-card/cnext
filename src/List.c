@@ -113,9 +113,9 @@ ListNode *listAddFrontEntry_(List *list, const volatile void *key,
   }
   
   if (type == NULL) {
-    if (list->tail != NULL) {
-      type = list->tail->type;
-      printLog(DEBUG, "Defaulting to type of tail.\n");
+    if (list->head != NULL) {
+      type = list->head->type;
+      printLog(DEBUG, "Defaulting to type of head.\n");
     } else {
       type = list->keyType;
       printLog(DEBUG, "Defaulting to type of key.\n");

@@ -298,6 +298,8 @@ typedef struct RedBlackNode {
 ///   (if any).
 /// @param lock A pointer to a mutex that guards the tree in multi-threaded
 ///   environments.
+/// @param lastAddedType TypeDescriptor describing the kind data for the last
+///   value added.
 /// @param root A pointer to the root node of the tree.
 /// @param nil A pointer to a terminating node in the tree.
 typedef struct RedBlackTree {
@@ -308,6 +310,7 @@ typedef struct RedBlackTree {
   TypeDescriptor *keyType;
   FILE *filePointer;
   mtx_t *lock;
+  TypeDescriptor *lastAddedType;
   // A sentinel is used for root and for nil.  These sentinels are
   // created when rbTreeCreate is caled.  root->left should always
   // point to the node which is the root of the tree.  nil points to a
@@ -332,10 +335,10 @@ typedef struct RedBlackNode HashNode;
 /// @param keyType A TypeDescriptor describing the keys used in the hash table.
 /// @param filePointer A pointer to the on-disk data for the hash table.
 /// @param lock A pointer to a mutex that guards access to this hash table.
-/// @param tableSize The number of red-black trees in the table.
-/// @param table The array of red-black trees for the table.
 /// @param lastAddedType TypeDescriptor describing the kind data for the last
 ///   value added.
+/// @param tableSize The number of red-black trees in the table.
+/// @param table The array of red-black trees for the table.
 typedef struct HashTable {
   HashNode *head;
   HashNode *tail;
@@ -343,9 +346,9 @@ typedef struct HashTable {
   TypeDescriptor *keyType;
   FILE *filePointer;
   mtx_t *lock;
+  TypeDescriptor *lastAddedType;
   u64 tableSize;
   RedBlackTree **table;
-  TypeDescriptor *lastAddedType;
 } HashTable;
 
 typedef struct ListNode VectorNode;

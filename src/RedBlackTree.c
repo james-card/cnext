@@ -312,9 +312,9 @@ RedBlackNode *rbInsert_(RedBlackTree *tree, const volatile void *key,
   }
   
   if (type == NULL) {
-    if (tree->tail != NULL) {
-      type = tree->tail->type;
-      printLog(DEBUG, "Defaulting to type of tail.\n");
+    if (tree->lastAddedType != NULL) {
+      type = tree->lastAddedType;
+      printLog(DEBUG, "Defaulting to type of last added element.\n");
     } else {
       type = tree->keyType;
       printLog(DEBUG, "Defaulting to type of key.\n");
@@ -394,6 +394,10 @@ RedBlackNode *rbInsert_(RedBlackTree *tree, const volatile void *key,
     // Last node in the tree
     tree->tail = newNode;
   }
+  
+  // If we made it this far then the add was successful.  Record the type for
+  // future use if desired.
+  tree->lastAddedType = type;
   
   mtx_unlock(tree->lock);
   
