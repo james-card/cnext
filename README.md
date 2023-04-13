@@ -6,6 +6,14 @@ I use C in my own work day in and day out.  Over the years, I've developed many 
 
 I'm now releasing this work to the public in the hopes that other people find it useful.
 
+## Scope
+
+Unlike C++, variables that go out of scope aren't automatically destructed.  The classic way of handling this in C is to use goto statements that point to the end of the function where the code responsible for teardown is.  However, since C99, it's been possible to declare variables other than at the beginning of functions and putting a goto before a variable declaration won't work.  So, we've been left to either continue to declare all our variables at the tops of our functions or painstakingly destroy all our allocated variables on every return statement.  I finally got fed up with this and created a Scope object to handle this problem.  This allows for tracking of variables that are to be destroyed before the function exits.  Having this as an independent object gives the programmer control over what gets cleaned up in this way and what does not.  Just put `scopeBegin();` at the beginning of your function, add pointers to it with `scopeAdd(pointer, destructor);`, and call `scopeEnd();` to cleanup everyting before a return statement.  *MUCH* cleaner.  If you add something to scope that you later want to remove from tracking and keep a valid pointer for, just call `scopeRemove(pointer);`.  If you want to remove it from tracking *AND* call its destructor, call `scopeRelease(pointer);`.
+
+`scopeBegin()` is a macro that declares a Scope object on the stack.  By default, it's large enough to accommodate 512 variables, which is the minimum maximum number of variables permitted by the C specification.  If you'd like to have a different number of variables, simply define `MAX_SCOPE_VARS` to the value of your choice before including Scope.h.  Note, however, that if you attempt to exceed the capcity of the object that scopeAdd will both fail *AND* call the provided destructor since there would be a memory leak otherwise.  For that reason, it's always best to check the return value of scopeAdd.
+
+In theory, scopeRemove or scopeRelease could be costly operations since removal of a value in the middle of the array would requrie moving all the elements after that down by one index.  In practice, however, this doesn't really happen.  The times that this is done are usually within loops that would be adding and removing from the end of the array, so there's virtually no cost in practice.
+
 ## General-Purpose Data Structures
 
 Data structures provided by this library are list, queue, stack, vector, red-black tree, and hash table.  The libraries achieve general-purpose use by specifiying a TypeDescriptor for the keys and values.  All the keys of a data structure have to be of the same type, but the values may be any type.  The type of the value is determined when the value is added to the data structure.
@@ -227,4 +235,5 @@ int myFunction(int lastArgument, ...) {
 ### Disclaimer
 
 I will not claim this is an optimized implementation of a data structures library.  I know there are things that could be done to make these libraries more efficient.  My goal was generic functionality and safety, not optimization.  My expectation is that the implementation will be optimized over time.
+
 
