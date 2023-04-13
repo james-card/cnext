@@ -27,6 +27,12 @@ Because `int8_t` can be defined to `char` and `uint8_t` can be defined to `unsig
 TypeDescriptors allow for determining type at runtime and have application outside of the data structures libraries.  In my other libraries, I sometimes use them to determine the type of arguments in variable argument functions.  For example:
 
 ```
+int myFunction(int lastArgument, ...) {
+  scopeEnter();
+
+  char *key = NULL;
+  TypeDescriptor *type = NULL;
+  void *value = NULL;
   List *list = listCreate(typeString);
   va_list args;
   va_start(args, lastArgument);
@@ -208,6 +214,14 @@ TypeDescriptors allow for determining type at runtime and have application outsi
   }
 
   va_end(args);
+
+  scopeAdd(list, listDestroy);
+
+  int returnValue = doSomething(lastArgument, list);
+
+  scopeEnd();
+  return returnValue;
+}
 ```
 
 ### Disclaimer
