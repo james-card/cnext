@@ -4,7 +4,7 @@ C is an incomplete language.  It lacks standard mechanisms for doing several sys
 
 I use C in my own work day in and day out.  Over the years, I've developed many of the things that C++ provides and that C lacks.  With generics in C17, it finally became possible to have generic, type-safe data structures, and so I completed my data structures libraries using that ability.  At that point, I realized that I had the part of C that C++ was initially intended to provide.
 
-I'm now releasing this work to the public in the hopes that other people find it useful.
+In the continued theme of one iteration past C, I'm now releasing this work to the public as "C.next" in the hopes that other people find it useful.
 
 ## StringLib
 
