@@ -250,7 +250,7 @@ C11 finally introduced standard support for most threading operations, however t
 
 ### CThreads
 
-CThreads.h includes the correct header based on the compiler, either PosixCTheads.h or WinCThreads.h.  The corresponding C libraries have the standard C functions for threading.  The libraries ensure functionality that conforms to the C specification.
+CThreads.h includes the correct header based on the compiler, either PosixCTheads.h or WinCThreads.h.  The corresponding C libraries have the standard C functions for threading.  The libraries ensure functionality that conforms to the C specification.  I have also added thrd_terminate to the supported functions in these libraries.  Even though it is not a best practice to terminate a thread, there are situations where it is necessary and the language should not constrain programmers from necessary operations.  Without a cross-platform way to do this, developers would still have to rely on OS-specific mechanisms for the times that this is necesary.
 
 ### Coroutines
 
