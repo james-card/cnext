@@ -256,7 +256,7 @@ int coconditionWait(Cocondition *cond, Comutex *mtx);
 void* coconditionLastYieldValue(Cocondition *cond);
 
 
-int coroutineKill(Coroutine *targetCoroutine, Comutex **mutexes);
+int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes);
 
 #ifdef __cplusplus
 } // extern "C"
