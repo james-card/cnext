@@ -98,11 +98,12 @@ int cnd_wait(cnd_t *cond, mtx_t *mtx);
 typedef pthread_t thrd_t;
 typedef int (*thrd_start_t)(void*);
 
-#define thrd_success  0
-#define thrd_busy     1
-#define thrd_error    2
-#define thrd_nomem    3
-#define thrd_timedout 4
+#define thrd_success    0
+#define thrd_busy       1
+#define thrd_error      2
+#define thrd_nomem      3
+#define thrd_timedout   4
+#define thrd_terminated PTHREAD_CANCELED
 
 int thrd_create(thrd_t *thr, thrd_start_t func, void *arg);
 #define thrd_current pthread_self
@@ -112,6 +113,7 @@ int thrd_create(thrd_t *thr, thrd_start_t func, void *arg);
 int thrd_join(thrd_t thr, int *res);
 #define thrd_sleep nanosleep
 #define thrd_yield sched_yield
+#define thrd_terminate pthread_cancel
 
 
 // Thread-specific storage support.

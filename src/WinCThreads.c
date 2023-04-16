@@ -1698,6 +1698,30 @@ void thrd_yield(void) {
     Sleep(0);
 }
 
+int thrd_terminate(thrd_t thr) {
+    int returnValue = thrd_success;
+    HANDLE threadHandle = NULL;
+    mtx_lock(attachedThreadsMutex);
+
+    RedBlackNode* node = rbTreeExactQuery(attachedThreads, &thr);
+    if (node != attachedThreads->nil) {
+        threadHandle = (HANDLE)node->value;
+    }
+    mtx_unlock(attachedThreadsMutex);
+
+    if (threadHandle != NULL) {
+        BOOL success = TerminateThread(threadHandle, thrd_terminated);
+        if (success == 0) {
+            returnValue = thrd_error;
+        }
+    } else {
+        // Thread not found.
+        returnValue = thrd_error;
+    }
+
+    return returnValue;
+}
+
 /*
 /// @fn int timespec_get(struct timespec* spec, int base)
 ///

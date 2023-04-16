@@ -96,11 +96,12 @@ int cnd_wait(cnd_t* cond, mtx_t* mtx);
 typedef DWORD thrd_t;
 typedef int (*thrd_start_t)(void*);
 
-#define thrd_success  0
-#define thrd_busy     1
-#define thrd_error    2
-#define thrd_nomem    3
-#define thrd_timedout 4
+#define thrd_success    0
+#define thrd_busy       1
+#define thrd_error      2
+#define thrd_nomem      3
+#define thrd_timedout   4
+#define thrd_terminated 5
 
 int thrd_create(thrd_t* thr, thrd_start_t func, void* arg);
 thrd_t thrd_current(void);
@@ -110,6 +111,7 @@ void thrd_exit(int res);
 int thrd_join(thrd_t thr, int* res);
 int thrd_sleep(const struct timespec* duration, struct timespec* remaining);
 void thrd_yield(void);
+int thrd_terminate(thrd_t thr);
 
 
 // Thread-specific storage support.
