@@ -136,7 +136,7 @@ char *unformatString(char *inputString);
 i32 reverseString(char *inputString);
 int arrayFindValueIndex(const char **array, const char *value);
 int arrayRemoveValue(char **array, const char *value);
-void stringToLowercase(char *string);
+void stringToLowerCase(char *string);
 char *strstrci(const char *haystack, const char *needle);
 int strncmpci(const char *s1, const char *s2, size_t len);
 // strcmpci is just strncmpci with the maximum possible value for len
@@ -185,6 +185,7 @@ bool isNumber(const char *string);
 const char *getProgramName(const char *argv0);
 bool stringStartsWith(const char *haystack, const char *beginning);
 bool stringStartsWithCi(const char *haystack, const char *beginning);
+bool dataIsString(const volatile void *data, u64 dataLength);
 
 // Bytes functions
 Bytes bytesAllocate(Bytes *buffer, u64 size);

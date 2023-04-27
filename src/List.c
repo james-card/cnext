@@ -2066,6 +2066,15 @@ bool listUnitTest() { \
   list2 = listDestroy(list2); \
   list = listDestroy(list); \
  \
+  jsonPosition = 0; \
+  list2 = jsonToList("{\"key1\":\"value1\",\"key2\":false,\"key3\":null}", \
+    &jsonPosition); \
+  if (list2 == NULL) { \
+    printLog(ERR, "Could not convert unformatted JSON to list.\n"); \
+    return false; \
+  } \
+  list2 = listDestroy(list2); \
+ \
   return true; \
 }
 LIST_UNIT_TEST

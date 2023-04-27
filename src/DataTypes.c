@@ -75,17 +75,17 @@ EndianUnion littleEndianUnion = {.integer = 1};
 ///
 /// @return Returns 0 on success, -1 on failure (if value is NULL).
 int byteSwapIfNotLittleEndian(volatile void *value, size_t size) {
-  printLog(TRACE, "ENTER hostToLittleEndian(value = %p, size = %llu)\n",
+  printLog(TRACE, "ENTER hostToLittleEndian(value=%p, size=%llu)\n",
     value, llu(size));
   if (value == NULL) {
     printLog(ERR, "value is NULL.  Cannot convert to little endian.\n");
-    printLog(TRACE, "EXIT hostToLittleEndian(value = %p, size = %llu) = {-1}\n",
+    printLog(TRACE, "EXIT hostToLittleEndian(value=%p, size=%llu) = {-1}\n",
       value, llu(size));
     return -1;
   }
   
   if (HOST_IS_LITTLE_ENDIAN) {
-    printLog(TRACE, "EXIT hostToLittleEndian(value = %p, size = %llu) = {0}\n",
+    printLog(TRACE, "EXIT hostToLittleEndian(value=%p, size=%llu) = {0}\n",
       value, llu(size));
     return 0;
   }
@@ -93,7 +93,7 @@ int byteSwapIfNotLittleEndian(volatile void *value, size_t size) {
   // Swap the bytes.
   reverseMemory(value, size);
   
-  printLog(TRACE, "EXIT hostToLittleEndian(value = %p, size = %llu) = {0}\n",
+  printLog(TRACE, "EXIT hostToLittleEndian(value=%p, size=%llu) = {0}\n",
     value, llu(size));
   return 0;
 }
@@ -108,11 +108,11 @@ int (*littleEndianToHost)(volatile void *value, size_t size) = byteSwapIfNotLitt
 ///
 /// @return Returns 0 on success, -1 on failure (if value is NULL).
 int byteSwapIfNotBigEndian(volatile void *value, size_t size) {
-  printLog(TRACE, "ENTER hostToBigEndian(value = %p, size = %llu)\n",
+  printLog(TRACE, "ENTER hostToBigEndian(value=%p, size=%llu)\n",
     value, llu(size));
   if (value == NULL) {
     printLog(ERR, "value is NULL.  Cannot convert to little endian.\n");
-    printLog(TRACE, "EXIT hostToBigEndian(value = %p, size = %llu) = {-1}\n",
+    printLog(TRACE, "EXIT hostToBigEndian(value=%p, size=%llu) = {-1}\n",
       value, llu(size));
     return -1;
   }
@@ -122,7 +122,7 @@ int byteSwapIfNotBigEndian(volatile void *value, size_t size) {
     reverseMemory(value, size);
   }
   
-  printLog(TRACE, "EXIT hostToBigEndian(value = %p, size = %llu) = {0}\n",
+  printLog(TRACE, "EXIT hostToBigEndian(value=%p, size=%llu) = {0}\n",
     value, llu(size));
   return 0;
 }
@@ -5503,17 +5503,26 @@ bool stringIsBoolean(const char *str) {
   return false;
 }
 
-/// @fn bool strtobool(const char *str)
+/// @fn bool strtobool(const char *str, char **endptr)
 ///
 /// @brief Convert a string representation of a boolean value to its bool
 /// equivalent.
 ///
 /// @param str The string to convert.
+/// @param endptr If this parameter is non-NULL, it will be set to the first
+///   character past the end of the parsed value.
 ///
 /// @return Returns true if the string at str is "true", false otherwise.
-bool strtobool(const char *str) {
+bool strtobool(const char *str, char **endptr) {
   if (strncmp(str, "true", 4) == 0) {
+    if (endptr != NULL) {
+      *endptr = ((char*) str) + 4;
+    }
     return true;
+  }
+  
+  if ((strncmp(str, "false", 5) == 0) && (endptr != NULL)) {
+    *endptr = ((char*) str) + 5;
   }
   
   return false;
