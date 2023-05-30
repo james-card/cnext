@@ -130,8 +130,8 @@ extern RedBlackNode* (*rbTreeAddEntry_)(RedBlackTree *tree,
 #define rbTreeAddEntry(tree, key, value, ...) \
   rbTreeAddEntry_(tree, key, value, ##__VA_ARGS__, NULL)
 RedBlackNode *rbQuery(const RedBlackTree *tree, const volatile void *key);
-void *rbGetValue(const RedBlackTree *tree, const volatile void *key);
-int rbRemove(RedBlackTree *tree, const volatile void *key);
+void *rbTreeGetValue(const RedBlackTree *tree, const volatile void *key);
+int rbTreeRemove(RedBlackTree *tree, const volatile void *key);
 void rbDestroyNode(RedBlackTree*, RedBlackNode*);
 RedBlackTree *rbTreeDestroy(RedBlackTree*);
 RedBlackNode *rbTreePredecessor(RedBlackTree*, RedBlackNode*);

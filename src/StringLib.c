@@ -503,7 +503,8 @@ Bytes getFileContent_(const char *fullPath, i64 start, i64 length, ...) {
     // pointerDestroy instead of bytesDestroy here.
     returnValue = (Bytes) pointerDestroy(returnValue);
     fclose(requestedFile); requestedFile = NULL;
-    printLog(ERR, "Could not %lld Bytes from \"%s\"\n", lld(length), fullPath);
+    printLog(ERR, "Could not read %lld Bytes from \"%s\"\n",
+      lld(length), fullPath);
     printLog(TRACE,
       "EXIT getFileContent(fullPath=\"%s\", start=%lld, length=%lld) = {NULL}\n",
       (fullPath != NULL) ? fullPath : "NULL", lli(start), lli(length));
@@ -889,16 +890,42 @@ char *strReplaceStr(
     return returnValue;
   }
   
-  char *workingString = NULL;
-  straddstr(&workingString, inputString);
+  int findWhatLength = strlen(findWhat);
+  bool replaceToEnd = false;
+  char *findWhatCopy = NULL;
+  straddstr(&findWhatCopy, findWhat);
+  if (findWhat[findWhatLength - 1] == '*') {
+    if (findWhat[findWhatLength - 2] == '\\') {
+      // We're looking for a literal '*' at the end of findWhat.
+      findWhatCopy[findWhatLength - 2] = '*';
+      findWhatCopy[findWhatLength - 1] = '\0';
+      findWhatLength--;
+    } else {
+      // We're looking for everything from findWhat to the end of the string.
+      findWhatCopy[findWhatLength - 1] = '\0';
+      findWhatLength--;
+      // This means we only need to do one pass.
+      replaceToEnd = true;
+    }
+  }
   
-  bool replacementMade = false;
+  const char *currentString = inputString;
   do {
-    returnValue = strReplaceOneStr(
-      workingString, findWhat, replaceText, &replacementMade);
-    workingString = stringDestroy(workingString);
-    workingString = returnValue;
-  } while (replacementMade == true);
+    Bytes nonReplacedBytes = getBytesBetween(currentString, "", findWhatCopy);
+    if (nonReplacedBytes == NULL) {
+      // findWhat not found.
+      nonReplacedBytes = bytesDestroy(nonReplacedBytes);
+      straddstr(&returnValue, currentString);
+      break;
+    }
+    
+    straddstr(&returnValue, str(nonReplacedBytes));
+    currentString += bytesLength(nonReplacedBytes);
+    currentString += findWhatLength;
+    nonReplacedBytes = bytesDestroy(nonReplacedBytes);
+    straddstr(&returnValue, replaceText);
+  } while ((replaceToEnd == false) && (*currentString != '\0'));
+  findWhatCopy = stringDestroy(findWhatCopy);
   
   printLog(FLOOD,
     "EXIT strReplaceStr(inputString=\"%s\", findWhat=\"%s\", "
@@ -1254,7 +1281,9 @@ Bytes* stringToBytesArray_(const char *input, ...) {
         const char *delimiterCandidateAt
           = strstr(nextField, delimiterCandidate);
         if ((delimiterCandidateAt != NULL)
-          && (delimiterCandidateAt < nextDelimiterAt)
+          && ((delimiterCandidateAt < nextDelimiterAt)
+            || (nextDelimiterAt == NULL)
+          )
         ) {
           nextDelimiterAt = delimiterCandidateAt;
           fieldDelimiter = delimiterCandidate;
@@ -1862,7 +1891,7 @@ int arrayRemoveValue(char **array, const char *value) {
   return returnValue;
 }
 
-/// @fn void stringToLowercase(char *string)
+/// @fn void stringToLowerCase(char *string)
 ///
 /// @brief Convert a string to a lower-case version of itself.  Modifies the
 /// string in place.
@@ -1870,12 +1899,12 @@ int arrayRemoveValue(char **array, const char *value) {
 /// @param string The string to convert to lower-case.  Modified in place.
 ///
 /// @return This function returns no value.
-void stringToLowercase(char *string) {
-  printLog(TRACE, "ENTER stringToLowercase(string=\"%s\")\n",
+void stringToLowerCase(char *string) {
+  printLog(TRACE, "ENTER stringToLowerCase(string=\"%s\")\n",
     (string != NULL) ? string : "{NULL}");
   
   if (string == NULL) {
-    printLog(TRACE, "EXIT stringToLowercase(string=NULL)\n");
+    printLog(TRACE, "EXIT stringToLowerCase(string=NULL)\n");
     return;
   }
   
@@ -1884,7 +1913,7 @@ void stringToLowercase(char *string) {
     string[i] = (char) tolower((unsigned char) string[i]);
   }
   
-  printLog(TRACE, "EXIT stringToLowercase(string=\"%s\")\n", string);
+  printLog(TRACE, "EXIT stringToLowerCase(string=\"%s\")\n", string);
   return;
 }
 
@@ -3091,6 +3120,55 @@ Bytes hexStringToBytes(const char *hexString, u64 length) {
   
   printLog(TRACE, "EXIT hexStringToBytes(hexString=%p, length=%llu) = {%p}\n",
     hexString, llu(length), returnValue);
+  return returnValue;
+}
+
+/// @fn bool dataIsString(const volatile void *data, u64 dataLength)
+///
+/// @brief Determine whether or not a block of arbitrary data constitutes a
+/// C string.
+///
+/// @param data A pointer to an arbitrary block of memory (cast to a void*).
+/// @param dataLength The number of bytes pointed to by the data pointer.
+///
+/// @return Returns true if the data provided constitutes a C string, false
+/// if not.
+bool dataIsString(const volatile void *data, u64 dataLength) {
+  printLog(TRACE, "ENTER dataIsString(data=%p, dataLength=%llu)\n",
+    data, llu(dataLength));
+  
+  u8 *dataBytes = (u8*) data;
+  bool returnValue = true;
+  u64 lastCharIndex = 0;
+  if (dataLength > 0) {
+    lastCharIndex = dataLength - 1;
+  }
+  
+  if (data == NULL) {
+    // NULL data is not a string.
+    returnValue = false;
+    printLog(TRACE, "EXIT dataIsString(data=%p, dataLength=%llu) = {%s}\n",
+      data, llu(dataLength), boolNames[returnValue]);
+    return returnValue;
+  }
+  
+  u64 i = 0;
+  for (i = 0; i < lastCharIndex; i++) {
+    if (((dataBytes[i] < 32) || (dataBytes[i] > 126))
+      && (dataBytes[i] != '\r') && (dataBytes[i] != '\n')
+      && (dataBytes[i] != '\0')
+    ) {
+      returnValue = false;
+      break;
+    }
+  }
+  
+  if (dataBytes[i] != '\0') {
+    returnValue = false;
+  }
+  
+  printLog(TRACE, "EXIT dataIsString(data=%p, dataLength=%llu) = {%s}\n",
+    data, llu(dataLength), boolNames[returnValue]);
   return returnValue;
 }
 

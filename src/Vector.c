@@ -618,7 +618,7 @@ Vector* jsonToVector(const char *jsonText, long long int *position) {
   }
   
   const char *charAt
-    = &(jsonText[*position + strspn(&jsonText[*position], " \t\n")]);
+    = &(jsonText[*position + strspn(&jsonText[*position], " \t\r\n")]);
   if (*charAt != '[') {
     printLog(ERR, "No opening bracket in jsonText.  Malformed JSON input.\n");
     printLog(TRACE,
@@ -632,9 +632,9 @@ Vector* jsonToVector(const char *jsonText, long long int *position) {
   
   *position += ((long long int) ((intptr_t) charAt))
     - ((long long int) ((intptr_t) &jsonText[*position]));
+  (*position)++;
   while ((*position >= 0) && (jsonText[*position] != '\0')) {
-    (*position)++;
-    *position += strspn(&jsonText[*position], " \t\n");
+    *position += strspn(&jsonText[*position], " \t\r\n");
     char charAtPosition = jsonText[*position];
     if (charAtPosition == ']') {
       // End of vector.
@@ -645,6 +645,7 @@ Vector* jsonToVector(const char *jsonText, long long int *position) {
     if ((charAtPosition != '"') && (charAtPosition != '{')
       && (charAtPosition != '[') && !stringIsNumber(&jsonText[*position])
       && !stringIsBoolean(&jsonText[*position])
+      && (strncmp(&jsonText[*position], "null", 4) != 0)
     ) {
       printLog(ERR, "Malformed JSON input.\n");
       returnValue = vectorDestroy(returnValue);
@@ -659,27 +660,26 @@ Vector* jsonToVector(const char *jsonText, long long int *position) {
       vectorSetEntry(returnValue, i++, stringValue, typeString);
       *position += bytesLength(stringValue) + 2;
       stringValue = bytesDestroy(stringValue);
-      if (jsonText[*position] == ',') {
-        (*position)++;
-      }
     } else if (stringIsNumber(&jsonText[*position])) {
       // Parse the number.
+      char *endpos = NULL;
       if (stringIsInteger(&jsonText[*position])) {
-        i64 longLongValue = (i64) strtoll(&jsonText[*position], NULL, 10);
+        i64 longLongValue = (i64) strtoll(&jsonText[*position], &endpos, 10);
         vectorSetEntry(returnValue, i++, &longLongValue, typeI64);
       } else { // stringIsFloat(&jsonText[*position])
-        double doubleValue = strtod(&jsonText[*position], NULL);
+        double doubleValue = strtod(&jsonText[*position], &endpos);
         vectorSetEntry(returnValue, i++, &doubleValue, typeDouble);
       }
       *position
-        += ((long long int) ((intptr_t) strchr(&jsonText[*position], '\n')))
+        += ((long long int) ((intptr_t) endpos))
         - ((long long int) ((intptr_t) &jsonText[*position]));
     } else if (stringIsBoolean(&jsonText[*position])) {
       // Parse the boolean.
-      bool boolValue = strtobool(&jsonText[*position]);
+      char *endpos = NULL;
+      bool boolValue = strtobool(&jsonText[*position], &endpos);
       vectorSetEntry(returnValue, i++, &boolValue, typeBool);
       *position
-        += ((long long int) ((intptr_t) strchr(&jsonText[*position], '\n')))
+        += ((long long int) ((intptr_t) endpos))
         - ((long long int) ((intptr_t) &jsonText[*position]));
     } else if (charAtPosition == '{') {
       // Parse the key-value data structure (list).
@@ -696,7 +696,7 @@ Vector* jsonToVector(const char *jsonText, long long int *position) {
         typeHashTableNoCopy);
       node->type = typeHashTable;
       // position is automatically updated in this case.
-    } else { // (charAtPosition == '[')
+    } else if (charAtPosition == '[') {
       // Parse the vector.
       Vector *vector = jsonToVector(jsonText, position);
       if (vector == NULL) {
@@ -710,6 +710,13 @@ Vector* jsonToVector(const char *jsonText, long long int *position) {
       VectorNode *node = vectorSetEntry(returnValue, i++, vector, typeVectorNoCopy);
       node->type = typeVector;
       // position is automatically updated in this case.
+    } else { // (strncmp(&jsonText[*position], "null", 4) != 0)
+      vectorSetEntry(returnValue, i++, NULL, typePointer);
+      *position += 4;
+    }
+    *position += strspn(&jsonText[*position], " \t\r\n");;
+    if (jsonText[*position] == ',') {
+      (*position)++;
     }
   }
   
@@ -1143,6 +1150,17 @@ bool vectorUnitTest() { \
   } \
   vector = (Vector*) vectorDestroy(vector); \
   listDestroy(list); list = NULL; \
+   \
+  long long int jsonPosition = 0; \
+  vector \
+    = jsonToVector("[\"value1\",false,null]", \
+    &jsonPosition); \
+  if (vector == NULL) { \
+    printLog(ERR, "Could not convert unformatted JSON to list.\n"); \
+    return false; \
+  } \
+  vector = vectorDestroy(vector); \
+ \
   return true; \
 }
 VECTOR_UNIT_TEST

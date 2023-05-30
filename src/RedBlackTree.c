@@ -960,7 +960,7 @@ void rbDestroyNode(RedBlackTree *tree, RedBlackNode *z) {
   printLog(TRACE, "EXIT rbDestroyNode(tree=%p, z=%p) = {}\n", tree, z);
 }
 
-/// @fn int rbRemove(RedBlackTree *tree, const volatile void *key)
+/// @fn int rbTreeRemove(RedBlackTree *tree, const volatile void *key)
 ///
 /// @brief Remove and destroy a node from the tree identified by key.
 ///
@@ -971,11 +971,11 @@ void rbDestroyNode(RedBlackTree *tree, RedBlackNode *z) {
 ///
 /// @note If there are multiple nodes with a matching key, this function
 ///   removes and destorys the matching node highest in the tree.
-int rbRemove(RedBlackTree *tree, const volatile void *key) {
-  printLog(TRACE, "ENTER rbRemove(tree=%p, key=%p)\n", tree, key);
+int rbTreeRemove(RedBlackTree *tree, const volatile void *key) {
+  printLog(TRACE, "ENTER rbTreeRemove(tree=%p, key=%p)\n", tree, key);
   
   if (tree == NULL) {
-    printLog(TRACE, "EXIT rbRemove(tree=%p, key=%p) = {%p}\n",
+    printLog(TRACE, "EXIT rbTreeRemove(tree=%p, key=%p) = {%p}\n",
       tree, key, (void*) NULL);
     return -1;
   }
@@ -989,12 +989,12 @@ int rbRemove(RedBlackTree *tree, const volatile void *key) {
     rbDestroyNode(tree, node);
     mtx_unlock(tree->lock);
     
-    printLog(TRACE, "EXIT rbRemove(tree=%p, key=%p) = {0}\n", tree, key);
+    printLog(TRACE, "EXIT rbTreeRemove(tree=%p, key=%p) = {0}\n", tree, key);
     return 0;
   } else {
     mtx_unlock(tree->lock);
     
-    printLog(TRACE, "EXIT rbRemove(tree=%p, key=%p) = {-1}\n", tree, key);
+    printLog(TRACE, "EXIT rbTreeRemove(tree=%p, key=%p) = {-1}\n", tree, key);
     return -1;
   }
 }
@@ -1372,7 +1372,7 @@ RedBlackTree* listToRbTree(const List *list) {
   return tree;
 }
 
-/// @fn void *rbGetValue(const RedBlackTree *tree, const volatile void *key)
+/// @fn void *rbTreeGetValue(const RedBlackTree *tree, const volatile void *key)
 ///
 /// @brief Get a value from the red black tree given the key for its node.
 ///
@@ -1380,12 +1380,12 @@ RedBlackTree* listToRbTree(const List *list) {
 /// @param key A pointer to the key to search for.
 ///
 /// @return Returns a pointer to the found value on success, NULL on failure.
-void *rbGetValue(const RedBlackTree *tree, const volatile void *key) {
-  printLog(TRACE, "ENTER rbGetValue(tree=%p, key=%p)\n", tree, key);
+void *rbTreeGetValue(const RedBlackTree *tree, const volatile void *key) {
+  printLog(TRACE, "ENTER rbTreeGetValue(tree=%p, key=%p)\n", tree, key);
   
   if ((tree == NULL) || (key == NULL)) {
     printLog(ERR, "Invalid parameters.\n");
-    printLog(TRACE, "EXIT rbGetValue(tree=%p, key=%p) = {NULL}\n", tree, key);
+    printLog(TRACE, "EXIT rbTreeGetValue(tree=%p, key=%p) = {NULL}\n", tree, key);
     return NULL;
   }
   
@@ -1395,7 +1395,7 @@ void *rbGetValue(const RedBlackTree *tree, const volatile void *key) {
     x = (void*) node->value;
   }
   
-  printLog(TRACE, "EXIT rbGetValue(tree=%p, key=%p) = {%p}\n", tree, key, x);
+  printLog(TRACE, "EXIT rbTreeGetValue(tree=%p, key=%p) = {%p}\n", tree, key, x);
   return x;
 }
 
@@ -1495,8 +1495,8 @@ bool redBlackTreeUnitTest() { \
     return false; \
   } \
  \
-  if (rbRemove(NULL, NULL) >= 0) { \
-    printLog(ERR, "rbRemove succeeded and should not have.\n"); \
+  if (rbTreeRemove(NULL, NULL) >= 0) { \
+    printLog(ERR, "rbTreeRemove succeeded and should not have.\n"); \
     return false; \
   } \
  \
@@ -1588,8 +1588,8 @@ bool redBlackTreeUnitTest() { \
     return false; \
   } \
  \
-  if (rbRemove(tree, NULL) >= 0) { \
-    printLog(ERR, "rbRemove succeeded and should not have.\n"); \
+  if (rbTreeRemove(tree, NULL) >= 0) { \
+    printLog(ERR, "rbTreeRemove succeeded and should not have.\n"); \
     return false; \
   } \
  \
@@ -1811,7 +1811,7 @@ bool redBlackTreeUnitTest() { \
     return false; \
   } \
  \
-  if (rbRemove(tree, "key2") != 0) { \
+  if (rbTreeRemove(tree, "key2") != 0) { \
     printLog(ERR, "Could not remove key2 from tree.\n"); \
     return false; \
   } \

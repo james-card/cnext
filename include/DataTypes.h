@@ -107,7 +107,7 @@ bool stringIsInteger(const char *str);
 bool stringIsFloat(const char *str);
 bool stringIsNumber(const char *str);
 bool stringIsBoolean(const char *str);
-bool strtobool(const char *str);
+bool strtobool(const char *str, char **endptr);
 
 /// @struct TypeDescriptor
 /// @brief This is the set of information required to describe any type of
@@ -548,7 +548,7 @@ Type* jsonTo##Type(const char *jsonText, long long int *position) { \
   } \
    \
   const char *charAt \
-    = &(jsonText[*position + strspn(&jsonText[*position], " \t\n")]); \
+    = &(jsonText[*position + strspn(&jsonText[*position], " \t\r\n")]); \
   if (*charAt != '{') { \
     printLog(ERR, "No opening brace in jsonText.  Malformed JSON input.\n"); \
     printLog(TRACE, \
@@ -561,9 +561,9 @@ Type* jsonTo##Type(const char *jsonText, long long int *position) { \
    \
   *position += ((long long int) ((intptr_t) charAt)) \
     - ((long long int) ((intptr_t) &jsonText[*position])); \
+  (*position)++; \
   while ((*position >= 0) && (jsonText[*position] != '\0')) { \
-    (*position)++; \
-    *position += strspn(&jsonText[*position], " \t\n"); \
+    *position += strspn(&jsonText[*position], " \t\r\n"); \
     char charAtPosition = jsonText[*position]; \
     if (charAtPosition == '}') { \
       /* End of object. */ \
@@ -588,9 +588,10 @@ Type* jsonTo##Type(const char *jsonText, long long int *position) { \
     } \
     printLog(DEBUG, "Getting value for \"%s\".\n", key); \
      \
-    /* Start of value is 4 past the start of name plus the name due to the */ \
-    /* double quotes, colon, and white space. */ \
-    *position += bytesLength(key) + 4; \
+    /* Start of value is 3 past the start of name plus the name due to the */ \
+    /* double quotes, and colon. */ \
+    *position += bytesLength(key) + 3; \
+    *position += strspn(&jsonText[*position], " \t\r\n"); \
     charAtPosition = jsonText[*position]; \
     if ((charAtPosition != '"') && (charAtPosition != '{') \
       && (charAtPosition != '[') && !stringIsNumber(&jsonText[*position]) \
@@ -612,27 +613,26 @@ Type* jsonTo##Type(const char *jsonText, long long int *position) { \
       unescapeBytes(stringValue); \
       prefix##AddEntry(returnValue, key, stringValue, typeBytesNoCopy)->type = typeBytes; \
       *position += skipLength + 2; \
-      if (jsonText[*position] == ',') { \
-        (*position)++; \
-      } \
     } else if (stringIsNumber(&jsonText[*position])) { \
       /* Parse the number. */ \
+      char *endpos = NULL; \
       if (stringIsInteger(&jsonText[*position])) { \
-        i64 longLongValue = (i64) strtoll(&jsonText[*position], NULL, 10); \
+        i64 longLongValue = (i64) strtoll(&jsonText[*position], &endpos, 10); \
         prefix##AddEntry(returnValue, key, &longLongValue, typeI64); \
       } else { /* stringIsFloat(&jsonText[*position]) */ \
-        double doubleValue = strtod(&jsonText[*position], NULL); \
+        double doubleValue = strtod(&jsonText[*position], &endpos); \
         prefix##AddEntry(returnValue, key, &doubleValue, typeDouble); \
       } \
       *position \
-        += ((long long int) ((intptr_t) strchr(&jsonText[*position], '\n'))) \
+        += ((long long int) ((intptr_t) endpos)) \
         - ((long long int) ((intptr_t) &jsonText[*position])); \
     } else if (stringIsBoolean(&jsonText[*position])) { \
       /* Parse the boolean. */ \
-      bool boolValue = strtobool(&jsonText[*position]); \
+      char *endpos = NULL; \
+      bool boolValue = strtobool(&jsonText[*position], &endpos); \
       prefix##AddEntry(returnValue, key, &boolValue, typeBool); \
       *position \
-        += ((long long int) ((intptr_t) strchr(&jsonText[*position], '\n'))) \
+        += ((long long int) ((intptr_t) endpos)) \
         - ((long long int) ((intptr_t) &jsonText[*position])); \
     } else if (charAtPosition == '{') { \
       /* Parse the key-value data structure. */ \
@@ -668,9 +668,11 @@ Type* jsonTo##Type(const char *jsonText, long long int *position) { \
       /* position is automatically updated in this case. */ \
     } else { /* (strncmp(&jsonText[*position], "null", 4) == 0) */ \
       prefix##AddEntry(returnValue, key, NULL, typePointer); \
-      *position \
-        += ((long long int) ((intptr_t) strchr(&jsonText[*position], '\n'))) \
-        - ((long long int) ((intptr_t) &jsonText[*position])); \
+      *position += 4; \
+    } \
+    *position += strspn(&jsonText[*position], " \t\r\n"); \
+    if (jsonText[*position] == ',') { \
+      (*position)++; \
     } \
     key = bytesDestroy(key); \
   } \

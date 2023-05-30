@@ -86,9 +86,7 @@ void* scopeUpdate_(Scope *scope, volatile void *oldPointer, volatile void *newPo
     *variableAddress = temp; \
   }
 #define scopeRemove(oldPointer) \
-  { \
-    scopeUpdate_(&_scope_, (oldPointer), NULL); \
-  }
+  scopeUpdate_(&_scope_, (oldPointer), NULL)
 
 #define SCOPE_ENTER(argFormat, ...) \
   printLog(TRACE, "ENTER %s(" argFormat ")", __func__, ##__VA_ARGS__); \

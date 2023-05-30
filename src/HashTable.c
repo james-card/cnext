@@ -483,7 +483,7 @@ i32 htRemoveEntry(HashTable *table, const volatile void *key) {
       }
       table->size--;
     }
-    rbRemove(tree, key);
+    rbTreeRemove(tree, key);
     if (tree->size == 0) {
       rbTreeDestroy(tree);
       table->table[index] = NULL;
@@ -624,7 +624,6 @@ HashTable *htCopy(const HashTable *table) {
   printLog(TRACE, "ENTER htCopy(table=%p)\n", table);
   
   HashTable *copy = NULL;
-  HashNode *previousCopyTail = NULL;
   
   if (table == NULL) {
     printLog(ERR, "HashTable provided is NULL.\n");
@@ -638,34 +637,9 @@ HashTable *htCopy(const HashTable *table) {
     printLog(WARN, "Could not lock table mutex.\n");
   }
   
-  for (u64 i = 0; i < table->tableSize; i++) {
-    if (table->table[i] != NULL) {
-      // Break the links to other trees.
-      HashNode *prev = NULL, *next = NULL;
-      if (table->table[i]->head != NULL) {
-        prev = table->table[i]->head->prev;
-        table->table[i]->head->prev = NULL;
-      }
-      if (table->table[i]->tail != NULL) {
-        next = table->table[i]->tail->next;
-        table->table[i]->tail->next = NULL;
-      }
-      copy->table[i] = rbTreeCopy(table->table[i]);
-      copy->table[i]->head->prev = previousCopyTail;
-      if (previousCopyTail != NULL) {
-        previousCopyTail->next = copy->table[i]->head;
-      }
-      previousCopyTail = copy->table[i]->tail;
-      if (copy->head == NULL) {
-        copy->head = copy->table[i]->head;
-      }
-      // Restore the links
-      table->table[i]->head->prev = prev;
-      table->table[i]->tail->next = next;
-    }
+  for (HashNode *cur = table->head; cur != NULL; cur = cur->next) {
+    htAddEntry(copy, cur->key, cur->value, cur->type);
   }
-  copy->size = table->size;
-  copy->tail = previousCopyTail;
   
   mtx_unlock(table->lock);
   

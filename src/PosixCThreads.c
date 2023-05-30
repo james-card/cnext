@@ -150,6 +150,9 @@ typedef struct PthreadCreateWrapperArgs {
 } PthreadCreateWrapperArgs;
 
 void *pthread_create_wrapper(void* wrapper_args) {
+  // We want to be able to kill this thread if we need to.
+  pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
+  
   PthreadCreateWrapperArgs *cthread_args
     = (PthreadCreateWrapperArgs*) wrapper_args;
   thrd_start_t func = cthread_args->func;
@@ -169,6 +172,7 @@ void *pthread_create_wrapper(void* wrapper_args) {
 
 int thrd_create(thrd_t *thr, thrd_start_t func, void *arg) {
   int returnValue = thrd_success;
+  
   PthreadCreateWrapperArgs *wrapper_args
     = (PthreadCreateWrapperArgs*) malloc(sizeof(PthreadCreateWrapperArgs));
   if (wrapper_args == NULL) {
