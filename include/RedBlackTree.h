@@ -156,7 +156,7 @@ RedBlackTree* listToRbTree(const List *list);
 RedBlackTree* jsonToRedBlackTree(const char *jsonText, long long int *position);
 RedBlackTree *xmlToRedBlackTree(const char *inputData);
 i32 rbTreeClear(RedBlackTree *tree);
-RedBlackTree *rbTreeFromByteArray_(const volatile void *array, u64 *length, bool inPlaceData, bool disableThreadSafety ...);
+RedBlackTree *rbTreeFromByteArray_(const volatile void *array, u64 *length, bool inPlaceData, bool disableThreadSafety, ...);
 #define rbTreeFromByteArray(array, length, ...) \
   rbTreeFromByteArray_(array, length, ##__VA_ARGS__, 0, 0)
 bool redBlackTreeUnitTest();

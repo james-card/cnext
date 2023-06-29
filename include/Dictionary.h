@@ -62,25 +62,24 @@ int keyValueStringToDictionaryEntry(Dictionary **dictionary, char *inputString);
 Dictionary* kvStringToDictionary(const char *inputString,
   const char *separator);
 Dictionary* parseCommandLine(int argc, char **argv);
-extern Dictionary* (*xmlToDictionary)(const char *inputData);
 char* getUserValue(Dictionary *args, const char *argName, const char *prompt,
   const char *defaultValue);
 
 // Dictionary functions.
-extern char* (*dictionaryToString)(const Dictionary *dictionary);
+char* dictionaryToString(const Dictionary *dictionary);
 #define dictionaryAdd rbTreeAddEntry
 DictionaryEntry* dictionaryAddEntry_(Dictionary **dictionary, const volatile void *key,
   const volatile void *value, TypeDescriptor *type, ...);
 #define dictionaryAddEntry(dictionary, key, value, ...) \
   dictionaryAddEntry_(dictionary, key, value, ##__VA_ARGS__, typeString)
-extern Dictionary* (*dictionaryDestroy)(Dictionary *dictionary);
+#define dictionaryDestroy rbTreeDestroy
 extern int (*dictionaryRemove)(Dictionary *dictionary, const char *key);
 /// @def dictionaryToXml
 /// Method for converting a dictionary to its XML representation.
 #define dictionaryToXml(dictionary, elementName, ...)  \
   listToXml_((const List*) dictionary, elementName, ##__VA_ARGS__, false)
 extern DictionaryEntry* (*dictionaryGetEntry)(const Dictionary *dictionary, const volatile void *key);
-extern void* (*dictionaryGetValue)(const Dictionary *dictionary, const volatile void *key);
+void* dictionaryGetValue(const Dictionary *dictionary, const volatile void *key);
 #define dictionaryToList rbTreeToList
 extern int (*dictionaryCompare)(const Dictionary *dictionaryA, const Dictionary *dictionaryB);
 Dictionary *dictionaryCreate(TypeDescriptor *type);
@@ -93,6 +92,7 @@ Dictionary *dictionaryCreate(TypeDescriptor *type);
   rbTreeFromByteArray_(array, length, ##__VA_ARGS__, 0, 0)
 #define dictionaryToByteArray(dictionary, length) \
   listToByteArray((List*) dictionary, length)
+#define xmlToDictionary xmlToRedBlackTree
 
 #ifdef __cplusplus
 } // extern "C"

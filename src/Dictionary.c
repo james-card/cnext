@@ -39,12 +39,8 @@
 #define logFile stderr
 #endif
 
-Dictionary* (*xmlToDictionary)(const char*) = xmlToRedBlackTree;
 int (*dictionaryRemove)(Dictionary*, const char*) = (int (*)(Dictionary*, const char*)) rbTreeRemove;
-Dictionary* (*dictionaryDestroy)(Dictionary*) = rbTreeDestroy;
-char* (*dictionaryToString)(const Dictionary*) = (char* (*)(const Dictionary*)) listToString;
 DictionaryEntry* (*dictionaryGetEntry)(const Dictionary*, const volatile void*) = (DictionaryEntry* (*)(const Dictionary*, const volatile void*)) rbTreeGetEntry;
-void* (*dictionaryGetValue)(const Dictionary *dictionary, const volatile void *key) = (void* (*)(const Dictionary *dictionary, const volatile void *key)) rbTreeGetValue;
 int (*dictionaryCompare)(const Dictionary *dictionaryA, const Dictionary *dictionaryB) = rbTreeCompare;
 
 /// @fn Dictionary *dictionaryCreate(TypeDescriptor *type)
@@ -350,5 +346,33 @@ char* getUserValue(Dictionary *args, const char *argName, const char *prompt,
   }
 
   return returnValue;
+}
+
+/// @fn char* dictionaryToString(const Dictionary *dictionary)
+///
+/// @brief Wrapper function to create a string representation of a Dictionary.
+/// This is a wrapper function instead of a function pointer because C doesn't
+/// allow initializers to other function pointers from function pointers.
+///
+/// @param dictionary A pointer to a Dictionary object to convert to a string.
+///
+/// @return Returns a string representation of the Dictionary on success, NULL
+/// on failure.
+char* dictionaryToString(const Dictionary *dictionary) {
+  return listToString((List*) dictionary);
+}
+
+/// @fn void* dictionaryGetValue(const Dictionary *dictionary, const volatile void *key)
+///
+/// @brief Wrapper function to get a value from a Dictionary.
+/// This is a wrapper function instead of a function pointer because C doesn't
+/// allow initializers to other function pointers from function pointers.
+///
+/// @param dictionary A pointer to a Dictionary object to search.
+/// @param key The key of the value to search for.
+///
+/// @return Returns a pointer to the located value on success, NULL on failure.
+void* dictionaryGetValue(const Dictionary *dictionary, const volatile void *key) {
+  return rbTreeGetValue(dictionary, key);
 }
 
