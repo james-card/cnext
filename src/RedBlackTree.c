@@ -1521,7 +1521,7 @@ void *rbTreeGetValue(const RedBlackTree *tree, const volatile void *key) {
   printLog(TRACE, "ENTER rbTreeGetValue(tree=%p, key=%p)\n", tree, key);
   
   if ((tree == NULL) || (key == NULL)) {
-    printLog(ERR, "Invalid parameters.\n");
+    printLog(DEBUG, "Invalid parameters.\n");
     printLog(TRACE, "EXIT rbTreeGetValue(tree=%p, key=%p) = {NULL}\n", tree, key);
     return NULL;
   }
