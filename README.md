@@ -86,7 +86,7 @@ int myFunction(int lastArgument, ...) {
     char *stringParam = NULL;
     Bytes bytesParam = NULL;
 
-        switch (typeIndex) {
+    switch (typeIndex) {
       case TYPE_BOOL: {
         boolParam = va_arg(args, int);
         value = &boolParam;
