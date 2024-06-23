@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                     Copyright (c) 2012-2023 James Card                     //
+//                     Copyright (c) 2012-2024 James Card                     //
 //                                                                            //
 // Permission is hereby granted, free of charge, to any person obtaining a    //
 // copy of this software and associated documentation files (the "Software"), //
@@ -29,7 +29,7 @@
 /// @file
 
 #include "Stack.h"
-#ifdef LOGGING_ENABLED
+#ifdef DS_LOGGING_ENABLED
 #include "LoggingLib.h"
 #else
 #undef printLog
@@ -161,6 +161,7 @@ int stackFlush(Stack *stack, int numItems) {
 TypeDescriptor _typeStack = {
   .name          = "Stack",
   .xmlName       = NULL,
+  .dataIsPointer = true,
   .toString      = (char* (*)(const volatile void*)) listToString,
   .toBytes       = (Bytes (*)(const volatile void*)) listToBytes,
   .compare       = (int (*)(const volatile void*, const volatile void*)) listCompare,
@@ -168,10 +169,12 @@ TypeDescriptor _typeStack = {
   .copy          = (void* (*)(const volatile void*)) listCopy,
   .destroy       = (void* (*)(volatile void*)) stackDestroy,
   .size          = listSize,
-  .toByteArray   = (void* (*)(const volatile void*, u64*)) listToByteArray,
-  .fromByteArray = (void* (*)(const volatile void*, u64*)) listFromByteArray,
+  .toBlob        = (Bytes (*)(const volatile void*)) listToBlob,
+  .fromBlob      = (void* (*)(const volatile void*, u64*, bool, bool)) listFromBlob_,
   .hashFunction  = NULL,
   .clear         = (i32 (*)(volatile void *)) listClear,
+  .toXml         = (Bytes (*)(const volatile void*, const char *elementName, bool indent, ...)) listToXml_,
+  .toJson        = (Bytes (*)(const volatile void*)) listToJson,
 };
 TypeDescriptor *typeStack = &_typeStack;
 
@@ -189,6 +192,7 @@ TypeDescriptor *typeStack = &_typeStack;
 TypeDescriptor _typeStackNoCopy = {
   .name          = "Stack",
   .xmlName       = NULL,
+  .dataIsPointer = true,
   .toString      = (char* (*)(const volatile void*)) listToString,
   .toBytes       = (Bytes (*)(const volatile void*)) listToBytes,
   .compare       = (int (*)(const volatile void*, const volatile void*)) listCompare,
@@ -196,10 +200,12 @@ TypeDescriptor _typeStackNoCopy = {
   .copy          = (void* (*)(const volatile void*)) shallowCopy,
   .destroy       = (void* (*)(volatile void*)) nullFunction,
   .size          = listSize,
-  .toByteArray   = (void* (*)(const volatile void*, u64*)) listToByteArray,
-  .fromByteArray = (void* (*)(const volatile void*, u64*)) listFromByteArray,
+  .toBlob        = (Bytes (*)(const volatile void*)) listToBlob,
+  .fromBlob      = (void* (*)(const volatile void*, u64*, bool, bool)) listFromBlob_,
   .hashFunction  = NULL,
   .clear         = (i32 (*)(volatile void *)) listClear,
+  .toXml         = (Bytes (*)(const volatile void*, const char *elementName, bool indent, ...)) listToXml_,
+  .toJson        = (Bytes (*)(const volatile void*)) listToJson,
 };
 TypeDescriptor *typeStackNoCopy = &_typeStackNoCopy;
 
@@ -311,15 +317,15 @@ bool stackUnitTest() { \
   stackPushEntry(stack, "one"); \
  \
   printLog(INFO, "Converting stack to byte array.\n"); \
-  u64 length = 0; \
-  void *byteArray = typeStack->toByteArray(stack, &length); \
+  Bytes byteArray = typeStack->toBlob(stack); \
+  u64 length = bytesLength(byteArray); \
   printLog(INFO, "Converting byte array to stack.\n"); \
-  Stack *stack2 = (Stack*) typeStack->fromByteArray(byteArray, &length); \
+  Stack *stack2 = (Stack*) typeStack->fromBlob(byteArray, &length, false, false); \
   if (stackCompare(stack, stack2) != 0) { \
     printLog(ERR, "stack and stack2 were not identical.\n"); \
     return false; \
   } \
-  byteArray = pointerDestroy(byteArray); \
+  byteArray = bytesDestroy(byteArray); \
   stack2 = stackDestroy(stack2); \
   if (stack2 != NULL) { \
     printLog(ERR, "Could not destroy stack2.\n"); \

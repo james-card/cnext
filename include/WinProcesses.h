@@ -12,7 +12,7 @@
 /// @details
 ///
 /// @copyright
-///                   Copyright (c) 2012-2023 James Card
+///                   Copyright (c) 2012-2024 James Card
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a
 /// copy of this software and associated documentation files (the "Software"),
@@ -41,7 +41,7 @@
 #define WIN_PROCESSES_H
 
 #define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
+#include <windows.h>
 #include <process.h>
 #include <time.h>
 #include <stdint.h>
@@ -66,6 +66,14 @@ extern "C"
 /// @param stdIn is the FILE object used to write data to the program
 /// @param killed is a boolean to keep track of whether or not the process
 ///   has been forcibly killed
+/// @param errorMessage is a string containing an error message if the
+///   process failed to start
+/// @param criticalSection is a Windows CRITICAL_SECTION to guard access to
+///   the member variables
+/// @param numWindows is the number of windows the process has at the current
+///   time
+/// @param windows is a one-dimensional, NULL-terminated array of Windows HWND
+///   window handles representing the windows for the process
 typedef struct Process {
   HANDLE stdOutRd;
   HANDLE stdInWr;
@@ -74,6 +82,8 @@ typedef struct Process {
   bool killed;
   char *errorMessage;
   CRITICAL_SECTION criticalSection;
+  size_t numWindows;
+  HWND *windows;
 } Process;
 
 

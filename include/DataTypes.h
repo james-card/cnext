@@ -12,7 +12,7 @@
 /// @details
 ///
 /// @copyright
-///                   Copyright (c) 2012-2023 James Card
+///                   Copyright (c) 2012-2024 James Card
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a
 /// copy of this software and associated documentation files (the "Software"),
@@ -101,6 +101,21 @@ extern "C"
 #define literal(x) (x)
 #endif
 
+extern const bool       boolZero;
+extern const i8         i8Zero;
+extern const u8         u8Zero;
+extern const i16        i16Zero;
+extern const u16        u16Zero;
+extern const i32        i32Zero;
+extern const u32        u32Zero;
+extern const i64        i64Zero;
+extern const u64        u64Zero;
+extern const i128       i128Zero;
+extern const u128       u128Zero;
+extern const float      floatZero;
+extern const double     doubleZero;
+extern const longDouble longDoubleZero;
+
 extern const char *boolNames[2];
 
 bool stringIsInteger(const char *str);
@@ -114,6 +129,9 @@ bool strtobool(const char *str, char **endptr);
 ///   data in the general data structures.
 /// @param name The C-string representation of the name of the type.
 /// @param xmlName The name of the XML type that is used to describe this type.
+/// @param dataIsPointer Whether or not the data type is managed by its pointer
+///   instead of the value at the pointer.  This will be true for strings,
+///   Bytes, and raw pointer values.
 /// @param toString Pointer to the function that will return a C-string
 ///   representation of the value.
 /// @param toBytes Pointer to the function that will return a Bytes object
@@ -130,36 +148,42 @@ bool strtobool(const char *str, char **endptr);
 /// @param size A function that returns the amount of space in memory occupied
 ///   by a specific instance of this type.  Note that this must be a function
 ///   to account for variable-length types such as strings and UTF-8 characters.
-/// @param toByteArray A function that converts the data into an array of bytes
+/// @param toBlob A function that converts the data into an array of bytes
 ///   that can then be exported or converted back into a data element via
-///   fromByteArray.
-/// @param fromByteArray A function that converts an array of bytes output by
-///   toByteArray back into a data element of the data type.
+///   fromBlob.
+/// @param fromBlob A function that converts an array of bytes output by
+///   toBlob back into a data element of the data type.
 /// @param hashFunction A function that hashes the data of the type into an
 ///   integer value.  This member is optional.  The default hash algorithm will
 ///   be used in the hash table logic if it's omitted.
 /// @param clear A function the clears but does not deallocate the value.
+/// @param toXml A function that converts the data to an XML representation.
+/// @param toJson A function that converts the data to a JSON representation.
 typedef struct TypeDescriptor {
   const char    *name;
   const char    *xmlName;
+  bool           dataIsPointer;
   char*        (*toString)(const volatile void *value);
   Bytes        (*toBytes)(const volatile void *value);
   int          (*compare)(const volatile void *valueA, const volatile void *valueB);
   void*        (*create)(const volatile void *parameter1, ...);
   void*        (*copy)(const volatile void *value);
   void*        (*destroy)(volatile void *value);
-  int          (*size)(const volatile void *value);
-  void*        (*toByteArray)(const volatile void *value, u64 *length);
-  void*        (*fromByteArray)(const volatile void *value, u64 *length);
+  size_t       (*size)(const volatile void *value);
+  Bytes        (*toBlob)(const volatile void *value);
+  void*        (*fromBlob)(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety);
   u64          (*hashFunction)(const volatile void *value);
   i32          (*clear)(volatile void *value);
+  Bytes        (*toXml)(const volatile void*, const char *elementName, bool indent, ...);
+  Bytes        (*toJson)(const volatile void*);
 } TypeDescriptor;
 
 /// @struct Variant
 ///
 /// @brief Structure representing a single value of a specified type.
 ///
-/// @param type A TypeDescriptor describing the value stored in the node.
+/// @param type A pointer to a TypeDescriptor describing the value stored in
+///   the node.
 /// @param value Pointer to the value stored in this node.
 typedef struct Variant {
   volatile void *value;
@@ -170,13 +194,16 @@ typedef struct Variant {
 ///
 /// @brief Structure representing a single element of a linked list.
 ///
-/// @note The top of this structure *MUST* match a Variant.
+/// @note The first two elements of this structure *MUST* match a Variant.
 ///
-/// @param type A TypeDescriptor describing the value stored in the node.
+/// @param type A pointer to a TypeDescriptor describing the value stored in
+///   the node.
 /// @param value Pointer to the value stored in this node.
 /// @param key A pointer to the key associated with this node (if any).
 /// @param prev A pointer to the previous node in the list.
 /// @param next A pointer to the next node in the list.
+/// @param byteOffset The offset into a file where the value is located
+///   (if any).
 typedef struct ListNode {
   // The first two items must be compatible with Variant.
   volatile void *value;
@@ -194,7 +221,8 @@ typedef struct ListNode {
 /// @param head A pointer to the first ListNode in the list.
 /// @param tail A pointer to the last ListNode in the list.
 /// @param size The number of elements in the list.
-/// @param keyType A TypeDescriptor describing the keys used in the list.
+/// @param keyType A pointer to a TypeDescriptor describing the keys used in
+///   the list.
 /// @param filePointer A pointer to the on-disk data for the list.
 /// @param lock A pointer to a mutex that guards access to this list.
 typedef struct List {
@@ -217,7 +245,8 @@ typedef struct ListNode QueueNode;
 /// @param head A pointer to the first QueueNode in the queue.
 /// @param tail A pointer to the last QueueNode in the queue.
 /// @param size The number of elements in the queue.
-/// @param keyType A TypeDescriptor describing the keys used in the queue.
+/// @param keyType A pointer to a TypeDescriptor describing the keys used in
+///   the queue.
 /// @param filePointer A pointer to the on-disk data for the queue.
 /// @param lock A pointer to a mutex that guards access to this queue.
 typedef struct Queue {
@@ -240,7 +269,8 @@ typedef struct ListNode StackNode;
 /// @param head A pointer to the first StackNode in the queue.
 /// @param tail A pointer to the last StackNode in the queue.
 /// @param size The number of elements in the queue.
-/// @param keyType A TypeDescriptor describing the keys used in the queue.
+/// @param keyType A pointer to a TypeDescriptor describing the keys used in
+///   the queue.
 /// @param filePointer A pointer to the on-disk data for the queue.
 /// @param lock A pointer to a mutex that guards access to this queue.
 typedef struct Stack {
@@ -258,11 +288,14 @@ typedef struct Stack {
 ///
 /// @note The beginning of this structure *MUST* match a ListNode.
 ///
-/// @param type A TypeDescriptor describing the datg in the value pointer.
+/// @param type A pointer to a TypeDescriptor describing the data in the
+///   value pointer.
 /// @param value A pointer to the data held by this node.
 /// @param key A pointer to the key associated with this value.
 /// @param prev A pointer to the predecessor node in the tree.
 /// @param next A pointer to the successor node in the tree.
+/// @param byteOffset The offset into a file where the value is located
+///   (if any).
 /// @param red A boolean to indicate whether the node is red or black.  If
 ///   red == false then the node is black.
 /// @param left A pointer to the node to the left of this one in the tree.
@@ -292,8 +325,8 @@ typedef struct RedBlackNode {
 /// @param head The head of the linked-list version of the tree.
 /// @param tail The tail of the linked-list version of the tree.
 /// @param size A count of the number of data nodes in the tree.
-/// @param keyType A TypeDescriptor describing how to interact with the keys
-///   in this tree.
+/// @param keyType A pointer to a TypeDescriptor describing how to interact
+///   with the keys in this tree.
 /// @param filePointer A pointer to an on-disk representation of the tree
 ///   (if any).
 /// @param lock A pointer to a mutex that guards the tree in multi-threaded
@@ -332,7 +365,8 @@ typedef struct RedBlackNode HashNode;
 /// @param tail A pointer to the last HashNode in the hash table.
 /// @param size The number of elements in the hash table.  This number will
 ///   equal the sum of the sizes of all red-black trees in the table.
-/// @param keyType A TypeDescriptor describing the keys used in the hash table.
+/// @param keyType A pointer to a TypeDescriptor describing the keys used in
+///   the hash table.
 /// @param filePointer A pointer to the on-disk data for the hash table.
 /// @param lock A pointer to a mutex that guards access to this hash table.
 /// @param lastAddedType TypeDescriptor describing the kind data for the last
@@ -351,20 +385,57 @@ typedef struct HashTable {
   RedBlackTree **table;
 } HashTable;
 
-typedef struct ListNode VectorNode;
+/// @struct VectorNode
+///
+/// @brief Structure representing a single element of a vector.
+///
+/// @note The first six elements of this structure *MUST* match ListNode.
+///
+/// @param type A pointer to a TypeDescriptor describing the value stored in
+///   the node.
+/// @param value Pointer to the value stored in this node.
+/// @param key A pointer to the key associated with this node (if any).
+/// @param prev A pointer to the previous node in the list.
+/// @param next A pointer to the next node in the list.
+/// @param byteOffset The offset into a file where the value is located
+///   (if any).
+/// @param allocated Whether or not the value at this node is allocated and
+///   valid.
+typedef struct VectorNode {
+  // The first two items must be compatible with Variant.
+  volatile void *value;
+  TypeDescriptor *type;
+  void *key;
+  struct VectorNode *prev;
+  struct VectorNode *next;
+  i64 byteOffset; // Must be signed to be compatible with fseeko64.
+  bool allocated;
+  u64 index; // For sorting algorithm.
+} VectorNode;
+
+typedef VectorNode KvVectorNode;
+typedef VectorNode ArrayNode;
+typedef VectorNode KvArrayNode;
 
 /// @struct Vector
+///
 /// @brief Structure representing a full vector.
+///
 /// @param head A pointer to the first VectorNode in the vector.
 /// @param tail A pointer to the last VectorNode in the vector.
-/// @param size The number of elements in the vector.
-/// @param keyType A TypeDescriptor describing the keys used in the vector
-///   (if any).
+/// @param size The number of elements in the vector.  This value is less than
+///   or equal to the value of arraySize.
+/// @param keyType A pointer to a TypeDescriptor describing the keys used in
+///   the vector (if any).
 /// @param filePointer A pointer to a FILE object for on-disk data (if any).
 /// @param lock A pointer to a mutex to guard the Vector in multi-threaded
 ///   environments.
-/// @param array An array of pointers to VectorNodes for indexed lookup of
-///   vector content.
+/// @param valueType A pointer to a TypeDescriptor describing the values used
+///   in the vector.  This value may be NULL initially.  It may only be set
+///   once.
+/// @param arraySize The number of VectorNodes allocated in the array element.
+/// @param array An array of VectorNodes for indexed lookup of vector content.
+/// @param data A pointer to the actual data that's stored by the vector.
 typedef struct Vector {
   // The first six items must be compatible with List.
   VectorNode *head;
@@ -373,8 +444,52 @@ typedef struct Vector {
   TypeDescriptor *keyType;
   FILE *filePointer;
   mtx_t *lock;
-  VectorNode **array;
+  TypeDescriptor *valueType;
+  u64 arraySize;
+  VectorNode *array;
+  void *data;
 } Vector;
+
+typedef Vector KvVector;
+
+/// @struct Array
+///
+/// @brief Structure representing a full array.
+///
+/// @param head A pointer to the first ArrayNode in the array.
+/// @param tail A pointer to the last ArrayNode in the array.
+/// @param size The number of elements in the array.  This value is less than
+///   or equal to the value of arraySize.
+/// @param keyType A pointer to a TypeDescriptor describing the keys used in
+///   the array (if any).
+/// @param filePointer A pointer to a FILE object for on-disk data (if any).
+/// @param lock An embedded mutex to guard the Array in multi-threaded
+///   environments.
+/// @param lockInitialized A boolean to keep track of whether or not the lock
+///   member variable has been initialized and may be used for mutual exclusion.
+/// @param arraySize The number of ArrayNodes allocated in the array element.
+/// @param data An array of ArrayNodes for indexed lookup of array content.
+///   This is a flexible array member.  C++ doesn't allow flexible array
+///   member variables of structs, so we can't declare it to be empty like it
+///   should be and still have this code compile in C++.  Declare an embedded
+///   array of size 1 here.  When we do the malloc, we'll declare the real size.
+///   We can still access any number of elements as long as the memory is there.
+typedef struct Array {
+  // The first six items must be compatible with List.
+  ArrayNode *head;
+  ArrayNode *tail;
+  u64 size;
+  TypeDescriptor *keyType;
+  FILE *filePointer;
+  mtx_t lock;
+  bool lockInitialized;
+  u64 arraySize;
+  ArrayNode data[1];
+} Array;
+
+#define EMPTY_ARRAY_SIZE (sizeof(Array) - sizeof(ArrayNode))
+
+typedef Array KvArray;
 
 
 extern TypeDescriptor *typeBool;
@@ -425,6 +540,12 @@ extern TypeDescriptor *typeHashTable;
 extern TypeDescriptor *typeHashTableNoCopy;
 extern TypeDescriptor *typeVector;
 extern TypeDescriptor *typeVectorNoCopy;
+#define typeKvVector typeVector
+#define typeKvVectorNoCopy typeVectorNoCopy
+extern TypeDescriptor *typeArray;
+extern TypeDescriptor *typeArrayNoCopy;
+#define typeKvArray typeArray
+#define typeKvArrayNoCopy typeArrayNoCopy
 extern TypeDescriptor *typePointer;
 extern TypeDescriptor *typePointerNoCopy;
 extern TypeDescriptor *typePointerNoOwn;
@@ -481,10 +602,40 @@ typedef enum TypeDescriptorIndexes {
   TYPE_HASH_TABLE_NO_COPY,
   TYPE_VECTOR,
   TYPE_VECTOR_NO_COPY,
+  //// TYPE_ARRAY,
+  //// TYPE_ARRAY_NO_COPY,
   TYPE_POINTER, // Must be next-to-last
   TYPE_POINTER_NO_COPY, // Must be last
   NUM_TYPE_DESCRIPTOR_INDEXES
 } TypeDescriptorIndexes;
+
+/// @union EndianUnion
+///
+/// @brief Union for determining whether or not the host is a little endian
+/// system.
+typedef union EndianUnion {
+  int integer;
+  char character;
+} EndianUnion;
+
+/// @var littleEndianUnion
+///
+/// @brief Constant variable that concretely identifies whether or not the
+/// system is little endian.
+extern const EndianUnion littleEndianUnion;
+
+/// @def HOST_IS_LITTLE_ENDIAN
+///
+/// @brief Define that can be used to determine whether or not the system is
+/// little endian from anywhere that links to this library.
+#define HOST_IS_LITTLE_ENDIAN littleEndianUnion.character
+
+// C and C++ treat the empty part of the ?: differently.
+#ifdef __cplusplus
+#define TRINARY_ZERO (( 0 ))
+#else // C
+#define TRINARY_ZERO ((void) 0)
+#endif
 
 void *shallowCopy(const volatile void *value);
 void *nullFunction(volatile void *value, ...);
@@ -493,11 +644,45 @@ i64 getIndexFromTypeDescriptor(TypeDescriptor *typeDescriptor);
 u64 getNumTypeDescriptors();
 int registerTypeDescriptor(TypeDescriptor *typeDescriptor);
 TypeDescriptor* getTypeDescriptorFromIndex(i64 typeDescriptorIndex);
-extern int (*hostToLittleEndian)(volatile void *value, size_t size);
-extern int (*littleEndianToHost)(volatile void *value, size_t size);
-extern int (*hostToBigEndian)(volatile void *value, size_t size);
-extern int (*bigEndianToHost)(volatile void *value, size_t size);
-void* pointerDestroy(volatile void *pointer);
+#define pointerDestroy(pointer) ((void*) (free((void*) pointer), NULL))
+void* pointerDestroyFunction(volatile void *pointer);
+
+// Endianness functions and macros
+//
+// These functions and macros are used to guarantee that data is correct when
+// being convereted to/from byte arrays.  The *ToBlob functions encode all
+// integer data in little endian format based on the assumption that most
+// systems are little endian (because that's generally more optimal) and the
+// *FromBlob functions all guarantee that the data is in the correct
+// endianness before returning the data.  Since the underlying assumption here
+// is that most systems will be little endian on both the encoding and decoding
+// sides, it really makes no sense to even enter the byte swap operation if the
+// system is already little endian.  Therefore, while the byteSwapIfNot*
+// functions do need to check the endianness of the system in order to gurantee
+// correctness, the hostTo* and *ToHost calls would be better off not even
+// calling the byteSwap* functions if there's no need.  Because of this, the
+// macros check the endianness before even calling the byteSwap* functions.
+//
+// The big endian versions of these calls are provided for completeness but are
+// not used by this library.
+int byteSwapIfNotLittleEndian(volatile void *value, size_t size);
+#define hostToLittleEndian(value, size) \
+  (HOST_IS_LITTLE_ENDIAN) \
+    ? TRINARY_ZERO \
+    : byteSwapIfNotLittleEndian(value, size)
+#define littleEndianToHost(value, size) \
+  (HOST_IS_LITTLE_ENDIAN) \
+    ? TRINARY_ZERO \
+    : byteSwapIfNotLittleEndian(value, size)
+int byteSwapIfNotBigEndian(volatile void *value, size_t size);
+#define hostToBigEndian(value, size) \
+  (HOST_IS_LITTLE_ENDIAN) \
+    ? byteSwapIfNotBigEndian(value, size) \
+    : TRINARY_ZERO
+#define bigEndianToHost(value, size) \
+  (HOST_IS_LITTLE_ENDIAN) \
+    ? byteSwapIfNotBigEndian(value, size) \
+    : TRINARY_ZERO
 
 bool boolUnitTest();
 bool u8UnitTest();
@@ -515,6 +700,7 @@ bool stringUnitTest();
 bool pointerUnitTest();
 bool bytesUnitTest();
 bool structUnitTest();
+bool valueToStringUnitTest();
 
 extern u16 DsMarker;
 extern u32 DsVersion;
@@ -608,10 +794,63 @@ Type* jsonTo##Type(const char *jsonText, long long int *position) { \
     } \
     if (charAtPosition == '"') { \
       /* Get the string between the quotes. */ \
-      Bytes stringValue = getBytesBetween(&jsonText[*position], "\"", "\""); \
+      const char *startQuoteAt = &jsonText[*position]; \
+      const char *endQuoteAt = startQuoteAt + 1; \
+      while (*endQuoteAt != '"') { \
+        if (*endQuoteAt != '\\') { \
+          endQuoteAt++; \
+        } else { \
+          endQuoteAt += 2; \
+        } \
+      } \
+      Bytes stringValue = NULL; \
+      if (((uintptr_t) endQuoteAt) > ((uintptr_t) startQuoteAt)) { \
+        startQuoteAt++; \
+        u64 stringLength \
+          = ((uintptr_t) endQuoteAt) - ((uintptr_t) startQuoteAt); \
+        if (stringLength > 0) { \
+          /* The usual case. */ \
+          bytesAddData(&stringValue, startQuoteAt, stringLength); \
+        } else { \
+          /* Empty string. */ \
+          bytesAddStr(&stringValue, ""); \
+        } \
+      } \
+      if (stringValue == NULL) { \
+        printLog(ERR, "Malformed JSON input.\n"); \
+        key = bytesDestroy(key); \
+        returnValue = prefix##Destroy(returnValue);; \
+        printLog(TRACE, \
+          "EXIT jsonTo" #Type "(jsonText=\"%s\", position=%lld) = {NULL}\n", \
+          jsonText, *position); \
+        return NULL; \
+      } \
       u64 skipLength = bytesLength(stringValue); \
+      /* Remove any backslash escapes that were injected by the protocol. */ \
+      u64 i = 0; \
+      for (u64 j = 0; j < skipLength; i++, j++) { \
+        if (stringValue[j] == '\\') { \
+          j++; \
+          if (stringValue[j] == 'n') { \
+            stringValue[i] = '\n'; \
+            continue; \
+          } \
+        } \
+        stringValue[i] = stringValue[j]; \
+      } \
+      bytesSetLength(stringValue, i); \
       unescapeBytes(stringValue); \
-      prefix##AddEntry(returnValue, key, stringValue, typeBytesNoCopy)->type = typeBytes; \
+      Type##Node *node = prefix##AddEntry(returnValue, key, stringValue, typeBytesNoCopy); \
+      if (node != NULL) { \
+        node->type = typeBytes; \
+      } else { \
+        LOG_MALLOC_FAILURE(); \
+        returnValue = prefix##Destroy(returnValue); \
+        printLog(NEVER, \
+          "EXIT jsonTo" #Type "(jsonText=\"%s\", position=%lld) = {NULL}\n", \
+          jsonText, *position); \
+        return returnValue; \
+      } \
       *position += skipLength + 2; \
     } else if (stringIsNumber(&jsonText[*position])) { \
       /* Parse the number. */ \
@@ -695,9 +934,15 @@ Type* jsonTo##Type(const char *jsonText, long long int *position) { \
     } \
   } while(0)
 
+#define stringIsTrue(string) \
+  ((string != NULL) && ((*((u32*) string)) == (*((u32*) boolNames[true]))))
+
 #ifdef __cplusplus
 } // extern "C"
 #endif
+
+// This must come last and must come outside the extern "C" block.
+#include "TypeSafeValueToString.h"
 
 #endif // DATA_TYPES_H
 

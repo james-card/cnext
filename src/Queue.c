@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                     Copyright (c) 2012-2023 James Card                     //
+//                     Copyright (c) 2012-2024 James Card                     //
 //                                                                            //
 // Permission is hereby granted, free of charge, to any person obtaining a    //
 // copy of this software and associated documentation files (the "Software"), //
@@ -29,7 +29,7 @@
 /// @file
 
 #include "Queue.h"
-#ifdef LOGGING_ENABLED
+#ifdef DS_LOGGING_ENABLED
 #include "LoggingLib.h"
 #else
 #undef printLog
@@ -161,6 +161,7 @@ int queueFlush(Queue *queue, int numItems) {
 TypeDescriptor _typeQueue = {
   .name          = "Queue",
   .xmlName       = NULL,
+  .dataIsPointer = true,
   .toString      = (char* (*)(const volatile void*)) listToString,
   .toBytes       = (Bytes (*)(const volatile void*)) listToBytes,
   .compare       = (int (*)(const volatile void*, const volatile void*)) listCompare,
@@ -168,10 +169,12 @@ TypeDescriptor _typeQueue = {
   .copy          = (void* (*)(const volatile void*)) listCopy,
   .destroy       = (void* (*)(volatile void*)) queueDestroy,
   .size          = listSize,
-  .toByteArray   = (void* (*)(const volatile void*, u64*)) listToByteArray,
-  .fromByteArray = (void* (*)(const volatile void*, u64*)) listFromByteArray,
+  .toBlob        = (Bytes (*)(const volatile void*)) listToBlob,
+  .fromBlob      = (void* (*)(const volatile void*, u64*, bool, bool)) listFromBlob_,
   .hashFunction  = NULL,
   .clear         = (i32 (*)(volatile void *)) listClear,
+  .toXml         = (Bytes (*)(const volatile void*, const char *elementName, bool indent, ...)) listToXml_,
+  .toJson        = (Bytes (*)(const volatile void*)) listToJson,
 };
 TypeDescriptor *typeQueue = &_typeQueue;
 
@@ -189,6 +192,7 @@ TypeDescriptor *typeQueue = &_typeQueue;
 TypeDescriptor _typeQueueNoCopy = {
   .name          = "Queue",
   .xmlName       = NULL,
+  .dataIsPointer = true,
   .toString      = (char* (*)(const volatile void*)) listToString,
   .toBytes       = (Bytes (*)(const volatile void*)) listToBytes,
   .compare       = (int (*)(const volatile void*, const volatile void*)) listCompare,
@@ -196,10 +200,12 @@ TypeDescriptor _typeQueueNoCopy = {
   .copy          = (void* (*)(const volatile void*)) shallowCopy,
   .destroy       = (void* (*)(volatile void*)) nullFunction,
   .size          = listSize,
-  .toByteArray   = (void* (*)(const volatile void*, u64*)) listToByteArray,
-  .fromByteArray = (void* (*)(const volatile void*, u64*)) listFromByteArray,
+  .toBlob        = (Bytes (*)(const volatile void*)) listToBlob,
+  .fromBlob      = (void* (*)(const volatile void*, u64*, bool, bool)) listFromBlob_,
   .hashFunction  = NULL,
   .clear         = (i32 (*)(volatile void *)) listClear,
+  .toXml         = (Bytes (*)(const volatile void*, const char *elementName, bool indent, ...)) listToXml_,
+  .toJson        = (Bytes (*)(const volatile void*)) listToJson,
 };
 TypeDescriptor *typeQueueNoCopy = &_typeQueueNoCopy;
 
@@ -319,15 +325,15 @@ bool queueUnitTest() { \
   queuePushEntry(queue, "three"); \
  \
   printLog(INFO, "Converting queue to byte array.\n"); \
-  u64 length = 0; \
-  void *byteArray = typeQueue->toByteArray(queue, &length); \
+  Bytes byteArray = typeQueue->toBlob(queue); \
+  u64 length = bytesLength(byteArray); \
   printLog(INFO, "Converting byte array to queue.\n"); \
-  Queue *queue2 = (Queue*) typeQueue->fromByteArray(byteArray, &length); \
+  Queue *queue2 = (Queue*) typeQueue->fromBlob(byteArray, &length, false, false); \
   if (queueCompare(queue, queue2) != 0) { \
     printLog(ERR, "queue and queue2 were not identical.\n"); \
     return false; \
   } \
-  byteArray = pointerDestroy(byteArray); \
+  byteArray = bytesDestroy(byteArray); \
   queue2 = (Queue*) queueDestroy(queue2); \
   if (queue2 != NULL) { \
     printLog(ERR, "Could not destroy queue2.\n"); \

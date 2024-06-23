@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                     Copyright (c) 2012-2023 James Card                     //
+//                     Copyright (c) 2012-2024 James Card                     //
 //                                                                            //
 // Permission is hereby granted, free of charge, to any person obtaining a    //
 // copy of this software and associated documentation files (the "Software"), //
@@ -42,7 +42,7 @@
 #define logFile stderr
 #endif
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 
 /*
  * Open directory stream DIRNAME for read and return a pointer to the
@@ -708,7 +708,7 @@ void dirent_set_errno(int error)
 }
 #endif
 
-#endif // _MSC_VER
+#endif // _WIN32
 
 /// @fn int mkpath(const char *path, mode_t mode)
 ///
@@ -768,6 +768,11 @@ int mkpath(const char *path, int mode) {
 ///
 /// @return Returns 0 on success, -1 on failure.
 int rmdirRecursive(const char *directory) {
+  if ((directory == NULL) || (*directory == '\0')) {
+    printLog(ERR, "NULL or empty directory provided.\n");
+    return -1;
+  }
+  
   DIR *dir = NULL;
   struct dirent *entry = NULL;
   

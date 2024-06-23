@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                     Copyright (c) 2012-2023 James Card                     //
+//                     Copyright (c) 2012-2024 James Card                     //
 //                                                                            //
 // Permission is hereby granted, free of charge, to any person obtaining a    //
 // copy of this software and associated documentation files (the "Software"), //
@@ -80,13 +80,7 @@ void* scopeAdd_(Scope *scope, volatile void *pointer, ...) {
   Destructor destructor = va_arg(args, Destructor);
   va_end(args);
   
-  if (pointer == NULL) {
-    // Not an error but nothing to do.
-    printLog(TRACE,
-      "EXIT scopeAdd(scope=%p, pointer=%p, destructor=%p) = {%p}\n",
-      scope, pointer, destructor, pointer);
-    return (void*) pointer;
-  } else if (destructor == NULL) {
+  if (destructor == NULL) {
     // This should be impossible.  This function should only be called with the
     // macro wrapper that provides a default destructor.  For this to be the
     // case, someone has to deliberately call this method badly, but we still
@@ -175,7 +169,7 @@ void scopePop_(Scope *scope, u64 numEntries) {
 
 /// @fn void scopeRelease_(Scope *scope, volatile void *pointer)
 ///
-/// @brief Remove an arbitrary entry from a Scope object.
+/// @brief Remove and destroy an arbitrary entry from a Scope object.
 ///
 /// @param scope A pointer to the Scope object to remove an entry from.
 /// @param pointer A pointer to the memory that was previously added to the
@@ -296,25 +290,27 @@ void* scopeUpdate_(Scope *scope, volatile void *oldPointer, volatile void *newPo
   return (void*) newPointer;
 }
 
-/// @fn Scope* scopeEnd_(Scope *scope)
+/// @fn int scopeEnd_(Scope *scope)
 ///
 /// @brief Remove all entries from the Scope object and free its resources.
 ///
 /// @param scope A pointer to the scope object to destroy.
 ///
-/// @return This function always succeeds and returns no value.
-void scopeEnd_(Scope *scope) {
-  printLog(TRACE, "ENTER scopeEnd(scope=%p) = {%p}\n", scope, scope);
+/// @return This function always succeeds and returns 0.
+int scopeEnd_(Scope *scope) {
+  printLog(TRACE, "ENTER scopeEnd(scope=%p)\n", scope);
   
   if (scope == NULL) {
     // Not an error, but nothing to do.
-    printLog(TRACE, "EXIT scopeEnd(scope=%p) = {%p}\n", scope, scope);
+    printLog(TRACE, "EXIT scopeEnd(scope=%p) = {0}\n", scope);
+    return 0;
   }
   
   scopePop_(scope, scope->numVars);
   
-  printLog(TRACE, "EXIT scopeEnd(scope=%p) = {NULL}\n", scope);
+  printLog(TRACE, "EXIT scopeEnd(scope=%p) = {0}\n", scope);
   scope = NULL;
+  return 0;
 }
 
 #include <stdlib.h>
@@ -326,7 +322,7 @@ bool scopeUnitTest() {
   SCOPE_ENTER("");
   
   // Test adding and removing.
-  char *myString = (char*) scopeAdd(malloc(20), stringDestroy);
+  char *myString = (char*) scopeAdd(malloc(20), pointerDestroyFunction);
   if (myString == NULL) {
     printLog(ERR, "myString was NULL after scopeAdd().\n");
     returnValue = false;

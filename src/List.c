@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                     Copyright (c) 2012-2023 James Card                     //
+//                     Copyright (c) 2012-2024 James Card                     //
 //                                                                            //
 // Permission is hereby granted, free of charge, to any person obtaining a    //
 // copy of this software and associated documentation files (the "Software"), //
@@ -41,15 +41,21 @@
 
 #include "Vector.h" // For to/from JSON support
 
-/// @fn List *listCreate(TypeDescriptor *keyType)
+/// @fn List *listCreate_(TypeDescriptor *keyType, bool disableThreadSafety, ...)
 ///
 /// @brief Create a new linked list data structure.
 ///
 /// @param keyType The TypeDescriptor that specifies what kind of key is to be
 ///   used with this list.
+/// @param disableThreadSafety Whether or not to disable thread safety for the
+///   List.
+///
+/// @note This function is wrapped by a macro of the same name (minus the
+/// trailing underscore) that automatically provides false for the
+/// dsiableThreadSafety parameter.
 ///
 /// @return Returns a new list on success, NULL on failure.
-List *listCreate(TypeDescriptor *keyType) {
+List *listCreate_(TypeDescriptor *keyType, bool disableThreadSafety, ...) {
   if (keyType == NULL) {
     // Can't make a functional list.
     printLog(ERR, "keyType is NULL.\n");
@@ -67,10 +73,12 @@ List *listCreate(TypeDescriptor *keyType) {
   }
   list->keyType = keyType;
   
-  // The mtx_t lock member has to be zeroed, so use calloc here.
-  list->lock = (mtx_t*) calloc(1, sizeof(mtx_t));
-  if (mtx_init(list->lock, mtx_plain | mtx_recursive) != thrd_success) {
-    printLog(ERR, "Could not initialize list mutex lock.\n");
+  if (disableThreadSafety == false) {
+    // The mtx_t lock member has to be zeroed, so use calloc here.
+    list->lock = (mtx_t*) calloc(1, sizeof(mtx_t));
+    if (mtx_init(list->lock, mtx_plain | mtx_recursive) != thrd_success) {
+      printLog(ERR, "Could not initialize list mutex lock.\n");
+    }
   }
   
   printLog(TRACE, "EXIT listCreate(keyType=%s) = {%p}\n", keyType->name, list);
@@ -108,7 +116,7 @@ ListNode *listAddFrontEntry_(List *list, const volatile void *key,
     return NULL;
   }
   
-  if (mtx_lock(list->lock) != thrd_success) {
+  if ((list->lock != NULL) && (mtx_lock(list->lock) != thrd_success)) {
     printLog(WARN, "Could not lock list mutex.\n");
   }
   
@@ -127,7 +135,9 @@ ListNode *listAddFrontEntry_(List *list, const volatile void *key,
     // Out of memory.  Fail.
     printLog(ERR, "Could not allocate memory for list node.\n");
     
-    mtx_unlock(list->lock);
+    if (list->lock != NULL) {
+      mtx_unlock(list->lock);
+    }
     
     printLog(TRACE,
       "EXIT listAddFrontEntry(list=%p, key=%p, value=%p, type=%s) = {%p}\n",
@@ -151,7 +161,9 @@ ListNode *listAddFrontEntry_(List *list, const volatile void *key,
   }
   list->size++;
   
-  mtx_unlock(list->lock);
+  if (list->lock != NULL) {
+    mtx_unlock(list->lock);
+  }
   
   printLog(TRACE, "EXIT listAddFrontEntry(list=%p, key=%p, value=%p, type=%s) = {%p}\n", list, key, value, type->name, node);
   return node;
@@ -188,7 +200,7 @@ ListNode *listAddBackEntry_(List *list, const volatile void *key,
     return NULL;
   }
   
-  if (mtx_lock(list->lock) != thrd_success) {
+  if ((list->lock != NULL) && (mtx_lock(list->lock) != thrd_success)) {
     printLog(WARN, "Could not lock list mutex.\n");
   }
   
@@ -207,7 +219,9 @@ ListNode *listAddBackEntry_(List *list, const volatile void *key,
     // Out of memory.  Fail.
     printLog(ERR, "Could not allocate memory for list node.\n");
     
-    mtx_unlock(list->lock);
+    if (list->lock != NULL) {
+      mtx_unlock(list->lock);
+    }
     
     printLog(TRACE,
       "EXIT listAddBackEntry(list=%p, key=%p, value=%p, type=%s) = {%p}\n",
@@ -231,7 +245,9 @@ ListNode *listAddBackEntry_(List *list, const volatile void *key,
   }
   list->size++;
   
-  mtx_unlock(list->lock);
+  if (list->lock != NULL) {
+    mtx_unlock(list->lock);
+  }
   
   printLog(TRACE, "EXIT listAddBackEntry(list=%p, key=%p, value=%p, type=%s) = {%p}\n", list, key, value, type->name, node);
   return node;
@@ -255,7 +271,7 @@ int listRemoveFront(List *list) {
     return -1;
   }
   
-  if (mtx_lock(list->lock) != thrd_success) {
+  if ((list->lock != NULL) && (mtx_lock(list->lock) != thrd_success)) {
     printLog(WARN, "Could not lock list mutex.\n");
   }
   
@@ -266,7 +282,9 @@ int listRemoveFront(List *list) {
   
   int returnValue = listDestroyNode(list, node);
   
-  mtx_unlock(list->lock);
+  if (list->lock != NULL) {
+    mtx_unlock(list->lock);
+  }
   
   printLog(TRACE, "EXIT listRemoveFront(list=%p) = {%d}\n", list, returnValue);
   return returnValue;
@@ -290,7 +308,7 @@ int listRemoveBack(List *list) {
     return -1;
   }
   
-  if (mtx_lock(list->lock) != thrd_success) {
+  if ((list->lock != NULL) && (mtx_lock(list->lock) != thrd_success)) {
     printLog(WARN, "Could not lock list mutex.\n");
   }
   
@@ -301,7 +319,9 @@ int listRemoveBack(List *list) {
   
   int returnValue = listDestroyNode(list, node);
   
-  mtx_unlock(list->lock);
+  if (list->lock != NULL) {
+    mtx_unlock(list->lock);
+  }
   
   printLog(TRACE, "EXIT listRemoveBack(list=%p) = {%d}\n", list, returnValue);
   return returnValue;
@@ -326,7 +346,7 @@ int listRemove(List *list, const volatile void *key) {
     return -1;
   }
   
-  if (mtx_lock(list->lock) != thrd_success) {
+  if ((list->lock != NULL) && (mtx_lock(list->lock) != thrd_success)) {
     printLog(WARN, "Could not lock list mutex.\n");
   }
   
@@ -337,7 +357,9 @@ int listRemove(List *list, const volatile void *key) {
   
   int returnValue = listDestroyNode(list, node);
   
-  mtx_unlock(list->lock);
+  if (list->lock != NULL) {
+    mtx_unlock(list->lock);
+  }
   
   printLog(TRACE, "EXIT listRemove(list=%p) = {%d}\n", list, returnValue);
   return returnValue;
@@ -411,16 +433,20 @@ ListNode *listGet(const List *list, const volatile void *key) {
     return NULL;
   }
   
-  if (mtx_lock(list->lock) != thrd_success) {
+  if ((list->lock != NULL) && (mtx_lock(list->lock) != thrd_success)) {
     printLog(WARN, "Could not lock list mutex.\n");
   }
   
-  ListNode *node = list->head;
-  while ((node != NULL) && (list->keyType->compare(node->key, key) != 0)) {
-    node = node->next;
+  ListNode *node = NULL;
+  for (node = list->head; node != NULL; node = node->next) {
+    if (list->keyType->compare(node->key, key) == 0) {
+      break;
+    }
   }
   
-  mtx_unlock(list->lock);
+  if (list->lock != NULL) {
+    mtx_unlock(list->lock);
+  }
   
   printLog(TRACE, "EXIT listGet(list=%p, key=%p) = {%p}\n", list, key, node);
   return node;
@@ -448,12 +474,16 @@ int listDestroyNode(List *list, ListNode *node) {
     return -1;
   }
   
-  if (mtx_lock(list->lock) != thrd_success) {
+  if ((list->lock != NULL) && (mtx_lock(list->lock) != thrd_success)) {
     printLog(WARN, "Could not lock list mutex.\n");
   }
   
-  list->keyType->destroy(node->key);
-  node->type->destroy(node->value);
+  if (list->keyType != NULL) {
+    list->keyType->destroy(node->key);
+  }
+  if (node->type != NULL) {
+    node->type->destroy(node->value);
+  }
   if (node->prev != NULL) {
     node->prev->next = node->next;
   }
@@ -469,7 +499,9 @@ int listDestroyNode(List *list, ListNode *node) {
   node = (ListNode*) pointerDestroy(node);
   list->size--;
   
-  mtx_unlock(list->lock);
+  if (list->lock != NULL) {
+    mtx_unlock(list->lock);
+  }
   
   printLog(TRACE, "EXIT listDestroyNode(list=%p, node=%p) = {0}\n", list, node);
   return 0;
@@ -504,7 +536,9 @@ List* listDestroy(List *list) {
     fclose(list->filePointer); list->filePointer = NULL;
   }
   
-  mtx_destroy(list->lock);
+  if (list->lock != NULL) {
+    mtx_destroy(list->lock);
+  }
   list->lock = (mtx_t*) pointerDestroy(list->lock);
   
   list = (List*) pointerDestroy(list);
@@ -536,7 +570,7 @@ char *listToString(const List *list) {
     return returnValue;
   }
   
-  if (mtx_lock(list->lock) != thrd_success) {
+  if ((list->lock != NULL) && (mtx_lock(list->lock) != thrd_success)) {
     printLog(WARN, "Could not lock list mutex.\n");
   }
   
@@ -551,19 +585,40 @@ char *listToString(const List *list) {
   size = stringDestroy(size);
   
   straddstr(&returnValue, "  keyType=");
-  straddstr(&returnValue, list->keyType->name);
+  straddstr(&returnValue,
+    (list->keyType != NULL) ? list->keyType->name : "NULL");
   
   ListNode *end = (list->tail != NULL) ? list->tail->next : NULL;
-  for (node = list->head; node != end; node = node->next) {
+  u64 listSize = list->size;
+  u64 index = 0;
+  for (node = list->head;
+    (node != end) && (index++ < listSize);
+    node = node->next
+  ) {
+    if (node->type == NULL) {
+      continue;
+    }
     straddstr(&returnValue, "\n");
     
     straddstr(&returnValue, "  {\n");
     
+    straddstr(&returnValue, "    address=");
+    char *addressString = typePointer->toString(node);
+    straddstr(&returnValue, addressString);
+    addressString = stringDestroy(addressString);
+    straddstr(&returnValue, "\n");
     straddstr(&returnValue, "    valueType=");
     straddstr(&returnValue, node->type->name);
     straddstr(&returnValue, "\n");
     straddstr(&returnValue, "    key={\n");
-    char *keyString = list->keyType->toString(node->key);
+    char *keyString = NULL;
+    if (list->keyType == typeString) {
+      straddchr(&keyString, '"');
+      straddstr(&keyString, str(node->key));
+      straddchr(&keyString, '"');
+    } else {
+      keyString = list->keyType->toString(node->key);
+    }
     char *indentedKey = indentText(keyString, 6);
     keyString = stringDestroy(keyString);
     straddstr(&returnValue, indentedKey);
@@ -572,7 +627,13 @@ char *listToString(const List *list) {
     
     straddstr(&returnValue, "    value={\n");
     char *valueString = NULL;
-    valueString = node->type->toString(node->value);
+    if (node->type == typeString) {
+      straddchr(&valueString, '"');
+      straddstr(&valueString, str(node->value));
+      straddchr(&valueString, '"');
+    } else {
+      valueString = node->type->toString(node->value);
+    }
     char *indentedValue = indentText(valueString, 6);
     valueString = stringDestroy(valueString);
     straddstr(&returnValue, indentedValue);
@@ -583,7 +644,9 @@ char *listToString(const List *list) {
   }
   straddstr(&returnValue, "\n}");
   
-  mtx_unlock(list->lock);
+  if (list->lock != NULL) {
+    mtx_unlock(list->lock);
+  }
   
   printLog(TRACE, "EXIT listToString(list=%p) = {%s}\n", list, returnValue);
   return returnValue;
@@ -616,7 +679,7 @@ Bytes listToBytes(const List *list) {
     return NULL;
   }
   
-  if (mtx_lock(list->lock) != thrd_success) {
+  if ((list->lock != NULL) && (mtx_lock(list->lock) != thrd_success)) {
     printLog(WARN, "Could not lock list mutex.\n");
   }
   
@@ -626,7 +689,12 @@ Bytes listToBytes(const List *list) {
   listSizeBytes = bytesDestroy(listSizeBytes);
   
   bytesAddStr(&returnValue, "\n{");
-  for (node = list->head; node != NULL; node = node->next) {
+  u64 size = list->size;
+  u64 index = 0;
+  for (node = list->head;
+    (node != NULL) && (index++ < size);
+    node = node->next
+  ) {
     bytesAddStr(&returnValue, "\n");
     
     bytesAddStr(&returnValue, "  {\n");
@@ -657,7 +725,9 @@ Bytes listToBytes(const List *list) {
   }
   bytesAddStr(&returnValue, "}");
   
-  mtx_unlock(list->lock);
+  if (list->lock != NULL) {
+    mtx_unlock(list->lock);
+  }
   
   printLog(TRACE, "EXIT listToBytes(list=%p) = {%s}\n", list, returnValue);
   return returnValue;
@@ -834,7 +904,7 @@ List *xmlToList(const char *inputData) {
   return list;
 }
 
-/// @fn char *listToXml(const List *list, const char *elementName)
+/// @fn Bytes listToXml(const List *list, const char *elementName)
 ///
 /// @brief Convert a list to its XML representation.
 ///
@@ -847,24 +917,24 @@ List *xmlToList(const char *inputData) {
 /// leading underscore, that defaults the indent parameter to false.
 ///
 /// @return Returns a C string with the XML representation of the list.
-char *listToXml_(const List *list, const char *elementName, bool indent, ...) {
+Bytes listToXml_(const List *list, const char *elementName, bool indent, ...) {
   printLog(TRACE, "ENTER listToXml(list=%p, elementName=%s, indent=%s)\n",
     list, elementName, (indent == true) ? "true" : "false");
   
   ListNode *cur = NULL;
-  char *listXml = NULL;
+  Bytes listXml = NULL;
   
-  straddstr(&listXml, "<");
-  straddstr(&listXml, elementName);
-  straddstr(&listXml, ">");
+  bytesAddStr(&listXml, "<");
+  bytesAddStr(&listXml, elementName);
+  bytesAddStr(&listXml, ">");
   if (indent == true) {
-    straddstr(&listXml, "\n");
+    bytesAddStr(&listXml, "\n");
   }
   
   if (list == NULL) {
-    straddstr(&listXml, "</");
-    straddstr(&listXml, elementName);
-    straddstr(&listXml, ">");
+    bytesAddStr(&listXml, "</");
+    bytesAddStr(&listXml, elementName);
+    bytesAddStr(&listXml, ">");
     
     printLog(TRACE,
       "EXIT listToXml(list=%p, elementName=%s, indent=%s) = {%s}\n",
@@ -872,59 +942,77 @@ char *listToXml_(const List *list, const char *elementName, bool indent, ...) {
     return listXml;
   }
   
-  if (mtx_lock(list->lock) != thrd_success) {
+  if ((list->lock != NULL) && (mtx_lock(list->lock) != thrd_success)) {
     printLog(WARN, "Could not lock list mutex.\n");
   }
   
-  i64 listTypeIndex = getIndexFromTypeDescriptor(typeList);
-  for (cur = list->head; cur != NULL; cur = cur->next) {
+  i64 stringTypeIndex = getIndexFromTypeDescriptor(typeString);
+  i64 stringCiNoCopyTypeIndex = getIndexFromTypeDescriptor(typeStringCiNoCopy);
+  i64 bytesTypeIndex = getIndexFromTypeDescriptor(typeBytes);
+  i64 bytesNoCopyTypeIndex = getIndexFromTypeDescriptor(typeBytesNoCopy);
+  u64 size = list->size;
+  u64 index = 0;
+  for (cur = list->head; (cur != NULL) && (index < size); cur = cur->next) {
     if (indent == true) {
-      straddstr(&listXml, "  ");
+      bytesAddStr(&listXml, "  ");
     }
-    straddstr(&listXml, "<");
+    bytesAddStr(&listXml, "<");
     char *keyString = list->keyType->toString(cur->key);
-    straddstr(&listXml, keyString);
-    straddstr(&listXml, ">");
-    if (getIndexFromTypeDescriptor(cur->type) < listTypeIndex) {
+    bytesAddStr(&listXml, keyString);
+    bytesAddStr(&listXml, ">");
+    i64 typeIndex = getIndexFromTypeDescriptor(cur->type);
+    if (typeIndex < stringTypeIndex) {
       if (cur->value != NULL) {
         char *valueString = cur->type->toString(cur->value);
-        straddstr(&listXml, valueString);
+        bytesAddStr(&listXml, valueString);
         valueString = stringDestroy(valueString);
       }
+    } else if ((typeIndex >= stringTypeIndex)
+      && (typeIndex <= stringCiNoCopyTypeIndex)
+    ) {
+      bytesAddStr(&listXml, str(cur->value));
+    } else if ((typeIndex >= bytesTypeIndex)
+      && (typeIndex <= bytesNoCopyTypeIndex)
+    ) {
+      bytesAddBytes(&listXml, (Bytes) cur->value);
     } else { // cur->type >= typeList
       char *subListName = list->keyType->toString(cur->key);
-      straddstr(&subListName, "List");
-      char *subListXml = listToXml((List*) cur->value, subListName);
+      straddstr(&subListName, cur->type->name);
+      Bytes subListXml
+        = cur->type->toXml((List*) cur->value, subListName, indent);
       subListName = stringDestroy(subListName);
       if (indent == true) {
-        straddstr(&listXml, "\n");
-        char *indentedXml = indentText(subListXml, 2);
-        subListXml = stringDestroy(subListXml);
-        subListXml = indentedXml;
+        bytesAddStr(&listXml, "\n");
+        char *indentedXml = indentText(str(subListXml), 2);
+        subListXml = bytesDestroy(subListXml);
+        bytesAddStr(&subListXml, indentedXml);
+        indentedXml = stringDestroy(indentedXml);
       }
-      straddstr(&listXml, subListXml);
-      subListXml = stringDestroy(subListXml);
+      bytesAddBytes(&listXml, subListXml);
+      subListXml = bytesDestroy(subListXml);
       if (indent == true) {
-        straddstr(&listXml, "\n");
+        bytesAddStr(&listXml, "\n");
       }
     }
-    straddstr(&listXml, "</");
-    straddstr(&listXml, keyString);
+    bytesAddStr(&listXml, "</");
+    bytesAddStr(&listXml, keyString);
     keyString = stringDestroy(keyString);
-    straddstr(&listXml, ">");
+    bytesAddStr(&listXml, ">");
     if (indent == true) {
-      straddstr(&listXml, "\n");
+      bytesAddStr(&listXml, "\n");
     }
   }
   
-  mtx_unlock(list->lock);
+  if (list->lock != NULL) {
+    mtx_unlock(list->lock);
+  }
   
-  straddstr(&listXml, "</");
-  straddstr(&listXml, elementName);
-  straddstr(&listXml, ">");
+  bytesAddStr(&listXml, "</");
+  bytesAddStr(&listXml, elementName);
+  bytesAddStr(&listXml, ">");
   
   printLog(TRACE, "EXIT listToXml(list=%p, elementName=%s, indent=%s) = {%s}\n",
-    list, elementName, (indent == true) ? "true" : "false", listXml);
+    list, elementName, (indent == true) ? "true" : "false", str(listXml));
   return listXml;
 }
 
@@ -961,22 +1049,43 @@ int listCompare(const List *listA, const List *listB) {
   
   if (listA->keyType != listB->keyType) {
     returnValue = getIndexFromTypeDescriptor(listA->keyType) - getIndexFromTypeDescriptor(listB->keyType);
+    if (returnValue == 0) {
+      // Two unknown types.  Use the value of strcmp on the names.
+      returnValue = strcmp(listA->keyType->name, listB->keyType->name);
+    }
     printLog(DEBUG, "listA->keyType = %s, listB->keyType = %s\n", listA->keyType->name, listB->keyType->name);
     
     printLog(TRACE, "EXIT listCompare(listA=%p, listB=%p) = {%d}\n", listA, listB, returnValue);
     return returnValue; // lists are not equal
   }
   
-  if (mtx_lock(listA->lock) != thrd_success) {
+  if (listA->size != listB->size) {
+    if (listA->size > listB->size) {
+      returnValue = 1;
+      
+      printLog(TRACE, "EXIT listCompare(listA=%p, listB=%p) = {%d}\n", listA, listB, returnValue);
+      return returnValue; // lists are not equal
+    } else {
+      returnValue = -1;
+      
+      printLog(TRACE, "EXIT listCompare(listA=%p, listB=%p) = {%d}\n", listA, listB, returnValue);
+      return returnValue; // lists are not equal
+    }
+  }
+  
+  if ((listA->lock != NULL) && (mtx_lock(listA->lock) != thrd_success)) {
     printLog(WARN, "Could not lock listA mutex.\n");
   }
-  if (mtx_lock(listB->lock) != thrd_success) {
+  if ((listB->lock != NULL) && (mtx_lock(listB->lock) != thrd_success)) {
     printLog(WARN, "Could not lock listB mutex.\n");
   }
   
   nodeA = listA->head;
   nodeB = listB->head;
-  while (returnValue == 0) {
+  // Lists are the same size, so it doesn't matter which size we use.
+  u64 listSize = listA->size;
+  u64 index = 0;
+  while ((returnValue == 0) && (index++ < listSize)) {
     if ((nodeA == NULL) && (nodeB != NULL)) {
       returnValue = -1;
       break;
@@ -991,6 +1100,10 @@ int listCompare(const List *listA, const List *listB) {
     if (nodeA->type != nodeB->type) {
       printLog(DEBUG, "nodeA->type = %s, nodeB->type = %s\n", nodeA->type->name, nodeB->type->name);
       returnValue = getIndexFromTypeDescriptor(nodeA->type) - getIndexFromTypeDescriptor(nodeB->type);
+      if (returnValue == 0) {
+        // Two unknown types.  Use the value of strcmp on the names.
+        returnValue = strcmp(nodeA->type->name, nodeB->type->name);
+      }
       break;
     }
     
@@ -1012,8 +1125,12 @@ int listCompare(const List *listA, const List *listB) {
     nodeB = nodeB->next;
   }
   
-  mtx_unlock(listA->lock);
-  mtx_unlock(listB->lock);
+  if (listA->lock != NULL) {
+    mtx_unlock(listA->lock);
+  }
+  if (listB->lock != NULL) {
+    mtx_unlock(listB->lock);
+  }
   
   printLog(TRACE, "EXIT listCompare(listA=%p, listB=%p) = {%d}\n", listA, listB, returnValue);
   return returnValue;
@@ -1042,13 +1159,18 @@ List *listCopy(const List *list) {
   
   copy = listCreate(list->keyType);
   
-  if (mtx_lock(list->lock) != thrd_success) {
+  if ((list->lock != NULL) && (mtx_lock(list->lock) != thrd_success)) {
     printLog(WARN, "Could not lock list mutex.\n");
   }
   
   i64 listTypeIndex = getIndexFromTypeDescriptor(typeList);
   i64 pointerTypeIndex = getIndexFromTypeDescriptor(typePointer);
-  for (node = list->head; node != NULL; node = node->next) {
+  u64 size = list->size;
+  u64 index = 0;
+  for (node = list->head;
+    (node != NULL) && (index++ < size);
+    node = node->next
+  ) {
     i64 typeIndex = getIndexFromTypeDescriptor(node->type);
     printLog(DEBUG, "Copying %s type value.\n", node->type->name);
     if ((typeIndex < listTypeIndex) || (typeIndex >= pointerTypeIndex)) {
@@ -1066,19 +1188,21 @@ List *listCopy(const List *list) {
     }
   }
   
-  mtx_unlock(list->lock);
+  if (list->lock != NULL) {
+    mtx_unlock(list->lock);
+  }
   
   printLog(TRACE, "EXIT listCopy(list=%p) = {%p}\n", list, copy);
   return copy;
 }
 
-/// @fn int listSize(const volatile void *value)
+/// @fn size_t listSize(const volatile void *value)
 ///
 /// @brief Compute the size of a list structure in memory.
 ///
 /// @return Returns the size of the list structure in bytes.
-int listSize(const volatile void *value) {
-  int size = 0;
+size_t listSize(const volatile void *value) {
+  size_t size = 0;
   List *list= (List*) value;
   printLog(TRACE, "ENTER listSize(value=\"%p\")\n", value);
   
@@ -1086,72 +1210,80 @@ int listSize(const volatile void *value) {
     size = sizeof(List);
   }
   
-  printLog(TRACE, "EXIT listSize(value=\"%p\") = {%d}\n", value, size);
+  printLog(TRACE, "EXIT listSize(value=\"%p\") = {%llu}\n", value, llu(size));
   return size;
 }
 
-/// @fn void *listToByteArray(const List *list, u64 *length)
+/// @fn Bytes listToBlob(const List *list)
 ///
 /// @brief Convert a List to a single array of bytes.
 ///
 /// @param list The List (or compatible data structure) to convert.
-/// @param length The length of the resulting byte array.
 ///
-/// @return Returns a pointer to a byte array "length" bytes long on success,
+/// @return Returns a Bytes object with the encoded list on success,
 /// NULL on failure.
-void *listToByteArray(const List *list, u64 *length) {
-  void *returnValue = NULL;
+Bytes listToBlob(const List *list) {
+  Bytes returnValue = NULL;
   i16 typeIndex = 0;
   u64 size = 0;
-  printLog(TRACE, "ENTER listToByteArray(list=%p, length=%p)\n", list, length);
+  printLog(TRACE, "ENTER listToBlob(list=%p)\n", list);
   
-  if ((list== NULL) || (length == NULL)) {
+  if (list== NULL) {
     printLog(ERR, "One or more NULL parameters.\n");
-    printLog(TRACE, "EXIT listToByteArray(list=%p, length=%p) = {%p}\n", list,
-      length, returnValue);
+    printLog(TRACE, "EXIT listToBlob(list=%p) = {%p}\n", list,
+      returnValue);
     return returnValue;
   }
-  *length = 0;
   
-  if (mtx_lock(list->lock) != thrd_success) {
+  if ((list->lock != NULL) && (mtx_lock(list->lock) != thrd_success)) {
     printLog(WARN, "Could not lock list mutex.\n");
   }
   
   // Metadata
   u16 dsMarker = DsMarker;
   hostToLittleEndian(&dsMarker, sizeof(dsMarker));
-  *length = dataAddData(&returnValue, *length, &dsMarker, sizeof(DsMarker));
+  bytesAddData(&returnValue, &dsMarker, sizeof(DsMarker));
   u32 dsVersion = DsVersion;
   hostToLittleEndian(&dsVersion, sizeof(dsVersion));
-  *length = dataAddData(&returnValue, *length, &dsVersion, sizeof(dsVersion));
+  bytesAddData(&returnValue, &dsVersion, sizeof(dsVersion));
   
   typeIndex = getIndexFromTypeDescriptor(list->keyType);
   if (typeIndex < 0) {
     // Index is invalid.  TypeDescriptor was not found.
     printLog(ERR, "Could not find list key type \"%s\".\n",
       list->keyType->name);
-    mtx_unlock(list->lock);
+    if (list->lock != NULL) {
+      mtx_unlock(list->lock);
+    }
     
-    printLog(TRACE, "EXIT listToByteArray(list=%p, length=%p) = {%p}\n", list,
-      length, returnValue);
+    printLog(TRACE, "EXIT listToBlob(list=%p) = {%p}\n", list,
+      returnValue);
     return returnValue;
   }
+  if (list->keyType->copy == typeStringNoCopy->copy) {
+    // Use the base type instead of the NoCopy type.
+    typeIndex--;
+  }
   hostToLittleEndian(&typeIndex, sizeof(i16));
-  *length = dataAddData(&returnValue, *length, &typeIndex, sizeof(i16));
+  bytesAddData(&returnValue, &typeIndex, sizeof(i16));
   
   size = list->size;
   hostToLittleEndian(&size, sizeof(size));
-  *length = dataAddData(&returnValue, *length, &size, sizeof(size));
+  bytesAddData(&returnValue, &size, sizeof(size));
   
   // Construct a default value for NULL values.
-  void *defaultKey = list->keyType->create(NULL);
-  u64 defaultSize = 0;
-  void *defaultValue = list->keyType->toByteArray(defaultKey, &defaultSize);
-  list->keyType->destroy(defaultKey);
+  void* defaultKey = list->keyType->create(NULL);
+  Bytes defaultValue = list->keyType->toBlob(defaultKey);
+  defaultKey = list->keyType->destroy(defaultKey);
   
-  for (ListNode *node = list->head; node != NULL; node = node->next) {
-    u64 valueSize = 0, keySize = 0;
-    void *value = NULL, *key = NULL;
+  ListNode *node = NULL;
+  u64 listSize = list->size;
+  u64 index = 0;
+  for (node = list->head;
+    (node != NULL) && (index++ < listSize);
+    node = node->next
+  ) {
+    Bytes value = NULL, key = NULL;
     typeIndex = getIndexFromTypeDescriptor(node->type);
     if (typeIndex < 0) {
       // Index is invalid.  TypeDescriptor was not found.
@@ -1159,62 +1291,83 @@ void *listToByteArray(const List *list, u64 *length) {
         node->type->name);
       continue;
     }
+    if (node->type->copy == typeStringNoCopy->copy) {
+      // Use the base type instead of the NoCopy type.
+      typeIndex--;
+    }
     hostToLittleEndian(&typeIndex, sizeof(i16));
-    value = node->type->toByteArray(node->value, &valueSize);
+    value = node->type->toBlob(node->value);
     if (value == NULL) {
       value = defaultValue;
-      valueSize = defaultSize;
     }
-    key = list->keyType->toByteArray(node->key, &keySize);
+    key = list->keyType->toBlob(node->key);
     if (key == NULL) {
       key = defaultValue;
-      keySize = defaultSize;
     }
     
-    *length = dataAddData(&returnValue, *length, &typeIndex, sizeof(i16));
-    *length = dataAddData(&returnValue, *length, value, valueSize);
+    bytesAddData(&returnValue, &typeIndex, sizeof(i16));
+    // *DO NOT* use bytesAddBytes or bytesLength here.  The toBlob call
+    // above will set the size to be the full amount of data encoded.
+    // bytesAddBytes and bytesLength do not return the full amount of data
+    // encoded for string values (it doesn't include the NULL terminator).
+    // We need to gurantee that we get the full data.
+    bytesAddData(&returnValue, value, bytesSize(value));
     if (value != defaultValue) {
-      value = pointerDestroy(value);
+      value = bytesDestroy(value);
     }
     value = NULL;
-    *length = dataAddData(&returnValue, *length, key, keySize);
+    bytesAddData(&returnValue, key, bytesSize(key));
     if (key != defaultValue) {
-      key = pointerDestroy(key);
+      key = bytesDestroy(key);
     }
     key = NULL;
   }
   
-  defaultValue = pointerDestroy(defaultValue);
+  defaultValue = bytesDestroy(defaultValue);
   
-  mtx_unlock(list->lock);
+  if (list->lock != NULL) {
+    mtx_unlock(list->lock);
+  }
   
-  printLog(TRACE, "EXIT listToByteArray(list=%p, length=%llu) = {%p}\n", list,
-    llu(*length), returnValue);
+  // Set the size to match the length.  This is so recursive toBlob calls
+  // will encode the right amount of data, which does not include the NULL
+  // string terminator in our case.
+  bytesSetSize(returnValue, bytesLength(returnValue));
+  
+  printLog(TRACE, "EXIT listToBlob(list=%p) = {%p}\n", list, returnValue);
   return returnValue;
 }
 
-/// @fn List *listFromByteArray(const volatile void *array, u64 *length)
+/// @fn List *listFromBlob_(const volatile void *array, u64 *length, bool inPlaceData, bool disableThreadSafety, ...)
 ///
-/// @brief Convert a properly-formatted byte array into a List object.
+/// @brief Convert a properly-formatted byte array into a list.
 ///
 /// @param array The array of bytes to convert.
 /// @param length As an input, this is the number of bytes in array.  As an
 ///   output, this is the number of bytes consumed by this call.
+/// @param inPlaceData Whether the data should be used in place (true) or a
+///   copy should be made and returned (false).
+/// @param disableThreadSafety Whether or not thread safety should be disabled
+///   in the returned list.
 ///
 /// @return Returns a pointer to a List on success, NULL on failure.
-List *listFromByteArray(const volatile void *array, u64 *length) {
+List *listFromBlob_(const volatile void *array, u64 *length, bool inPlaceData, bool disableThreadSafety, ...) {
   char *byteArray = (char*) array;
   List *list = NULL;
   u64 index = 0;
-  i16 typeIndex = 0;
-  printLog(TRACE, "ENTER listFromByteArray(array=%p, length=%p)\n", array, length);
+  i16 typeIndex = 0, keyTypeIndex = 0;
+  printLog(TRACE,
+    "ENTER listFromBlob(array=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s)\n",
+    array, length, boolNames[inPlaceData], boolNames[disableThreadSafety]);
   u64 size = 0;
-  TypeDescriptor *keyType = NULL;
+  TypeDescriptor *keyType = NULL, *keyTypeNoCopy = NULL;
   
   if ((array == NULL) || (length == NULL)) {
     printLog(ERR, "One or more NULL parameters.\n");
-    printLog(TRACE, "EXIT listFromByteArray(array=%p, length=%p) = {%p}\n", list, length, list);
-    return list;
+    printLog(TRACE,
+      "EXIT listFromBlob(array=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      list, length, boolNames[inPlaceData], boolNames[disableThreadSafety], list);
+    return NULL;
   }
   
   // Length check
@@ -1251,65 +1404,128 @@ List *listFromByteArray(const volatile void *array, u64 *length) {
   }
   index += sizeof(u32);
   
-  typeIndex = *((i16*) &byteArray[index]);
-  littleEndianToHost(&typeIndex, sizeof(i16));
+  keyTypeIndex = *((i16*) &byteArray[index]);
+  littleEndianToHost(&keyTypeIndex, sizeof(i16));
   index += sizeof(i16);
-  if (typeIndex < 1) {
+  if (keyTypeIndex < 1) {
     // Index is not valid.
     *length = index;
     printLog(ERR, "Improperly formatted byte array.  Cannot create list.\n");
-    printLog(TRACE, "EXIT listFromByteArray(array=%p, length=%llu) = {%p}\n", array, llu(*length), list);
-    return list;
+    printLog(TRACE,
+      "EXIT listFromBlob(array=%p, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      array, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety], list);
+    return NULL;
   }
-  keyType = getTypeDescriptorFromIndex(typeIndex);
-  list = listCreate(keyType);
+  keyType = getTypeDescriptorFromIndex(keyTypeIndex);
+  keyTypeNoCopy = getTypeDescriptorFromIndex(keyTypeIndex + 1);
   
   size = *((u64*) &byteArray[index]);
   littleEndianToHost(&size, sizeof(size));
   index += sizeof(size);
+  list = listCreate(keyTypeNoCopy, disableThreadSafety);
+  if (list == NULL) {
+    LOG_MALLOC_FAILURE();
+    printLog(NEVER,
+      "EXIT listFromBlob(array=%p, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      array, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety], list);
+    return NULL;
+  }
+  
+  // Complex data types (which will have type indexes greater than or equal
+  // to that of typeList) will need to be handled sliglistly differently than
+  // primitives in the case that inPlaceData is true, so grab the index for
+  // typeList now so that we can compare it later.
+  i64 listIndex = getIndexFromTypeDescriptor(typeList);
   
   ListNode *node = NULL;
   while ((index < arrayLength) && (list->size < size)) {
     void *key = NULL, *value = NULL;
     u64 keySize = 0, valueSize = 0;
-    TypeDescriptor *valueType = NULL;
+    TypeDescriptor *valueType = NULL, *valueTypeNoCopy = NULL;
     
     typeIndex = *((i16*) &byteArray[index]);
     littleEndianToHost(&typeIndex, sizeof(i16));
     if (typeIndex < 1) {
       // Index is not valid.
       *length = index;
-      printLog(ERR, "Improperly formatted byte array.  Cannot continue processing\n");
-      printLog(TRACE, "EXIT listFromByteArray(array=%p, length=%llu) = {%p}\n", array, llu(*length), list);
+      printLog(ERR,
+        "Improperly formatted byte array.  Cannot continue processing\n");
+      printLog(TRACE,
+        "EXIT listFromBlob(array=%p, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+        array, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety], list);
+      if (inPlaceData) {
+        // Optimize for this case.
+        if (keyTypeIndex >= listIndex) {
+          // See notes at the bottom of this function about this logic.
+          list->keyType = keyType;
+        }
+      } else {
+        list->keyType = keyType;
+      }
       return list;
     }
     valueType = getTypeDescriptorFromIndex(typeIndex);
+    valueTypeNoCopy = getTypeDescriptorFromIndex(typeIndex + 1);
     index += sizeof(i16);
     valueSize = arrayLength - index;
     
-    value = valueType->fromByteArray(&byteArray[index], &valueSize);
+    value = valueType->fromBlob(&byteArray[index], &valueSize, inPlaceData, disableThreadSafety);
     index += valueSize;
     if (value == NULL) {
       *length = index;
       printLog(ERR, "NULL value detected.  Cannot process.\n");
-      printLog(TRACE, "EXIT listFromByteArray(array=%p, length=%llu) = {%p}\n", array, llu(*length), list);
+      printLog(TRACE,
+        "EXIT listFromBlob(array=%p, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+        array, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety], list);
+      if (inPlaceData) {
+        // Optimize for this case.
+        if (keyTypeIndex >= listIndex) {
+          // See notes at the bottom of this function about this logic.
+          list->keyType = keyType;
+        }
+      } else {
+        list->keyType = keyType;
+      }
       return list;
     }
     
     keySize = arrayLength - index;
-    key = keyType->fromByteArray(&byteArray[index], &keySize);
+    key = keyType->fromBlob(&byteArray[index], &keySize, inPlaceData, disableThreadSafety);
     index += keySize;
     if (key == NULL) {
       *length = index;
       printLog(ERR, "NULL key detected.  Cannot process.\n");
-      printLog(TRACE, "EXIT listFromByteArray(array=%p, length=%llu) = {%p}\n", array, llu(*length), list);
+      printLog(TRACE,
+        "EXIT listFromBlob(array=%p, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+        array, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety], list);
+      if (inPlaceData) {
+        // Optimize for this case.
+        if (keyTypeIndex >= listIndex) {
+          // See notes at the bottom of this function about this logic.
+          list->keyType = keyType;
+        }
+      } else {
+        list->keyType = keyType;
+      }
       return list;
     }
     
-    node = listAddBackEntry(list, key, value, valueType);
-    valueType->destroy(value); value = NULL;
-    keyType->destroy(key); key = NULL;
-    if (node == NULL) {
+    node = listAddBackEntry(list, key, value, valueTypeNoCopy);
+    if (node != NULL) {
+      if (inPlaceData) {
+        // Optimize for this case.
+        if (typeIndex >= listIndex) {
+          // Memory has to be allocated to hold the top-level structures of
+          // complex data.  Only the primitives in the byte arrays involve no
+          // memory allocations at all.  So, for complex data, we need to set
+          // the node's type back to the base value type so that the destructor
+          // is called.  The destructors for all the primitives will be omitted.
+          node->type = valueType;
+        }
+      } else {
+        node->type = valueType;
+      }
+    } else {
       printLog(ERR, "Failed to add node to list.\n");
     }
   }
@@ -1324,8 +1540,20 @@ List *listFromByteArray(const volatile void *array, u64 *length) {
   }
   
   *length = index;
+  if (inPlaceData) {
+    // Optimize for this case.
+    if (keyTypeIndex >= listIndex) {
+      // See note above for value types.  Not sure why anyone would want to have
+      // a comlex data type as a key, but it is possible, so cover the case.
+      list->keyType = keyType;
+    }
+  } else {
+    list->keyType = keyType;
+  }
   
-  printLog(TRACE, "EXIT listFromByteArray(array=%p, length=%llu) = {%p}\n", array, llu(*length), list);
+  printLog(TRACE,
+    "EXIT listFromBlob(array=%p, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+    array, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety], list);
   return list;
 }
 
@@ -1352,13 +1580,18 @@ Bytes listToJson(const List *list) {
     return returnValue;
   }
   
-  if (mtx_lock(list->lock) != thrd_success) {
+  if ((list->lock != NULL) && (mtx_lock(list->lock) != thrd_success)) {
     printLog(WARN, "Could not lock list mutex.\n");
   }
   
   i64 listTypeIndex = getIndexFromTypeDescriptor(typeList);
   bytesAddStr(&returnValue, "{\n");
-  for (node = list->head; node != NULL; node = node->next) {
+  u64 size = list->size;
+  u64 index = 0;
+  for (node = list->head;
+    (node != NULL) && (index++ < size);
+    node = node->next
+  ) {
     bytesAddStr(&returnValue, "  \"");
     char *keyString = list->keyType->toString(node->key);
     bytesAddStr(&returnValue, keyString);
@@ -1396,23 +1629,12 @@ Bytes listToJson(const List *list) {
     ) {
       // NULL value.
       bytesAddStr(&returnValue, ": null");
-    } else if (node->type == typeVector) {
-      Bytes valueString = vectorToJson((Vector*) node->value);
-      // In this case, valueString starts with '[' on its own line and ends
-      // with ']' on its own line.  After the indent, the valueString will be
-      // correct except that we need to change the first character to a ':' to
-      // properly end the key.
-      char *indentedValue = indentText(str(valueString), 2);
-      valueString = bytesDestroy(valueString);
-      indentedValue[0] = ':';
-      bytesAddStr(&returnValue, indentedValue);
-      indentedValue = stringDestroy(indentedValue);
     } else { // Value's type is a data structure, not a primitive.
-      Bytes valueString = listToJson((List*) node->value);
-      // In this case, valueString starts with '{' on its own line and ends
-      // with '}' on its own line.  After the indent, the valueString will be
-      // correct except that we need to change the first character to a ':' to
-      // properly end the key.
+      Bytes valueString = node->type->toJson(node->value);
+      // In this case, valueString starts with '{' or '[' on its own line and
+      // ends with '}' or ']' on its own line.  After the indent, the
+      // valueString will be correct except that we need to change the first
+      // character to a ':' to properly end the key.
       char *indentedValue = indentText(str(valueString), 2);
       valueString = bytesDestroy(valueString);
       indentedValue[0] = ':';
@@ -1427,7 +1649,9 @@ Bytes listToJson(const List *list) {
   }
   bytesAddStr(&returnValue, "\n}");
   
-  mtx_unlock(list->lock);
+  if (list->lock != NULL) {
+    mtx_unlock(list->lock);
+  }
   
   printLog(TRACE, "EXIT listToJson(list=%p) = {%s}\n", list, returnValue);
   return returnValue;
@@ -1465,7 +1689,10 @@ char* listToKeyValueString(const List *list, const char *separator) {
     return returnValue; // NULL
   }
   
-  for (ListNode *cur = list->head; cur != NULL; cur = cur->next) {
+  ListNode *cur = NULL;
+  u64 size = list->size;
+  u64 index = 0;
+  for (cur = list->head; (cur != NULL) && (index++ < size); cur = cur->next) {
     i64 valueTypeIndex = getIndexFromTypeDescriptor(cur->type);
     if (valueTypeIndex < 0) {
       // Invalid value type.  Skip this node.
@@ -1538,15 +1765,21 @@ i32 listClear(List *list) {
   }
   
   // Make sure we're not deleting while someone else is accessing.
-  mtx_lock(list->lock);
+  if ((list->lock != NULL) && (mtx_lock(list->lock) != thrd_success)) {
+    printLog(WARN, "Could not lock list mutex.\n");
+  }
   
   for (ListNode *cur = list->head; cur != NULL;) {
     ListNode *node = cur;
     cur = cur->next;
     returnValue |= listDestroyNode(list, node);
   }
+  list->head = NULL;
+  list->tail = NULL;
   
-  mtx_unlock(list->lock);
+  if (list->lock != NULL) {
+    mtx_unlock(list->lock);
+  }
   
   printLog(TRACE, "EXIT listClear(list=%p) = {%d}\n", list, returnValue);
   return returnValue;
@@ -1569,9 +1802,13 @@ u64 listLength(List *list) {
     return returnValue; // 0
   }
   
-  mtx_lock(list->lock);
+  if ((list->lock != NULL) && (mtx_lock(list->lock) != thrd_success)) {
+    printLog(WARN, "Could not lock list mutex.\n");
+  }
   returnValue = list->size;
-  mtx_unlock(list->lock);
+  if (list->lock != NULL) {
+    mtx_unlock(list->lock);
+  }
   
   printLog(TRACE, "EXIT listLength(list=%p) = {%llu}\n", list,
     llu(returnValue));
@@ -1585,17 +1822,20 @@ u64 listLength(List *list) {
 TypeDescriptor _typeList = {
   .name          = "List",
   .xmlName       = NULL,
+  .dataIsPointer = true,
   .toString      = (char* (*)(const volatile void*)) listToString,
   .toBytes       = (Bytes (*)(const volatile void*)) listToBytes,
   .compare       = (int (*)(const volatile void*, const volatile void*)) listCompare,
-  .create        = (void* (*)(const volatile void*, ...)) listCreate,
+  .create        = (void* (*)(const volatile void*, ...)) listCreate_,
   .copy          = (void* (*)(const volatile void*)) listCopy,
   .destroy       = (void* (*)(volatile void*)) listDestroy,
   .size          = listSize,
-  .toByteArray   = (void* (*)(const volatile void*, u64*)) listToByteArray,
-  .fromByteArray = (void* (*)(const volatile void*, u64*)) listFromByteArray,
+  .toBlob        = (Bytes (*)(const volatile void*)) listToBlob,
+  .fromBlob      = (void* (*)(const volatile void*, u64*, bool, bool)) listFromBlob_,
   .hashFunction  = NULL,
   .clear         = (i32 (*)(volatile void *)) listClear,
+  .toXml         = (Bytes (*)(const volatile void*, const char *elementName, bool indent, ...)) listToXml_,
+  .toJson        = (Bytes (*)(const volatile void*)) listToJson,
 };
 TypeDescriptor *typeList = &_typeList;
 
@@ -1611,19 +1851,22 @@ TypeDescriptor *typeList = &_typeList;
 ///   type may be specified to avoid the unnecessary copy.  The real
 ///   typeList type can then be set after the data is added.
 TypeDescriptor _typeListNoCopy = {
-  .name          = "ListNoCopy",
+  .name          = "List",
   .xmlName       = NULL,
+  .dataIsPointer = true,
   .toString      = (char* (*)(const volatile void*)) listToString,
   .toBytes       = (Bytes (*)(const volatile void*)) listToBytes,
   .compare       = (int (*)(const volatile void*, const volatile void*)) listCompare,
-  .create        = (void* (*)(const volatile void*, ...)) listCreate,
+  .create        = (void* (*)(const volatile void*, ...)) listCreate_,
   .copy          = (void* (*)(const volatile void*)) shallowCopy,
   .destroy       = (void* (*)(volatile void*)) nullFunction,
   .size          = listSize,
-  .toByteArray   = (void* (*)(const volatile void*, u64*)) listToByteArray,
-  .fromByteArray = (void* (*)(const volatile void*, u64*)) listFromByteArray,
+  .toBlob        = (Bytes (*)(const volatile void*)) listToBlob,
+  .fromBlob      = (void* (*)(const volatile void*, u64*, bool, bool)) listFromBlob_,
   .hashFunction  = NULL,
   .clear         = (i32 (*)(volatile void *)) listClear,
+  .toXml         = (Bytes (*)(const volatile void*, const char *elementName, bool indent, ...)) listToXml_,
+  .toJson        = (Bytes (*)(const volatile void*)) listToJson,
 };
 TypeDescriptor *typeListNoCopy = &_typeListNoCopy;
 
@@ -1751,14 +1994,14 @@ bool listTestCases(List *list) { \
   stringValue = stringDestroy(stringValue); \
  \
   printLog(INFO, "Converting list to XML.\n"); \
-  stringValue = listToXml(list, NULL); \
-  if (strcmp(stringValue, "<></>") != 0) { \
+  Bytes bytesValue = listToXml(list, NULL); \
+  if (strcmp(str(bytesValue), "<></>") != 0) { \
     printLog(ERR, "Expected empty XML from listToXml.\n"); \
     printLog(ERR, "Got \"%s\"\n", stringValue); \
     stringValue = stringDestroy(stringValue); \
     return false; \
   } \
-  stringValue = stringDestroy(stringValue); \
+  bytesValue = bytesDestroy(bytesValue); \
  \
   if (list != NULL) { \
     listAddBackEntry(list, "key1", "value1"); \
@@ -1774,14 +2017,14 @@ bool listTestCases(List *list) { \
     listDestroy(list2); list2 = NULL; \
     list2 = listCopy(list); \
     printLog(INFO, "Converting list with sub-list to XML.\n"); \
-    stringValue = listToXml(list, "root"); \
-    char *stringValue2 = listToXml(list2, "root"); \
-    if (strcmp(stringValue, stringValue2) != 0) { \
+    bytesValue = listToXml(list, "root"); \
+    Bytes bytesValue2 = listToXml(list2, "root"); \
+    if (bytesCompare(bytesValue, bytesValue2) != 0) { \
       printLog(ERR, "XML for lists with sub-lists did not match.\n"); \
       return false; \
     } \
-    stringValue = stringDestroy(stringValue); \
-    stringValue2 = stringDestroy(stringValue2); \
+    bytesValue = bytesDestroy(bytesValue); \
+    bytesValue2 = bytesDestroy(bytesValue2); \
     if (listCompare(list, list2) != 0) { \
       printLog(ERR, "Comparsion of identical lists with sub-lists did not " \
         "return 0.\n"); \
@@ -1829,10 +2072,10 @@ bool listTestCases(List *list) { \
   listAddBackEntry(list, "key2", "value2"); \
   listAddFrontEntry(list, "key3", "value3"); \
  \
-  u64 length = 0; \
-  void *byteArray = listToByteArray(list, &length); \
-  list2 = listFromByteArray(byteArray, &length); \
-  byteArray = pointerDestroy(byteArray); \
+  Bytes byteArray = listToBlob(list); \
+  u64 length = bytesLength(byteArray); \
+  list2 = listFromBlob(byteArray, &length); \
+  byteArray = bytesDestroy(byteArray); \
   if (listCompare(list, list2) != 0) { \
     printLog(ERR, "list and list2 were not equal.\n"); \
     return false; \

@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                     Copyright (c) 2012-2023 James Card                     //
+//                     Copyright (c) 2012-2024 James Card                     //
 //                                                                            //
 // Permission is hereby granted, free of charge, to any person obtaining a    //
 // copy of this software and associated documentation files (the "Software"), //
@@ -40,16 +40,24 @@
 #define printLog(...) {}
 #define logFile stderr
 #define LOG_MALLOC_FAILURE(...) {}
+#define TRACE 2
+#define logThreshold 11 // NONE
 #endif
 
-/// @fn RedBlackTree *rbTreeCreate(TypeDescriptor *keyType)
+/// @fn RedBlackTree *rbTreeCreate_(TypeDescriptor *keyType, bool disableThreadSafety, ...)
 ///
 /// @brief Allocates a new RedBlackTree and associated metadata.
 ///
 /// @param keyType is the TypeDescriptor to use for the keys in the tree.
+/// @param disableThreadSafety Whether or not to disable thread safety for the
+///   RedBlackTree.
+///
+/// @note This function is wrapped by a macro of the same name (minus the
+/// trailing underscore) that automatically provides false for the
+/// dsiableThreadSafety parameter.
 ///
 /// @return Returns a pointer to a newly-created RedBlackTree.
-RedBlackTree *rbTreeCreate(TypeDescriptor *keyType) {
+RedBlackTree *rbTreeCreate_(TypeDescriptor *keyType, bool disableThreadSafety, ...) {
   printLog(TRACE, "ENTER rbTreeCreate(keyType=%s)\n",
     (keyType != NULL) ? keyType->name : "NULL");
   
@@ -69,10 +77,12 @@ RedBlackTree *rbTreeCreate(TypeDescriptor *keyType) {
   }
   // No need to NULL-ify member varialbes since we used calloc.
   newTree->keyType = keyType;
-  // The lock mtx_t member variable has to be zeroed, so use calloc here.
-  newTree->lock = (mtx_t*) calloc(1, sizeof(mtx_t));
-  if (mtx_init(newTree->lock, mtx_plain | mtx_recursive) != thrd_success) {
-    printLog(ERR, "Could not initialize red black tree mutex lock.\n");
+  if (disableThreadSafety == false) {
+    // The lock mtx_t member variable has to be zeroed, so use calloc here.
+    newTree->lock = (mtx_t*) calloc(1, sizeof(mtx_t));
+    if (mtx_init(newTree->lock, mtx_plain | mtx_recursive) != thrd_success) {
+      printLog(ERR, "Could not initialize red black tree mutex lock.\n");
+    }
   }
   
   // See the comment in the RedBlackTree structure in RedBlackTree.h
@@ -121,7 +131,7 @@ void leftRotate(RedBlackTree *tree, RedBlackNode *x) {
   // the parent pointer of nil.  This can be a problem if a
   // function which calls leftRotate also uses the nil sentinel
   // and expects the nil sentinel's parent pointer to be unchanged
-  // after calling this function.  For example, when rbDestroyNodeFixUp
+  // after calling this function.  For example, when rbTreeDestroyNodeFixUp
   // calls leftRotate it expects the parent pointer of nil to be
   // unchanged.
   
@@ -179,7 +189,7 @@ void rightRotate(RedBlackTree *tree, RedBlackNode *y) {
   // the parent pointer of nil.  This can be a problem if a
   // function which calls rightRotate also uses the nil sentinel
   // and expects the nil sentinel's parent pointer to be unchanged
-  // after calling this function.  For example, when rbDestroyNodeFixUp
+  // after calling this function.  For example, when rbTreeDestroyNodeFixUp
   // calls rightRotate it expects the parent pointer of nil to be
   // unchanged.
 
@@ -307,7 +317,7 @@ RedBlackNode *rbInsert_(RedBlackTree *tree, const volatile void *key,
     return NULL;
   }
   
-  if (mtx_lock(tree->lock) != thrd_success) {
+  if ((tree->lock != NULL) && (mtx_lock(tree->lock) != thrd_success)) {
     printLog(WARN, "Could not lock red black tree mutex.\n");
   }
   
@@ -327,6 +337,8 @@ RedBlackNode *rbInsert_(RedBlackTree *tree, const volatile void *key,
   x->value = type->copy(value);
   x->type = type;
   x->byteOffset = 0;
+  x->left = nil;
+  x->right = nil;
 
   treeInsertHelp(tree, x);
   newNode = x;
@@ -399,7 +411,9 @@ RedBlackNode *rbInsert_(RedBlackTree *tree, const volatile void *key,
   // future use if desired.
   tree->lastAddedType = type;
   
-  mtx_unlock(tree->lock);
+  if (tree->lock != NULL) {
+    mtx_unlock(tree->lock);
+  }
   
 #ifdef DEBUG_ASSERT
   rbAssert((tree->nil->red == false), "nil not black in rbInsert");
@@ -442,7 +456,7 @@ RedBlackNode *rbTreeSuccessor(RedBlackTree *tree, RedBlackNode *x) {
     return NULL;
   }
   
-  if (mtx_lock(tree->lock) != thrd_success) {
+  if ((tree->lock != NULL) && (mtx_lock(tree->lock) != thrd_success)) {
     printLog(WARN, "Could not lock red black tree mutex.\n");
   }
   
@@ -455,7 +469,9 @@ RedBlackNode *rbTreeSuccessor(RedBlackTree *tree, RedBlackNode *x) {
       y = y->left;
     }
     
-    mtx_unlock(tree->lock);
+    if (tree->lock != NULL) {
+      mtx_unlock(tree->lock);
+    }
     
     printLog(TRACE, "EXIT rbTreeSuccessor(tree=%p, x=%p) = {%p}\n", tree, x, y);
     return y;
@@ -466,7 +482,9 @@ RedBlackNode *rbTreeSuccessor(RedBlackTree *tree, RedBlackNode *x) {
       y = y->parent;
     }
     
-    mtx_unlock(tree->lock);
+    if (tree->lock != NULL) {
+      mtx_unlock(tree->lock);
+    }
     
     if (y == root) {
       printLog(TRACE, "EXIT rbTreeSuccessor(tree=%p, x=%p) = {NULL}\n", tree, x);
@@ -506,7 +524,7 @@ RedBlackNode *rbTreePredecessor(RedBlackTree *tree, RedBlackNode *x) {
     return NULL;
   }
   
-  if (mtx_lock(tree->lock) != thrd_success) {
+  if ((tree->lock != NULL) && (mtx_lock(tree->lock) != thrd_success)) {
     printLog(WARN, "Could not lock red black tree mutex.\n");
   }
   
@@ -519,7 +537,9 @@ RedBlackNode *rbTreePredecessor(RedBlackTree *tree, RedBlackNode *x) {
       y = y->right;
     }
     
-    mtx_unlock(tree->lock);
+    if (tree->lock != NULL) {
+      mtx_unlock(tree->lock);
+    }
     
     printLog(TRACE, "EXIT rbTreePredecessor(tree=%p, x=%p) = {%p}\n", tree, x, y);
     return y;
@@ -527,7 +547,9 @@ RedBlackNode *rbTreePredecessor(RedBlackTree *tree, RedBlackNode *x) {
     y = x->parent;
     while (x == y->left) { 
       if (y == root) {
-        mtx_unlock(tree->lock);
+        if (tree->lock != NULL) {
+          mtx_unlock(tree->lock);
+        }
         
         printLog(TRACE, "EXIT rbTreePredecessor(tree=%p, x=%p) = {NULL}\n", tree, x);
         return NULL; 
@@ -536,7 +558,9 @@ RedBlackNode *rbTreePredecessor(RedBlackTree *tree, RedBlackNode *x) {
       y = y->parent;
     }
     
-    mtx_unlock(tree->lock);
+    if (tree->lock != NULL) {
+      mtx_unlock(tree->lock);
+    }
     
     printLog(TRACE, "EXIT rbTreePredecessor(tree=%p, x=%p) = {%p}\n", tree, x, y);
     return y;
@@ -657,7 +681,9 @@ RedBlackTree *rbTreeDestroy(RedBlackTree *tree) {
   treeDestroyHelper(tree, tree->root->left); tree->root->left = NULL;
   tree->root = (RedBlackNode*) pointerDestroy(tree->root);
   tree->nil = (RedBlackNode*) pointerDestroy(tree->nil);
-  mtx_destroy(tree->lock);
+  if (tree->lock != NULL) {
+    mtx_destroy(tree->lock);
+  }
   tree->lock = (mtx_t*) pointerDestroy(tree->lock);
   tree = (RedBlackTree*) pointerDestroy(tree);
   
@@ -681,7 +707,9 @@ i32 rbTreeClear(RedBlackTree *tree) {
     return -1;
   }
   
-  mtx_lock(tree->lock);
+  if ((tree->lock != NULL) && (mtx_lock(tree->lock) != thrd_success)) {
+    printLog(WARN, "Could not lock red black tree mutex.\n");
+  }
   
   treeDestroyHelper(tree, tree->root->left); tree->root->left = tree->nil;
   tree->head = NULL;
@@ -689,8 +717,12 @@ i32 rbTreeClear(RedBlackTree *tree) {
   if (tree->filePointer != NULL) {
     fclose(tree->filePointer); tree->filePointer = NULL;
   }
+  tree->head = NULL;
+  tree->tail = NULL;
   
-  mtx_unlock(tree->lock);
+  if (tree->lock != NULL) {
+    mtx_unlock(tree->lock);
+  }
   
   printLog(TRACE, "EXIT rbTreeClear(tree=%p) = {%p}\n", tree, (void*) NULL);
   return 0;
@@ -719,7 +751,7 @@ RedBlackNode *rbQuery(const RedBlackTree *tree, const volatile void *q) {
     return NULL;
   }
   
-  if (mtx_lock(tree->lock) != thrd_success) {
+  if ((tree->lock != NULL) && (mtx_lock(tree->lock) != thrd_success)) {
     printLog(WARN, "Could not lock red black tree mutex.\n");
   }
   
@@ -727,7 +759,9 @@ RedBlackNode *rbQuery(const RedBlackTree *tree, const volatile void *q) {
   RedBlackNode *nil = tree->nil;
   int compVal = 0;
   if (x == nil) {
-    mtx_unlock(tree->lock);
+    if (tree->lock != NULL) {
+      mtx_unlock(tree->lock);
+    }
     
     printLog(TRACE, "EXIT rbQuery(tree=%p, q=%p) = {%p}\n",
       tree, q, (void*) NULL);
@@ -740,8 +774,10 @@ RedBlackNode *rbQuery(const RedBlackTree *tree, const volatile void *q) {
     } else { // x->key <= q
       x = x->right;
     }
-    if (x == nil) {
-      mtx_unlock(tree->lock);
+    if ((x == nil) || (x == NULL)) {
+      if (tree->lock != NULL) {
+        mtx_unlock(tree->lock);
+      }
       
       printLog(TRACE, "EXIT rbQuery(tree=%p, q=%p) = {%p}\n",
         tree, q, (void*) NULL);
@@ -750,14 +786,16 @@ RedBlackNode *rbQuery(const RedBlackTree *tree, const volatile void *q) {
     compVal = tree->keyType->compare(x->key, q);
   }
   
-  mtx_unlock(tree->lock);
+  if (tree->lock != NULL) {
+    mtx_unlock(tree->lock);
+  }
   
   printLog(TRACE, "EXIT rbQuery(tree=%p, q=%p) = {%p}\n", tree, q, x);
   return x;
 }
 
 
-/// @fn static void rbDestroyNodeFixUp(RedBlackTree *tree, RedBlackNode *x)
+/// @fn static void rbTreeDestroyNodeFixUp(RedBlackTree *tree, RedBlackNode *x)
 ///
 /// @brief Performs rotations and changes colors to restore red-black
 ///   properties after a node is deleted.
@@ -766,8 +804,8 @@ RedBlackNode *rbQuery(const RedBlackTree *tree, const volatile void *q) {
 /// @param x is the child of the spliced out node in rbTreeDelete.
 ///
 /// @note The algorithm for this function is from _Introduction_To_Algorithms_.
-void rbDestroyNodeFixUp(RedBlackTree *tree, RedBlackNode *x) {
-  printLog(TRACE, "ENTER rbDestroyNodeFixUp(tree=%p, x=%p)\n", tree, x);
+void rbTreeDestroyNodeFixUp(RedBlackTree *tree, RedBlackNode *x) {
+  printLog(TRACE, "ENTER rbTreeDestroyNodeFixUp(tree=%p, x=%p)\n", tree, x);
   
   RedBlackNode *root = tree->root->left;
   RedBlackNode *w = NULL;
@@ -826,42 +864,48 @@ void rbDestroyNodeFixUp(RedBlackTree *tree, RedBlackNode *x) {
   x->red = false;
 
 #ifdef DEBUG_ASSERT
-  rbAssert((tree->nil->red == false), "nil not black in rbDestroyNodeFixUp");
+  rbAssert((tree->nil->red == false), "nil not black in rbTreeDestroyNodeFixUp");
 #endif
-  printLog(TRACE, "EXIT rbDestroyNodeFixUp(tree=%p, x=%p) = {}\n", tree, x);
+  printLog(TRACE, "EXIT rbTreeDestroyNodeFixUp(tree=%p, x=%p) = {}\n", tree, x);
 }
 
 
-/// @fn void rbDestroyNode(RedBlackTree *tree, RedBlackNode *z)
+/// @fn int rbTreeDestroyNode(RedBlackTree *tree, RedBlackNode *z)
 ///
 /// @brief Deletes z from tree and frees the key and value of z
 ///   using tree->keyType->destory and z->type->destroy.
 ///
-/// @details  This function calls rbDestroyNodeFixUp to restore red-black
+/// @details  This function calls rbTreeDestroyNodeFixUp to restore red-black
 ///   properties after the deletion of z.
 ///
 /// @param tree is the tree to remove the node from.
 /// @param z is the node to remove.
 ///
-/// @return This function returns no value.
+/// @return Returns 0 on success, -1 on failure.
 ///
 /// @note The algorithm for this function is from _Introduction_To_Algorithms_.
-void rbDestroyNode(RedBlackTree *tree, RedBlackNode *z) {
-  printLog(TRACE, "ENTER rbDestroyNode(tree=%p, z=%p) = {}\n", tree, z);
+int rbTreeDestroyNode(RedBlackTree *tree, RedBlackNode *z) {
+  printLog(TRACE, "ENTER rbTreeDestroyNode(tree=%p, z=%p) = {}\n", tree, z);
+  
+  int returnValue = 0;
   
   // Parameter check.
   if (tree == NULL) {
     printLog(ERR, "tree is NULL.\n");
-    printLog(TRACE, "EXIT rbDestroyNode(tree=%p, z=%p) = {}\n", tree, z);
-    return;
+    returnValue = -1;
+    printLog(TRACE, "EXIT rbTreeDestroyNode(tree=%p, z=%p) = {%d}\n",
+      tree, z, returnValue);
+    return returnValue;
   }
   if (z == NULL) {
     printLog(ERR, "z is NULL.\n");
-    printLog(TRACE, "EXIT rbDestroyNode(tree=%p, z=%p) = {}\n", tree, z);
-    return;
+    returnValue = -1;
+    printLog(TRACE, "EXIT rbTreeDestroyNode(tree=%p, z=%p) = {%d}\n",
+      tree, z, returnValue);
+    return returnValue;
   }
   
-  if (mtx_lock(tree->lock) != thrd_success) {
+  if ((tree->lock != NULL) && (mtx_lock(tree->lock) != thrd_success)) {
     printLog(WARN, "Could not lock red black tree mutex.\n");
   }
   
@@ -892,12 +936,12 @@ void rbDestroyNode(RedBlackTree *tree, RedBlackNode *z) {
   if (y != z) { // y should not be nil in this case
     // We're removing z in this case.
 #ifdef DEBUG_ASSERT
-    rbAssert((y != tree->nil), "y is nil in rbDestroyNode\n");
+    rbAssert((y != tree->nil), "y is nil in rbTreeDestroyNode\n");
 #endif
     
     // y is the node to splice out and x is its child
     if (y->red == false) {
-      rbDestroyNodeFixUp(tree, x);
+      rbTreeDestroyNodeFixUp(tree, x);
     }
     
     // Fix the linked-list portions.
@@ -946,18 +990,22 @@ void rbDestroyNode(RedBlackTree *tree, RedBlackNode *z) {
     tree->keyType->destroy(y->key); y->key = NULL;
     y->type->destroy(y->value); y->value = NULL;
     if (y->red == false) {
-      rbDestroyNodeFixUp(tree, x);
+      rbTreeDestroyNodeFixUp(tree, x);
     }
     y = (RedBlackNode*) pointerDestroy(y);
   }
   tree->size--;
   
-  mtx_unlock(tree->lock);
+  if (tree->lock != NULL) {
+    mtx_unlock(tree->lock);
+  }
   
 #ifdef DEBUG_ASSERT
-  rbAssert((tree->nil->red == false) ,"nil not black in rbDestroyNode");
+  rbAssert((tree->nil->red == false) ,"nil not black in rbTreeDestroyNode");
 #endif
-  printLog(TRACE, "EXIT rbDestroyNode(tree=%p, z=%p) = {}\n", tree, z);
+  printLog(TRACE, "EXIT rbTreeDestroyNode(tree=%p, z=%p) = {%d}\n",
+    tree, z, returnValue);
+  return returnValue;
 }
 
 /// @fn int rbTreeRemove(RedBlackTree *tree, const volatile void *key)
@@ -980,19 +1028,23 @@ int rbTreeRemove(RedBlackTree *tree, const volatile void *key) {
     return -1;
   }
   
-  if (mtx_lock(tree->lock) != thrd_success) {
+  if ((tree->lock != NULL) && (mtx_lock(tree->lock) != thrd_success)) {
     printLog(WARN, "Could not lock red black tree mutex.\n");
   }
   
   RedBlackNode *node = rbQuery(tree, key);
   if (node != NULL) {
-    rbDestroyNode(tree, node);
-    mtx_unlock(tree->lock);
+    rbTreeDestroyNode(tree, node);
+    if (tree->lock != NULL) {
+      mtx_unlock(tree->lock);
+    }
     
     printLog(TRACE, "EXIT rbTreeRemove(tree=%p, key=%p) = {0}\n", tree, key);
     return 0;
   } else {
-    mtx_unlock(tree->lock);
+    if (tree->lock != NULL) {
+      mtx_unlock(tree->lock);
+    }
     
     printLog(TRACE, "EXIT rbTreeRemove(tree=%p, key=%p) = {-1}\n", tree, key);
     return -1;
@@ -1036,7 +1088,7 @@ List *rbEnumerate(const RedBlackTree *tree,
     return NULL;
   }
   
-  if (mtx_lock(tree->lock) != thrd_success) {
+  if ((tree->lock != NULL) && (mtx_lock(tree->lock) != thrd_success)) {
     printLog(WARN, "Could not lock red black tree mutex.\n");
   }
   
@@ -1064,7 +1116,9 @@ List *rbEnumerate(const RedBlackTree *tree,
     lastBest = lastBest->prev;
   }
   
-  mtx_unlock(tree->lock);
+  if (tree->lock != NULL) {
+    mtx_unlock(tree->lock);
+  }
     
   // Top of stack now contains first tree entry >= low.  Bottom of stack now
   // contains last tree entry <= high.
@@ -1153,13 +1207,15 @@ RedBlackTree *rbTreeCopy(const RedBlackTree *tree) {
   }
   treeCopy = rbTreeCreate(tree->keyType);
   
-  if (mtx_lock(tree->lock) != thrd_success) {
+  if ((tree->lock != NULL) && (mtx_lock(tree->lock) != thrd_success)) {
     printLog(WARN, "Could not lock red black tree mutex.\n");
   }
   
   if (tree->tail == NULL) {
     // Empty tree.  We're done with the copy.
-    mtx_unlock(tree->lock);
+    if (tree->lock != NULL) {
+      mtx_unlock(tree->lock);
+    }
       
     printLog(TRACE, "EXIT rbTreeCopy(tree=%p) = {%p}\n", tree, treeCopy);
     return treeCopy; // Empty tree
@@ -1169,19 +1225,21 @@ RedBlackTree *rbTreeCopy(const RedBlackTree *tree) {
     rbInsert(treeCopy, node->key, node->value, node->type);
   }
   
-  mtx_unlock(tree->lock);
-    
+  if (tree->lock != NULL) {
+    mtx_unlock(tree->lock);
+  }
+  
   printLog(TRACE, "EXIT rbTreeCopy(tree=%p) = {%p}\n", tree, treeCopy);
   return treeCopy;
 }
 
-/// @fn int rbTreeSize(const volatile void *value)
+/// @fn size_t rbTreeSize(const volatile void *value)
 ///
 /// @brief Compute the size of a RedBlackTree structure in memory.
 ///
 /// @return Returns the size of the RedBlackTree structure in bytes.
-int rbTreeSize(const volatile void *value) {
-  int size = 0;
+size_t rbTreeSize(const volatile void *value) {
+  size_t size = 0;
   RedBlackTree *tree = (RedBlackTree*) value;
   printLog(TRACE, "ENTER rbTreeSize(value=\"%p\")\n", value);
   
@@ -1189,34 +1247,40 @@ int rbTreeSize(const volatile void *value) {
     size = sizeof(RedBlackTree);
   }
   
-  printLog(TRACE, "EXIT rbTreeSize(value=\"%p\") = {%d}\n", value, size);
+  printLog(TRACE, "EXIT rbTreeSize(value=\"%p\") = {%llu}\n", value, llu(size));
   return size;
 }
 
-/// @fn RedBlackTree *rbTreeFromByteArray(const volatile void *array, u64 *length)
+/// @fn RedBlackTree *rbTreeFromBlob_(const volatile void *array, u64 *length, bool inPlaceData, bool disableThreadSafety, ...)
 ///
 /// @brief Convert a properly-formatted byte array into a red-black tree.
 ///
 /// @param array The array of bytes to convert.
 /// @param length As an input, this is the number of bytes in array.  As an
 ///   output, this is the number of bytes consumed by this call.
+/// @param inPlaceData Whether the data should be used in place (true) or a
+///   copy should be made and returned (false).
+/// @param disableThreadSafety Whether or not thread safety should be disabled
+///   in the returned list.
 ///
 /// @return Returns a pointer to a RedBlackTree on success, NULL on failure.
-RedBlackTree *rbTreeFromByteArray(const volatile void *array, u64 *length) {
+RedBlackTree *rbTreeFromBlob_(const volatile void *array, u64 *length, bool inPlaceData, bool disableThreadSafety, ...) {
   char *byteArray = (char*) array;
-  RedBlackTree *tree = NULL;
+  RedBlackTree *rbTree = NULL;
   u64 index = 0;
-  i16 typeIndex = 0;
-  printLog(TRACE, "ENTER rbTreeFromByteArray(array=%p, length=%p)\n",
-    array, length);
+  i16 typeIndex = 0, keyTypeIndex = 0;
+  printLog(TRACE,
+    "ENTER rbTreeFromBlob(array=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s)\n",
+    array, length, boolNames[inPlaceData], boolNames[disableThreadSafety]);
   u64 size = 0;
-  TypeDescriptor *keyType = NULL;
+  TypeDescriptor *keyType = NULL, *keyTypeNoCopy = NULL;
   
   if ((array == NULL) || (length == NULL)) {
     printLog(ERR, "One or more NULL parameters.\n");
-    printLog(TRACE, "EXIT rbTreeFromByteArray(array=%p, length=%p) = {%p}\n",
-      tree, length, tree);
-    return tree;
+    printLog(TRACE,
+      "EXIT rbTreeFromBlob(array=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      rbTree, length, boolNames[inPlaceData], boolNames[disableThreadSafety], rbTree);
+    return NULL;
   }
   
   // Length check
@@ -1253,29 +1317,44 @@ RedBlackTree *rbTreeFromByteArray(const volatile void *array, u64 *length) {
   }
   index += sizeof(u32);
   
-  typeIndex = *((i16*) &byteArray[index]);
-  littleEndianToHost(&typeIndex, sizeof(i16));
+  keyTypeIndex = *((i16*) &byteArray[index]);
+  littleEndianToHost(&keyTypeIndex, sizeof(i16));
   index += sizeof(i16);
-  if (typeIndex < 1) {
+  if (keyTypeIndex < 1) {
     // Index is not valid.
     *length = index;
-    printLog(ERR, "Improperly formatted byte array.  Cannot create tree.\n");
-    printLog(TRACE, "EXIT rbTreeFromByteArray(array=%p, length=%llu) = {%p}\n",
-      array, llu(*length), tree);
-    return tree;
+    printLog(ERR, "Improperly formatted byte array.  Cannot create rbTree.\n");
+    printLog(TRACE,
+      "EXIT rbTreeFromBlob(array=%p, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      array, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety], rbTree);
+    return NULL;
   }
-  keyType = getTypeDescriptorFromIndex(typeIndex);
-  tree = rbTreeCreate(keyType);
+  keyType = getTypeDescriptorFromIndex(keyTypeIndex);
+  keyTypeNoCopy = getTypeDescriptorFromIndex(keyTypeIndex + 1);
   
   size = *((u64*) &byteArray[index]);
   littleEndianToHost(&size, sizeof(size));
   index += sizeof(size);
+  rbTree = rbTreeCreate(keyTypeNoCopy, disableThreadSafety);
+  if (rbTree == NULL) {
+    LOG_MALLOC_FAILURE();
+    printLog(NEVER,
+      "EXIT rbTreeFromBlob(array=%p, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      array, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety], rbTree);
+    return NULL;
+  }
+  
+  // Complex data types (which will have type indexes greater than or equal
+  // to that of typeRedBlackTree) will need to be handled sligrbTreely differently than
+  // primitives in the case that inPlaceData is true, so grab the index for
+  // typeRedBlackTree now so that we can compare it later.
+  i64 rbTreeIndex = getIndexFromTypeDescriptor(typeRedBlackTree);
   
   RedBlackNode *node = NULL;
-  while ((index < arrayLength) && (tree->size < size)) {
+  while ((index < arrayLength) && (rbTree->size < size)) {
     void *key = NULL, *value = NULL;
     u64 keySize = 0, valueSize = 0;
-    TypeDescriptor *valueType = NULL;
+    TypeDescriptor *valueType = NULL, *valueTypeNoCopy = NULL;
     
     typeIndex = *((i16*) &byteArray[index]);
     littleEndianToHost(&typeIndex, sizeof(i16));
@@ -1285,47 +1364,87 @@ RedBlackTree *rbTreeFromByteArray(const volatile void *array, u64 *length) {
       printLog(ERR,
         "Improperly formatted byte array.  Cannot continue processing\n");
       printLog(TRACE,
-        "EXIT rbTreeFromByteArray(array=%p, length=%llu) = {%p}\n",
-        array, llu(*length), tree);
-      return tree;
+        "EXIT rbTreeFromBlob(array=%p, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+        array, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety], rbTree);
+      if (inPlaceData) {
+        // Optimize for this case.
+        if (keyTypeIndex >= rbTreeIndex) {
+          // See notes at the bottom of this function about this logic.
+          rbTree->keyType = keyType;
+        }
+      } else {
+        rbTree->keyType = keyType;
+      }
+      return rbTree;
     }
     valueType = getTypeDescriptorFromIndex(typeIndex);
+    valueTypeNoCopy = getTypeDescriptorFromIndex(typeIndex + 1);
     index += sizeof(i16);
     valueSize = arrayLength - index;
     
-    value = valueType->fromByteArray(&byteArray[index], &valueSize);
+    value = valueType->fromBlob(&byteArray[index], &valueSize, inPlaceData, disableThreadSafety);
     index += valueSize;
     if (value == NULL) {
       *length = index;
       printLog(ERR, "NULL value detected.  Cannot process.\n");
       printLog(TRACE,
-        "EXIT rbTreeFromByteArray(array=%p, length=%llu) = {%p}\n",
-        array, llu(*length), tree);
-      return tree;
+        "EXIT rbTreeFromBlob(array=%p, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+        array, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety], rbTree);
+      if (inPlaceData) {
+        // Optimize for this case.
+        if (keyTypeIndex >= rbTreeIndex) {
+          // See notes at the bottom of this function about this logic.
+          rbTree->keyType = keyType;
+        }
+      } else {
+        rbTree->keyType = keyType;
+      }
+      return rbTree;
     }
     
     keySize = arrayLength - index;
-    key = keyType->fromByteArray(&byteArray[index], &keySize);
+    key = keyType->fromBlob(&byteArray[index], &keySize, inPlaceData, disableThreadSafety);
     index += keySize;
     if (key == NULL) {
       *length = index;
       printLog(ERR, "NULL key detected.  Cannot process.\n");
       printLog(TRACE,
-        "EXIT rbTreeFromByteArray(array=%p, length=%llu) = {%p}\n",
-        array, llu(*length), tree);
-      return tree;
+        "EXIT rbTreeFromBlob(array=%p, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+        array, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety], rbTree);
+      if (inPlaceData) {
+        // Optimize for this case.
+        if (keyTypeIndex >= rbTreeIndex) {
+          // See notes at the bottom of this function about this logic.
+          rbTree->keyType = keyType;
+        }
+      } else {
+        rbTree->keyType = keyType;
+      }
+      return rbTree;
     }
     
-    node = rbInsert(tree, key, value, valueType);
-    valueType->destroy(value); value = NULL;
-    keyType->destroy(key); key = NULL;
-    if (node == NULL) {
-      printLog(ERR, "Failed to add node to tree.\n");
+    node = rbTreeAddEntry(rbTree, key, value, valueTypeNoCopy);
+    if (node != NULL) {
+      if (inPlaceData) {
+        // Optimize for this case.
+        if (typeIndex >= rbTreeIndex) {
+          // Memory has to be allocated to hold the top-level structures of
+          // complex data.  Only the primitives in the byte arrays involve no
+          // memory allocations at all.  So, for complex data, we need to set
+          // the node's type back to the base value type so that the destructor
+          // is called.  The destructors for all the primitives will be omitted.
+          node->type = valueType;
+        }
+      } else {
+        node->type = valueType;
+      }
+    } else {
+      printLog(ERR, "Failed to add node to rbTree.\n");
     }
   }
-  if (tree->size < size) {
+  if (rbTree->size < size) {
     printLog(ERR, "Expected %llu entries, but only found %llu.\n",
-      llu(size), llu(tree->size));
+      llu(size), llu(rbTree->size));
     printLog(ERR, "If this input came from this library, please "
       "report this as a bug.\n");
     if (node != NULL) {
@@ -1334,10 +1453,21 @@ RedBlackTree *rbTreeFromByteArray(const volatile void *array, u64 *length) {
   }
   
   *length = index;
+  if (inPlaceData) {
+    // Optimize for this case.
+    if (keyTypeIndex >= rbTreeIndex) {
+      // See note above for value types.  Not sure why anyone would want to have
+      // a comlex data type as a key, but it is possible, so cover the case.
+      rbTree->keyType = keyType;
+    }
+  } else {
+    rbTree->keyType = keyType;
+  }
   
-  printLog(TRACE, "EXIT rbTreeFromByteArray(array=%p, length=%llu) = {%p}\n",
-    array, llu(*length), tree);
-  return tree;
+  printLog(TRACE,
+    "EXIT rbTreeFromBlob(array=%p, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+    array, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety], rbTree);
+  return rbTree;
 }
 
 /// @fn RedBlackTree* listToRbTree(const List *list)
@@ -1358,15 +1488,24 @@ RedBlackTree* listToRbTree(const List *list) {
   
   RedBlackTree *tree = rbTreeCreate(list->keyType);
   
-  if (mtx_lock(list->lock) != thrd_success) {
+  if ((list->lock != NULL) && (mtx_lock(list->lock) != thrd_success)) {
     printLog(WARN, "Could not lock list mutex.\n");
   }
   
+  i64 listIndex = getIndexFromTypeDescriptor(typeList);
   for (ListNode *node = list->head; node != NULL; node = node->next) {
-    rbInsert(tree, node->key, node->value, node->type);
+    if (getIndexFromTypeDescriptor(node->type) < listIndex) {
+      // The usual case, so put it first.
+      rbInsert(tree, node->key, node->value, node->type);
+    } else {
+      rbInsert(tree, node->key, listToRbTree((List*) node->value),
+        typeRedBlackTreeNoCopy)->type = typeRedBlackTree;
+    }
   }
   
-  mtx_unlock(list->lock);
+  if (list->lock != NULL) {
+    mtx_unlock(list->lock);
+  }
     
   printLog(TRACE, "EXIT listToRbTree(list=%p) = {%p}\n", list, tree);
   return tree;
@@ -1384,7 +1523,7 @@ void *rbTreeGetValue(const RedBlackTree *tree, const volatile void *key) {
   printLog(TRACE, "ENTER rbTreeGetValue(tree=%p, key=%p)\n", tree, key);
   
   if ((tree == NULL) || (key == NULL)) {
-    printLog(ERR, "Invalid parameters.\n");
+    printLog(DEBUG, "Invalid parameters.\n");
     printLog(TRACE, "EXIT rbTreeGetValue(tree=%p, key=%p) = {NULL}\n", tree, key);
     return NULL;
   }
@@ -1399,6 +1538,181 @@ void *rbTreeGetValue(const RedBlackTree *tree, const volatile void *key) {
   return x;
 }
 
+/// @fn RedBlackTree *xmlToRedBlackTree(const char *inputData)
+///
+/// @brief Take SOAP data and return a hash table of key-value objects.
+///
+/// @param inputData is the full data string from a POST call.
+///
+/// @return Returns a RedBlackTree containing the data parsed.
+RedBlackTree *xmlToRedBlackTree(const char *inputData) {
+  char *separatorAt = NULL;
+  char *rbTreeString = NULL, *indentedRedBlackTreeString = NULL;
+  RedBlackTree *rbTree= NULL;
+  char *key = NULL;
+  Bytes value = NULL;
+  char *xmlString = NULL;
+  
+  printLog(TRACE, "ENTER xmlToRedBlackTree(inputData=\"%s\")\n", inputData);
+  
+  if (inputData == NULL) {
+    printLog(ERR, "NULL inputData provided.\n");
+    printLog(TRACE, "EXIT xmlToRedBlackTree(inputData=NULL) = {NULL}\n");
+    return NULL;
+  }
+  
+  const char *startAt = &(inputData[strspn(inputData, " \t\n")]);
+  if (*startAt != '<') {
+    printLog(DEBUG, "No XML provided.\n");
+    printLog(TRACE, "EXIT xmlToRedBlackTree(inputData=NULL) = {NULL}\n");
+    return NULL;
+  }
+  straddstr(&xmlString, startAt);
+  
+  rbTree = rbTreeCreate(typeString);
+  
+  separatorAt = strstr(xmlString, "Request");
+  if (separatorAt == NULL) {
+    // Might be response data we're parsing instead of request data.  Try that.
+    separatorAt = strstr(xmlString, "Response");
+  }
+  if (separatorAt == NULL) {
+    // See if it's just generic XML, maybe.
+    printLog(DEBUG, "Looking for generic XML data.\n");
+    separatorAt = strchr(xmlString, '>');
+    if (separatorAt != NULL && separatorAt != xmlString) {
+      printLog(DEBUG, "Generic XML data found.\n");
+      separatorAt--;
+    }
+  }
+  if (separatorAt != NULL) {
+    separatorAt = strchr(separatorAt, '>'); // Skip over the request header
+    if (separatorAt != NULL) {
+      separatorAt = strchr(separatorAt, '<');
+      // We're now either at the first field or the close of the request
+    }
+  }
+  
+  while (separatorAt != NULL && *(separatorAt + 1) != '/') {
+    char *endOfLine = strchr(separatorAt, '\n');
+    // separatorAt should point to a '<'
+    char *endOfTag = strchr((++separatorAt), ' ');
+    printLog(DEBUG, "In separatorAt while.\n");
+    
+    if (endOfLine == NULL) {
+      // XML is all on one line
+      endOfLine = separatorAt + strlen(separatorAt);
+    }
+    
+    if (endOfTag != NULL && strchr(separatorAt, '>') &&
+      strchr(separatorAt, '>') < endOfTag) {
+      endOfTag = strchr((separatorAt), '>');
+    }
+    
+    if (endOfTag == NULL || endOfTag > endOfLine) {
+      endOfTag = strchr((separatorAt), '>');
+    }
+    
+    if (endOfTag != NULL) {
+      char *valueAt = NULL;
+      char *closeTag = NULL;
+      
+      if (*endOfTag == '>' && *(endOfTag - 1) == '/') {
+        // There is no value for this key
+        valueAt = NULL;
+      } else if (*endOfTag == '>') {
+        valueAt = endOfTag + 1;
+      } else { // endOfTag is ' '
+        valueAt = strchr((separatorAt + 1), '>');
+        if (valueAt) {
+          valueAt = valueAt + 1;
+        }
+      }
+      *endOfTag = '\0';
+      key = (char *) malloc(strlen(separatorAt) + 1);
+      strcpy(key, separatorAt);
+      straddstr(&closeTag, "</");
+      straddstr(&closeTag, key);
+      if (valueAt) {
+        endOfTag = strstr(valueAt, closeTag);
+      } else {
+        endOfTag = NULL;
+      }
+      if (endOfTag != NULL) {
+        *endOfTag = '\0';
+        value = NULL;
+        bytesAddStr(&value, valueAt);
+      } else {
+        // No value but there WAS a tag so we can't just leave the value
+        // NULL.  Make it an empty string.
+        value = NULL;
+        bytesAddData(&value, "", 1);
+      }
+      closeTag = stringDestroy(closeTag);
+      
+      // OK.  We're parsing XML data.  It's possible that what we just parsed
+      // is really just more XML.  If so, it should be added to a subordinate
+      // List.  Try to detect this case and act intelligently.
+      if (strstr(str(value), "<") != NULL &&
+        strrchr(str(value), '>') != NULL &&
+        strstr(str(value), "<") < strrchr(str(value), '>')) {
+        // Probably more XML.  Make it look like XML and parse again.
+        char *xmlValue = NULL;
+        straddstr(&xmlValue, "<");
+        straddstr(&xmlValue, key);
+        straddstr(&xmlValue, ">\n");
+        straddstr(&xmlValue, str(value));
+        straddstr(&xmlValue, "</");
+        straddstr(&xmlValue, key);
+        straddstr(&xmlValue, ">\n");
+        value = bytesDestroy(value);
+        RedBlackTree *subTable = xmlToRedBlackTree(xmlValue);
+        xmlValue = stringDestroy(xmlValue);
+        HashNode *node = rbTreeAddEntry(rbTree, key, subTable,
+          typeRedBlackTreeNoCopy);
+        if (node == NULL) {
+          printLog(ERR, "rbTreeAddEntry failed when adding key/table pair.\n");
+        } else {
+          node->type = typeRedBlackTree;
+        }
+      }
+    } else {
+      // No end of tag?  Is this possible?
+    }
+    
+    if (value != NULL) {
+      HashNode *node = rbTreeAddEntry(rbTree, key, value, typeBytesNoCopy);
+      if (node != NULL) {
+        node->type = typeBytes;
+      } else {
+        printLog(ERR, "rbTreeAddEntry failed when adding key/value pair.\n");
+      }
+    }
+    key = stringDestroy(key);
+    
+    // separatorAt should now be at the beginning of the value
+    // endOfTag should now be at the '<' of the closing tag but set to '\0'
+    if (endOfTag != NULL) {
+      separatorAt = strchr((endOfTag + 1), '<');
+    } else {
+      separatorAt = separatorAt + 1;
+      separatorAt = strchr(separatorAt, '<');
+    }
+    // separatorAt should now be at the '<' of the opening tag of the next value
+  }
+  
+  xmlString = stringDestroy(xmlString);
+  if (logThreshold <= TRACE) {
+    rbTreeString = rbTreeToString(rbTree);
+    indentedRedBlackTreeString = indentText(rbTreeString, 2);
+    rbTreeString = stringDestroy(rbTreeString);
+  }
+  printLog(TRACE, "EXIT xmlToRedBlackTree(inputData=\"%s\") = {%s}\n",
+    inputData, indentedRedBlackTreeString);
+  indentedRedBlackTreeString = stringDestroy(indentedRedBlackTreeString);
+  return rbTree;
+}
+
 // jsonToRedBlackTree implementation from generic macro.
 JSON_TO_DATA_STRUCTURE(RedBlackTree, rbTree)
 
@@ -1409,17 +1723,20 @@ JSON_TO_DATA_STRUCTURE(RedBlackTree, rbTree)
 TypeDescriptor _typeRbTree = {
   .name          = "RbTree",
   .xmlName       = NULL,
+  .dataIsPointer = true,
   .toString      = (char* (*)(const volatile void*)) listToString,
   .toBytes       = (Bytes (*)(const volatile void*)) listToBytes,
   .compare       = (int (*)(const volatile void*, const volatile void*)) rbTreeCompare,
-  .create        = (void* (*)(const volatile void*, ...)) rbTreeCreate,
+  .create        = (void* (*)(const volatile void*, ...)) rbTreeCreate_,
   .copy          = (void* (*)(const volatile void*)) rbTreeCopy,
   .destroy       = (void* (*)(volatile void*)) rbTreeDestroy,
   .size          = rbTreeSize,
-  .toByteArray   = (void* (*)(const volatile void*, u64*)) listToByteArray,
-  .fromByteArray = (void* (*)(const volatile void*, u64*)) rbTreeFromByteArray,
+  .toBlob        = (Bytes (*)(const volatile void*)) listToBlob,
+  .fromBlob      = (void* (*)(const volatile void*, u64*, bool, bool)) rbTreeFromBlob_,
   .hashFunction  = NULL,
   .clear         = (i32 (*)(volatile void*)) rbTreeClear,
+  .toXml         = (Bytes (*)(const volatile void*, const char *elementName, bool indent, ...)) listToXml_,
+  .toJson        = (Bytes (*)(const volatile void*)) listToJson,
 };
 TypeDescriptor *typeRbTree = &_typeRbTree;
 
@@ -1437,17 +1754,20 @@ TypeDescriptor *typeRbTree = &_typeRbTree;
 TypeDescriptor _typeRbTreeNoCopy = {
   .name          = "RbTree",
   .xmlName       = NULL,
+  .dataIsPointer = true,
   .toString      = (char* (*)(const volatile void*)) listToString,
   .toBytes       = (Bytes (*)(const volatile void*)) listToBytes,
   .compare       = (int (*)(const volatile void*, const volatile void*)) rbTreeCompare,
-  .create        = (void* (*)(const volatile void*, ...)) rbTreeCreate,
+  .create        = (void* (*)(const volatile void*, ...)) rbTreeCreate_,
   .copy          = (void* (*)(const volatile void*)) shallowCopy,
   .destroy       = (void* (*)(volatile void*)) nullFunction,
   .size          = rbTreeSize,
-  .toByteArray   = (void* (*)(const volatile void*, u64*)) listToByteArray,
-  .fromByteArray = (void* (*)(const volatile void*, u64*)) rbTreeFromByteArray,
+  .toBlob        = (Bytes (*)(const volatile void*)) listToBlob,
+  .fromBlob      = (void* (*)(const volatile void*, u64*, bool, bool)) rbTreeFromBlob_,
   .hashFunction  = NULL,
   .clear         = (i32 (*)(volatile void*)) rbTreeClear,
+  .toXml         = (Bytes (*)(const volatile void*, const char *elementName, bool indent, ...)) listToXml_,
+  .toJson        = (Bytes (*)(const volatile void*)) listToJson,
 };
 TypeDescriptor *typeRbTreeNoCopy = &_typeRbTreeNoCopy;
 
@@ -1511,7 +1831,7 @@ bool redBlackTreeUnitTest() { \
   } \
   stringValue = stringDestroy(stringValue); \
  \
-  rbDestroyNode(NULL, NULL); \
+  rbTreeDestroyNode(NULL, NULL); \
  \
   if (rbTreeDestroy(NULL) != NULL) { \
     printLog(ERR, "rbTreeDestroy returned non-NULL value.\n"); \
@@ -1542,16 +1862,16 @@ bool redBlackTreeUnitTest() { \
     return false; \
   } \
  \
-  stringValue = rbTreeToXml(NULL, "element"); \
-  if (stringValue == NULL) { \
+  Bytes bytesValue = rbTreeToXml(NULL, "element"); \
+  if (bytesValue == NULL) { \
     printLog(ERR, "Expected empty XML from rbTreeToXml, got NULL.\n"); \
     return false; \
   } \
-  if (strcmp(stringValue, "<element></element>") != 0) { \
+  if (strcmp(str(bytesValue), "<element></element>") != 0) { \
     printLog(ERR, "Expected empty XML from rbTreeToXml, got \"%s\".\n", stringValue); \
     return false; \
   } \
-  stringValue = stringDestroy(stringValue); \
+  bytesValue = bytesDestroy(bytesValue); \
  \
   list = rbTreeToList(NULL); \
   if (list != NULL) { \
@@ -1604,7 +1924,7 @@ bool redBlackTreeUnitTest() { \
   } \
   stringValue = stringDestroy(stringValue); \
  \
-  rbDestroyNode(tree, NULL); \
+  rbTreeDestroyNode(tree, NULL); \
  \
   if (rbTreeDestroy(tree) != NULL) { \
     printLog(ERR, "rbTreeDestroy returned non-NULL value.\n"); \
@@ -1636,16 +1956,16 @@ bool redBlackTreeUnitTest() { \
     return false; \
   } \
  \
-  stringValue = rbTreeToXml(tree, "element"); \
-  if (stringValue == NULL) { \
+  bytesValue = rbTreeToXml(tree, "element"); \
+  if (bytesValue == NULL) { \
     printLog(ERR, "Expected empty XML from rbTreeToXml, got NULL.\n"); \
     return false; \
   } \
-  if (strcmp(stringValue, "<element></element>") != 0) { \
+  if (strcmp(str(bytesValue), "<element></element>") != 0) { \
     printLog(ERR, "Expected empty XML from rbTreeToXml, got \"%s\".\n", stringValue); \
     return false; \
   } \
-  stringValue = stringDestroy(stringValue); \
+  bytesValue = bytesDestroy(bytesValue); \
  \
   list = rbTreeToList(tree); \
   if (list == NULL) { \
@@ -1846,6 +2166,151 @@ bool redBlackTreeUnitTest() { \
   } \
   listDestroy(list); list = NULL; \
   tree = (RedBlackTree*) rbTreeDestroy(tree); \
+ \
+  const char *jsonString = "{\n" \
+    "  \"myRedBlackTree1\": {\n" \
+    "    \"key1\": \"value1\",\n" \
+    "    \"key2\": \"value2\"\n" \
+    "  },\n" \
+    "  \"key3\": \"value3\",\n" \
+    "  \"myRedBlackTree2\": {\n" \
+    "    \"key4\": \"value4\",\n" \
+    "    \"key5\": \"value5\",\n" \
+    "    \"key6\": \"value6\"\n" \
+    "  },\n" \
+    "  \"myRedBlackTree3\": {\n" \
+    "    \"myRedBlackTree4\": {\n" \
+    "      \"key7\": \"value7\",\n" \
+    "      \"key8\": \"value8\"\n" \
+    "    },\n" \
+    "    \"key9\": \"value9\"\n" \
+    "  }\n" \
+    "}"; \
+  long long int startPosition = 0; \
+  tree = jsonToRedBlackTree(jsonString, &startPosition); \
+  if (tree == NULL) { \
+    printLog(ERR, "jsonToRedBlackTree returned NULL.\n"); \
+    return false; \
+  } \
+  Bytes byteArray = typeRedBlackTree->toBlob(tree); \
+  u64 length = bytesLength(byteArray); \
+  tree = rbTreeDestroy(tree); \
+  tree = rbTreeFromBlob(byteArray, &length, true); \
+  stringValue = rbTreeToString(tree); \
+  printLog(INFO, "Table: %s\n", stringValue); \
+  stringValue = stringDestroy(stringValue); \
+  stringValue = (char*) rbTreeGetValue(tree, "key3"); \
+  if (stringValue == NULL) { \
+    printLog(ERR, "Value for key3 was NULL.\n"); \
+    return false; \
+  } else if (strcmp(stringValue, "value3") != 0) { \
+    printLog(ERR, "Expected \"value3\", got \"%s\".\n", stringValue); \
+    return false; \
+  } \
+  tree2 = (RedBlackTree*) rbTreeGetValue(tree, "myRedBlackTree1"); \
+  if (tree2 == NULL) { \
+    printLog(ERR, "Value for myRedBlackTree1 was NULL.\n"); \
+    return false; \
+  } else if (rbTreeGetEntry(tree, "myRedBlackTree1")->type != typeRedBlackTree) { \
+    printLog(ERR, "Expected myRedBlackTree1 to be \"%s\", found \"%s\".\n", \
+      typeRedBlackTree->name, rbTreeGetEntry(tree, "myRedBlackTree1")->type->name); \
+    return false; \
+  } \
+  stringValue = (char*) rbTreeGetValue(tree2, "key1"); \
+  if (stringValue == NULL) { \
+    printLog(ERR, "Value for key1 was NULL.\n"); \
+    return false; \
+  } else if (strcmp(stringValue, "value1") != 0) { \
+    printLog(ERR, "Expected \"value1\", got \"%s\".\n", stringValue); \
+    return false; \
+  } \
+  stringValue = (char*) rbTreeGetValue(tree2, "key2"); \
+  if (stringValue == NULL) { \
+    printLog(ERR, "Value for key2 was NULL.\n"); \
+    return false; \
+  } else if (strcmp(stringValue, "value2") != 0) { \
+    printLog(ERR, "Expected \"value2\", got \"%s\".\n", stringValue); \
+    return false; \
+  } \
+  stringValue = (char*) rbTreeGetValue(tree2, "key6"); \
+  tree2 = (RedBlackTree*) rbTreeGetValue(tree, "myRedBlackTree2"); \
+  if (tree2 == NULL) { \
+    printLog(ERR, "Value for myRedBlackTree2 was NULL.\n"); \
+    return false; \
+  } else if (rbTreeGetEntry(tree, "myRedBlackTree2")->type != typeRedBlackTree) { \
+    printLog(ERR, "Expected myRedBlackTree2 to be \"%s\", found \"%s\".\n", \
+      typeRedBlackTree->name, rbTreeGetEntry(tree, "myRedBlackTree2")->type->name); \
+    return false; \
+  } \
+  stringValue = (char*) rbTreeGetValue(tree2, "key4"); \
+  if (stringValue == NULL) { \
+    printLog(ERR, "Value for key4 was NULL.\n"); \
+    return false; \
+  } else if (strcmp(stringValue, "value4") != 0) { \
+    printLog(ERR, "Expected \"value4\", got \"%s\".\n", stringValue); \
+    return false; \
+  } \
+  stringValue = (char*) rbTreeGetValue(tree2, "key5"); \
+  if (stringValue == NULL) { \
+    printLog(ERR, "Value for key5 was NULL.\n"); \
+    return false; \
+  } else if (strcmp(stringValue, "value5") != 0) { \
+    printLog(ERR, "Expected \"value5\", got \"%s\".\n", stringValue); \
+    return false; \
+  } \
+  stringValue = (char*) rbTreeGetValue(tree2, "key6"); \
+  if (stringValue == NULL) { \
+    printLog(ERR, "Value for key6 was NULL.\n"); \
+    return false; \
+  } else if (strcmp(stringValue, "value6") != 0) { \
+    printLog(ERR, "Expected \"value6\", got \"%s\".\n", stringValue); \
+    return false; \
+  } \
+  tree2 = (RedBlackTree*) rbTreeGetValue(tree, "myRedBlackTree3"); \
+  if (tree2 == NULL) { \
+    printLog(ERR, "Value for myRedBlackTree3 was NULL.\n"); \
+    return false; \
+  } else if (rbTreeGetEntry(tree, "myRedBlackTree3")->type != typeRedBlackTree) { \
+    printLog(ERR, "Expected myRedBlackTree3 to be \"%s\", found \"%s\".\n", \
+      typeRedBlackTree->name, rbTreeGetEntry(tree, "myRedBlackTree3")->type->name); \
+    return false; \
+  } \
+  stringValue = (char*) rbTreeGetValue(tree2, "key9"); \
+  if (stringValue == NULL) { \
+    printLog(ERR, "Value for key9 was NULL.\n"); \
+    return false; \
+  } else if (strcmp(stringValue, "value9") != 0) { \
+    printLog(ERR, "Expected \"value9\", got \"%s\".\n", stringValue); \
+    return false; \
+  } \
+  if (rbTreeGetValue(tree2, "myRedBlackTree4") == NULL) { \
+    printLog(ERR, "Value for myRedBlackTree4 was NULL.\n"); \
+    return false; \
+  } else if (rbTreeGetEntry(tree2, "myRedBlackTree4")->type != typeRedBlackTree) { \
+    printLog(ERR, "Expected myRedBlackTree4 to be \"%s\", found \"%s\".\n", \
+      typeRedBlackTree->name, rbTreeGetEntry(tree, "myRedBlackTree4")->type->name); \
+    return false; \
+  } \
+  tree2 = (RedBlackTree*) rbTreeGetValue(tree2, "myRedBlackTree4"); \
+  stringValue = (char*) rbTreeGetValue(tree2, "key7"); \
+  if (stringValue == NULL) { \
+    printLog(ERR, "Value for key7 was NULL.\n"); \
+    return false; \
+  } else if (strcmp(stringValue, "value7") != 0) { \
+    printLog(ERR, "Expected \"value7\", got \"%s\".\n", stringValue); \
+    return false; \
+  } \
+  stringValue = (char*) rbTreeGetValue(tree2, "key8"); \
+  if (stringValue == NULL) { \
+    printLog(ERR, "Value for key8 was NULL.\n"); \
+    return false; \
+  } else if (strcmp(stringValue, "value8") != 0) { \
+    printLog(ERR, "Expected \"value8\", got \"%s\".\n", stringValue); \
+    return false; \
+  } \
+  byteArray = bytesDestroy(byteArray); \
+  tree = rbTreeDestroy(tree); \
+ \
   return true; \
 }
 RED_BLACK_TREE_UNIT_TEST

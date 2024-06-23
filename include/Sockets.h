@@ -13,7 +13,7 @@
 /// @details
 ///
 /// @copyright
-///                   Copyright (c) 2012-2023 James Card
+///                   Copyright (c) 2012-2024 James Card
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a
 /// copy of this software and associated documentation files (the "Software"),
@@ -52,19 +52,16 @@
 #include <openssl/conf.h>
 #endif // TLS_SOCKETS_ENABLED
 
-#include "OsApi.h"
-#include "CThreads.h"
-#include "StringLib.h"
-
-#ifdef _MSC_VER
+#ifdef _WIN32
 
 #define WIN32_LEAN_AND_MEAN
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
-#include <WinSock2.h>
-#include <Windows.h>
-#include <WS2tcpip.h>
+#include <winsock2.h>
+#include <windows.h>
+#include <ws2tcpip.h>
 #include <iphlpapi.h>
-#pragma comment (lib, "Ws2_32.lib")
+
+#include "StringLib.h"
 
 /// @def rawSocketClose
 ///
@@ -80,6 +77,10 @@
 
 #define poll WSAPoll
 
+#ifdef _MSC_VER
+#pragma comment (lib, "Ws2_32.lib")
+#endif // _MSC_VER
+
 #else // POSIX
 
 #include <sys/socket.h>
@@ -89,10 +90,11 @@
 #include <netdb.h>
 #include <sys/types.h>
 #include <ifaddrs.h>
-#include <linux/if_link.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/ioctl.h>
+
+#include "CThreads.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -111,7 +113,7 @@ extern "C"
   (shutdown(socket, SHUT_RDWR), close(socket))
 #define NO_ERROR 0
 
-#endif // _MSC_VER
+#endif // _WIN32
 
 
 // Value definitions
@@ -175,6 +177,8 @@ Socket* socketCreate_(SocketType socketType, SocketProtocol socketProtocol,
 #define socketCreate(socketType, socketProtocol, address, ...) \
   socketCreate_(socketType, socketProtocol, address, ##__VA_ARGS__, 0, 0, 0, 0)
 void getIpAddress(char **address);
+size_t getAddressSize(const char *address);
+char *getNetworkAddress(const char *address, size_t numFixedBits);
 Socket* socketDestroy(Socket *sock);
 int socketSend(Socket *sock, const volatile void *buf, int len);
 int socketReceive_(Socket *sock, volatile void *buf, int len, int timeoutMilliseconds,

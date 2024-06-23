@@ -13,7 +13,7 @@
 /// @details
 ///
 /// @copyright
-///                   Copyright (c) 2012-2023 James Card
+///                   Copyright (c) 2012-2024 James Card
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a
 /// copy of this software and associated documentation files (the "Software"),
@@ -45,7 +45,7 @@
 extern "C" {
 #endif
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 /*
  * Dirent interface for Microsoft Visual Studio
  *
@@ -71,7 +71,7 @@ extern "C" {
 #ifndef WIN32_LEAN_AND_MEAN
 #	define WIN32_LEAN_AND_MEAN
 #endif
-#include <Windows.h>
+#include <windows.h>
 #include <direct.h>
 #define mkdir(path, mode) _mkdir(path)
 #define rmdir _rmdir
@@ -404,14 +404,14 @@ int dirent_wcstombs_s(
 void dirent_set_errno(int error);
 #endif
 
-#else // _MSC_VER not defined
+#else // _WIN32 not defined
 
 #include <dirent.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
-#endif // _MSC_VER
+#endif // _WIN32
 
 int mkpath(const char *path, int mode);
 int rmdirRecursive(const char *directory);

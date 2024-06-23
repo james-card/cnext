@@ -11,7 +11,7 @@
 /// @details
 ///
 /// @copyright
-///                   Copyright (c) 2012-2023 James Card
+///                   Copyright (c) 2012-2024 James Card
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a
 /// copy of this software and associated documentation files (the "Software"),
@@ -126,9 +126,12 @@ int vasprintf(char **buffer, const char *formatString, va_list args);
 #ifdef asprintf
 #undef asprintf
 #endif // asprintf
-#ifdef _MSC_VER
+#if defined _MSC_VER
 int asprintf(char **buffer, _Printf_format_string_ const char *printString, ...);
-#else
+#elif defined __MINGW32__
+int asprintf(char **buffer, const char *printString, ...)
+  __attribute__((format(__MINGW_PRINTF_FORMAT, 2, 3)));
+#else // Assume GCC
 int asprintf(char **buffer, const char *printString, ...)
   __attribute__((format(printf, 2, 3)));
 #endif
@@ -156,6 +159,7 @@ int strncmpci(const char *s1, const char *s2, size_t len);
 Bytes getBytesBetweenCi(
   const char *haystack, const char *start, const char *end);
 char *escapeData(const volatile void *data, u64 length);
+Bytes escapeDataToBytes(const volatile void *data, u64 length);
 void unescapeBytes(Bytes input);
 u64 straddbytes(char **buffer, const Bytes input);
 int bytesNCompare(const Bytes valueA, const Bytes valueB, u64 len);
@@ -172,11 +176,14 @@ Bytes getDataBetween(const volatile void *vHaystack, u64 haystackLength,
   const volatile void *start, u64 startLength,
   const volatile void *end, u64 endLength
 );
-char *stringDestroy(char *value);
+#define stringDestroy(string) ((char*) (free((void*) string), NULL))
 int vabprintf(Bytes *buffer, const char *formatString, va_list args);
-#ifdef _MSC_VER
+#if defined _MSC_VER
 int abprintf(Bytes *buffer, _Printf_format_string_ const char *printString, ...);
-#else
+#elif defined __MINGW32__
+int abprintf(Bytes *buffer, const char *printString, ...)
+  __attribute__((format(__MINGW_PRINTF_FORMAT, 2, 3)));
+#else // Assume GCC
 int abprintf(Bytes *buffer, const char *printString, ...)
   __attribute__((format(printf, 2, 3)));
 #endif
@@ -186,6 +193,14 @@ const char *getProgramName(const char *argv0);
 bool stringStartsWith(const char *haystack, const char *beginning);
 bool stringStartsWithCi(const char *haystack, const char *beginning);
 bool dataIsString(const volatile void *data, u64 dataLength);
+#define firstFourEq(strA, strB) \
+  ( \
+    ((strA == NULL) || (strB == NULL)) \
+      ? (((intptr_t) strA) == ((intptr_t) strB)) \
+      : ((*((char*) strA) == '\0') || (*((char*) strB) == '\0'))\
+        ? (*((char*) strA) == *((char*) strB)) \
+        : (*((u32*) strA) == *((u32*) strB)) \
+  )
 
 // Bytes functions
 Bytes bytesAllocate(Bytes *buffer, u64 size);
@@ -217,6 +232,10 @@ bool bytesArrayAddField(Bytes **array, u64 beforeIndex);
 bool bytesTableAddField(Bytes ***table, u64 beforeIndex);
 Bytes dataToHexBytes(const volatile void *data, u64 length);
 Bytes hexStringToBytes(const char *hexString, u64 length);
+#ifdef USE_OPENSSL
+Bytes dataToBase64(const volatile void *data, u64 dataLength);
+Bytes base64ToBytes(const char *hexString, u64 hexStringLength);
+#endif // USE_OPENSSL
 
 
 #ifdef __cplusplus

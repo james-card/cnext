@@ -13,7 +13,7 @@
 /// @details
 ///
 /// @copyright
-///                   Copyright (c) 2012-2023 James Card
+///                   Copyright (c) 2012-2024 James Card
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a
 /// copy of this software and associated documentation files (the "Software"),
@@ -42,7 +42,7 @@
 #define PROCESSES_H
 
 // Figure out how to support processes.
-#ifdef _MSC_VER
+#ifdef _WIN32
 // Windows system.
 #include "WinProcesses.h"
 #else

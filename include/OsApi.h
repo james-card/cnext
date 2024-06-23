@@ -13,7 +13,7 @@
 /// @details
 ///
 /// @copyright
-///                   Copyright (c) 2012-2023 James Card
+///                   Copyright (c) 2012-2024 James Card
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a
 /// copy of this software and associated documentation files (the "Software"),
@@ -44,11 +44,12 @@
 
 #include <stdint.h>
 #include <time.h>
+#include "CThreads.h"
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 
 #define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
+#include <windows.h>
 
 // Taken from https://stackoverflow.com/questions/341817/is-there-a-replacement-for-unistd-h-for-windows-visual-c
 
@@ -65,7 +66,8 @@
 #define random rand
 
 /* Values for the second argument to access.
-   These may be OR'd together.  */
+ * These may be OR'd together.
+ */
 #define R_OK    4       /* Test for read permission.  */
 #define W_OK    2       /* Test for write permission.  */
 //#define   X_OK    1       /* execute permission - unsupported in windows*/
@@ -81,7 +83,11 @@
 #define chdir _chdir
 #define isatty _isatty
 #define lseek _lseek
-/* read, write, and close are NOT being #defined here, because while there are file handle specific versions for Windows, they probably don't work for sockets. You need to look at your app and consider whether to call e.g. closesocket(). */
+/* read, write, and close are NOT being #defined here, because while there are
+ * file handle specific versions for Windows, they probably don't work for
+ * sockets. You need to look at your app and consider whether to call
+ * e.g. closesocket().
+ */
 
 #ifdef _WIN64
 #define ssize_t __int64
@@ -104,6 +110,19 @@ typedef unsigned __int32  uint32_t;
 typedef unsigned __int64  uint64_t;
 */
 
+#ifndef tzset
+#define tzset _tzset
+#endif
+#ifndef daylight
+#define daylight _daylight
+#endif
+#ifndef timezone
+#define timezone _timezone
+#endif
+#ifndef tzname
+#define tzname _tzname
+#endif
+
 #else // POSIX
 
 #include <unistd.h>
@@ -125,7 +144,7 @@ static inline uint64_t getElapsedMicroseconds(uint64_t previousTime) {
 static inline int msleep(int milliseconds) {
   int returnValue = 0;
   
-#ifdef _MSC_VER
+#ifdef _WIN32
   Sleep(milliseconds);
 #else // POSIX
   struct timespec sleepTime = {0, milliseconds * 1000000};

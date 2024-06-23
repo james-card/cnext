@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                     Copyright (c) 2012-2023 James Card                     //
+//                     Copyright (c) 2012-2024 James Card                     //
 //                                                                            //
 // Permission is hereby granted, free of charge, to any person obtaining a    //
 // copy of this software and associated documentation files (the "Software"), //
@@ -30,7 +30,7 @@
 
 #include "DataTypes.h"
 #include "StringLib.h"
-#ifdef LOGGING_ENABLED
+#ifdef DS_LOGGING_ENABLED
 #include "LoggingLib.h"
 #else
 #undef printLog
@@ -38,6 +38,21 @@
 #define LOG_MALLOC_FAILURE() {}
 #define logFile stderr
 #endif
+
+const bool       boolZero       = 0;
+const i8         i8Zero         = 0;
+const u8         u8Zero         = 0;
+const i16        i16Zero        = 0;
+const u16        u16Zero        = 0;
+const i32        i32Zero        = 0;
+const u32        u32Zero        = 0;
+const i64        i64Zero        = 0;
+const u64        u64Zero        = 0;
+const i128       i128Zero       = 0;
+const u128       u128Zero       = 0;
+const float      floatZero      = 0;
+const double     doubleZero     = 0;
+const longDouble longDoubleZero = 0;
 
 /// @var DsMarker
 ///
@@ -59,14 +74,12 @@ const char *boolNames[2] = {
   "true"
 };
 
-typedef union EndianUnion {
-  int integer;
-  char character;
-} EndianUnion;
-
-EndianUnion littleEndianUnion = {.integer = 1};
-
-#define HOST_IS_LITTLE_ENDIAN littleEndianUnion.character
+/// @var littleEndianUnion
+///
+/// @brief Constant variable that concretely identifies whether or not the
+/// system is little endian.  This is the instance of the variable decalred in 
+/// DataTypes.h.
+EndianUnion const littleEndianUnion = {.integer = 1};
 
 /// @fn int byteSwapIfNotLittleEndian(volatile void *value, size_t size)
 ///
@@ -75,17 +88,17 @@ EndianUnion littleEndianUnion = {.integer = 1};
 ///
 /// @return Returns 0 on success, -1 on failure (if value is NULL).
 int byteSwapIfNotLittleEndian(volatile void *value, size_t size) {
-  printLog(TRACE, "ENTER hostToLittleEndian(value=%p, size=%llu)\n",
+  printLog(TRACE, "ENTER byteSwapIfNotLittleEndian(value=%p, size=%llu)\n",
     value, llu(size));
   if (value == NULL) {
     printLog(ERR, "value is NULL.  Cannot convert to little endian.\n");
-    printLog(TRACE, "EXIT hostToLittleEndian(value=%p, size=%llu) = {-1}\n",
+    printLog(TRACE, "EXIT byteSwapIfNotLittleEndian(value=%p, size=%llu) = {-1}\n",
       value, llu(size));
     return -1;
   }
   
   if (HOST_IS_LITTLE_ENDIAN) {
-    printLog(TRACE, "EXIT hostToLittleEndian(value=%p, size=%llu) = {0}\n",
+    printLog(TRACE, "EXIT byteSwapIfNotLittleEndian(value=%p, size=%llu) = {0}\n",
       value, llu(size));
     return 0;
   }
@@ -93,13 +106,10 @@ int byteSwapIfNotLittleEndian(volatile void *value, size_t size) {
   // Swap the bytes.
   reverseMemory(value, size);
   
-  printLog(TRACE, "EXIT hostToLittleEndian(value=%p, size=%llu) = {0}\n",
+  printLog(TRACE, "EXIT byteSwapIfNotLittleEndian(value=%p, size=%llu) = {0}\n",
     value, llu(size));
   return 0;
 }
-
-int (*hostToLittleEndian)(volatile void *value, size_t size) = byteSwapIfNotLittleEndian;
-int (*littleEndianToHost)(volatile void *value, size_t size) = byteSwapIfNotLittleEndian;
 
 /// @fn int byteSwapIfNotBigEndian(volatile void *value, size_t size)
 ///
@@ -108,11 +118,11 @@ int (*littleEndianToHost)(volatile void *value, size_t size) = byteSwapIfNotLitt
 ///
 /// @return Returns 0 on success, -1 on failure (if value is NULL).
 int byteSwapIfNotBigEndian(volatile void *value, size_t size) {
-  printLog(TRACE, "ENTER hostToBigEndian(value=%p, size=%llu)\n",
+  printLog(TRACE, "ENTER byteSwapIfNotBigEndian(value=%p, size=%llu)\n",
     value, llu(size));
   if (value == NULL) {
     printLog(ERR, "value is NULL.  Cannot convert to little endian.\n");
-    printLog(TRACE, "EXIT hostToBigEndian(value=%p, size=%llu) = {-1}\n",
+    printLog(TRACE, "EXIT byteSwapIfNotBigEndian(value=%p, size=%llu) = {-1}\n",
       value, llu(size));
     return -1;
   }
@@ -122,13 +132,10 @@ int byteSwapIfNotBigEndian(volatile void *value, size_t size) {
     reverseMemory(value, size);
   }
   
-  printLog(TRACE, "EXIT hostToBigEndian(value=%p, size=%llu) = {0}\n",
+  printLog(TRACE, "EXIT byteSwapIfNotBigEndian(value=%p, size=%llu) = {0}\n",
     value, llu(size));
   return 0;
 }
-
-int (*hostToBigEndian)(volatile void *value, size_t size) = byteSwapIfNotBigEndian;
-int (*bigEndianToHost)(volatile void *value, size_t size) = byteSwapIfNotBigEndian;
 
 // Clear functions.  These functions are shared between types, so it doesn't
 // make sense to colocate them with an individual type.
@@ -548,51 +555,111 @@ void *boolDestroy(volatile void *value) {
   return (void*) value;
 }
 
-/// @fn void *boolSize(const volatile void *value)
+/// @fn size_t boolSize(const volatile void *value)
 ///
 /// @brief Return the size of a bool type.
 ///
 /// @param value A pointer to a bool variable.
 ///
 /// @return Return the size of a bool type.
-int boolSize(const volatile void *value) {
-  int size = 0;
-  printLog(TRACE, "ENTER boolSize(value=%u)\n", (value == NULL) ? 0 : *((bool*) value));
+size_t boolSize(const volatile void *value) {
+  size_t size = 0;
+  printLog(TRACE, "ENTER boolSize(value=%p)\n", value);
   
   if (value != NULL) {
     size = sizeof(bool);
   }
   
-  printLog(TRACE, "EXIT boolSize(value=%u) = {%d}\n", (value == NULL) ? 0 : *((bool*) value), size);
+  printLog(TRACE, "EXIT boolSize(value=%p) = {%llu}\n", value, llu(size));
   return size;
 }
 
-/// @fn void* boolToByteArray(const volatile void *value, u64 *length)
+/// @fn Bytes boolToBlob(const volatile void *value)
+///
+/// @brief Convert a bool value to an array of bytes.
+///
+/// @param value A pointer to the bool value to convert.
+///
+/// @return Returns a Bytes object with the encoded byte array on success,
+/// NULL on failure.
+Bytes boolToBlob(const volatile void *value) {
+  Bytes returnValue = NULL;
+  printLog(TRACE,
+    "ENTER boolToBlob(value=%u)\n",
+    (value == NULL) ? 0 : *((bool*) value));
+  
+  if (value == NULL) {
+    printLog(ERR, "Cannot convert to byte array.  Parameter is NULL.\n");
+    printLog(TRACE,
+      "EXIT boolToBlob(value=%u) = {%p}\n",
+      (value == NULL) ? 0 : *((bool*) value), returnValue);
+    return returnValue;
+  }
+  
+  bytesAddData(&returnValue, value, sizeof(bool));
+  // Set the size to match the length.  This is so data structures that are
+  // building byte arrays encode the right amount of data, which does not
+  // include the string terminator in our case.
+  bytesSetSize(returnValue, bytesLength(returnValue));
+  
+  printLog(TRACE,
+    "EXIT boolToBlob(value=%u) = {%p}\n",
+    (value == NULL) ? 0 : *((bool*) value), returnValue);
+  return returnValue;
+}
+
+/// @fn void* boolFromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety)
 ///
 /// @brief Convert a bool value to an array of bytes.
 ///
 /// @param value A pointer to the bool value to convert.
 /// @param length The length of the resulting byte array.
+/// @param inPlaceData Whether the data should be used in place (true) or a
+///   copy should be made and returned (false).
+/// @param disableThreadSafety Whether or not thread safety should be disabled
+///   in the returned data.  Not used by this function.
 ///
 /// @return Returns a pointer to a valid byte array on success, NULL on failure.
-void* boolToByteArray(const volatile void *value, u64 *length) {
+void* boolFromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety) {
+  (void) disableThreadSafety;
   void *returnValue = NULL;
-  printLog(TRACE, "ENTER boolToByteArray(value=%u, length=%p)\n", (value == NULL) ? 0 : *((bool*) value), length);
+  printLog(TRACE,
+    "ENTER boolFromBlob(value=%u, length=%p, inPlaceData=%s, disableThreadSafety=%s)\n",
+    (value == NULL) ? 0 : *((bool*) value), length, boolNames[inPlaceData], boolNames[disableThreadSafety]);
   
   if ((value == NULL) || (length == NULL)) {
     printLog(ERR, "Cannot convert to/from byte array.  Parameter is NULL.\n");
-    printLog(TRACE, "EXIT boolToByteArray(value=%u, length=%p) = {%p}\n", (value == NULL) ? 0 : *((bool*) value), length, returnValue);
-    return returnValue;
+    printLog(TRACE,
+      "EXIT boolFromBlob(value=%u, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      (value == NULL) ? 0 : *((bool*) value), length, boolNames[inPlaceData], boolNames[disableThreadSafety],
+      returnValue);
+    return returnValue; // NULL
+  } else if (*length < sizeof(bool)) {
+    printLog(ERR, "Cannot convert from byte array.  Insufficient data.\n");
+    printLog(ERR, "Needed at least %llu bytes, only have %llu.\n",
+      llu(sizeof(bool)), llu(*length));
+    printLog(TRACE,
+      "EXIT boolFromBlob(value=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      value, length, boolNames[inPlaceData], boolNames[disableThreadSafety], returnValue);
+    return returnValue; // NULL
   }
   
-  returnValue = boolCopy(value);
+  if (inPlaceData) {
+    // Optimize for this case.
+    returnValue = (void*) value;
+  } else {
+    returnValue = boolCopy(value);
+  }
   if (returnValue != NULL) {
     *length = sizeof(bool);
   } else {
     *length = 0;
   }
   
-  printLog(TRACE, "EXIT boolToByteArray(value=%u, length=%llu) = {%p}\n", (value == NULL) ? 0 : *((bool*) value), llu(*length), returnValue);
+  printLog(TRACE,
+    "EXIT boolFromBlob(value=%u, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+    (value == NULL) ? 0 : *((bool*) value), llu(*length),
+    boolNames[inPlaceData], boolNames[disableThreadSafety], returnValue);
   return returnValue;
 }
 
@@ -603,6 +670,7 @@ void* boolToByteArray(const volatile void *value, u64 *length) {
 TypeDescriptor _typeBool = {
   .name          = "bool",
   .xmlName       = "xs:boolean",
+  .dataIsPointer = false,
   .toString      = boolToString,
   .toBytes       = boolToBytes,
   .compare       = boolCompare,
@@ -610,10 +678,12 @@ TypeDescriptor _typeBool = {
   .copy          = boolCopy,
   .destroy       = boolDestroy,
   .size          = boolSize,
-  .toByteArray   = boolToByteArray,
-  .fromByteArray = boolToByteArray,
+  .toBlob        = boolToBlob,
+  .fromBlob      = boolFromBlob,
   .hashFunction  = NULL,
   .clear         = clearBool,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeBool = &_typeBool;
 
@@ -624,6 +694,7 @@ TypeDescriptor *typeBool = &_typeBool;
 TypeDescriptor _typeBoolNoCopy = {
   .name          = "bool",
   .xmlName       = "xs:boolean",
+  .dataIsPointer = true,
   .toString      = boolToString,
   .toBytes       = boolToBytes,
   .compare       = boolCompare,
@@ -631,10 +702,12 @@ TypeDescriptor _typeBoolNoCopy = {
   .copy          = shallowCopy,
   .destroy       = (void* (*)(volatile void*)) nullFunction,
   .size          = boolSize,
-  .toByteArray   = boolToByteArray,
-  .fromByteArray = boolToByteArray,
+  .toBlob        = boolToBlob,
+  .fromBlob      = boolFromBlob,
   .hashFunction  = NULL,
   .clear         = clearBool,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeBoolNoCopy = &_typeBoolNoCopy;
 
@@ -820,51 +893,108 @@ void *u8Destroy(volatile void *value) {
   return (void*) value;
 }
 
-/// @fn void *u8Size(const volatile void *value)
+/// @fn size_t u8Size(const volatile void *value)
 ///
 /// @brief Return the size of a u8 type.
 ///
 /// @param value A pointer to a u8 variable.
 ///
 /// @return Return the size of a u8 type.
-int u8Size(const volatile void *value) {
-  int size = 0;
-  printLog(TRACE, "ENTER u8Size(value=%u)\n", (value == NULL) ? 0 : *((u8*) value));
+size_t u8Size(const volatile void *value) {
+  size_t size = 0;
+  printLog(TRACE, "ENTER u8Size(value=%p)\n", value);
   
   if (value != NULL) {
     size = sizeof(u8);
   }
   
-  printLog(TRACE, "EXIT u8Size(value=%u) = {%d}\n", (value == NULL) ? 0 : *((u8*) value), size);
+  printLog(TRACE, "EXIT u8Size(value=%p) = {%llu}\n", value, llu(size));
   return size;
 }
 
-/// @fn void* u8ToByteArray(const volatile void *value, u64 *length)
+/// @fn Bytes u8ToBlob(const volatile void *value)
+///
+/// @brief Convert a u8 value to an array of bytes.
+///
+/// @param value A pointer to the u8 value to convert.
+///
+/// @return Returns a Bytes object with the encoded byte array on success,
+/// NULL on failure.
+Bytes u8ToBlob(const volatile void *value) {
+  Bytes returnValue = NULL;
+  printLog(TRACE, "ENTER u8ToBlob(value=%u)\n",
+    (value == NULL) ? 0 : *((u8*) value));
+  
+  if (value == NULL) {
+    printLog(ERR, "Cannot convert to byte array.  Parameter is NULL.\n");
+    printLog(TRACE, "EXIT u8ToBlob(value=%u) = {%p}\n",
+      (value == NULL) ? 0 : *((u8*) value), returnValue);
+    return returnValue;
+  }
+  
+  bytesAddData(&returnValue, value, sizeof(u8));
+  // Set the size to match the length.  This is so data structures that are
+  // building byte arrays encode the right amount of data, which does not
+  // include the string terminator in our case.
+  bytesSetSize(returnValue, bytesLength(returnValue));
+  
+  printLog(TRACE, "EXIT u8ToBlob(value=%u) = {%p}\n",
+    (value == NULL) ? 0 : *((u8*) value), returnValue);
+  return returnValue;
+}
+
+/// @fn void* u8FromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety)
 ///
 /// @brief Convert a u8 value to an array of bytes.
 ///
 /// @param value A pointer to the u8 value to convert.
 /// @param length The length of the resulting byte array.
+/// @param inPlaceData Whether the data should be used in place (true) or a
+///   copy should be made and returned (false).
+/// @param disableThreadSafety Whether or not thread safety should be disabled
+///   in the returned data.  Not used by this function.
 ///
 /// @return Returns a pointer to a valid byte array on success, NULL on failure.
-void* u8ToByteArray(const volatile void *value, u64 *length) {
+void* u8FromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety) {
+  (void) disableThreadSafety;
   void *returnValue = NULL;
-  printLog(TRACE, "ENTER u8ToByteArray(value=%u, length=%p)\n", (value == NULL) ? 0 : *((u8*) value), length);
+  printLog(TRACE,
+    "ENTER u8FromBlob(value=%u, length=%p, inPlaceData=%s, disableThreadSafety=%s)\n",
+    (value == NULL) ? 0 : *((u8*) value), length, boolNames[inPlaceData], boolNames[disableThreadSafety]);
   
   if ((value == NULL) || (length == NULL)) {
     printLog(ERR, "Cannot convert to/from byte array.  Parameter is NULL.\n");
-    printLog(TRACE, "EXIT u8ToByteArray(value=%u, length=%p) = {%p}\n", (value == NULL) ? 0 : *((u8*) value), length, returnValue);
-    return returnValue;
+    printLog(TRACE,
+      "EXIT u8FromBlob(value=%u, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      (value == NULL) ? 0 : *((u8*) value), length, boolNames[inPlaceData], boolNames[disableThreadSafety],
+      returnValue);
+    return returnValue; // NULL
+  } else if (*length < sizeof(u8)) {
+    printLog(ERR, "Cannot convert from byte array.  Insufficient data.\n");
+    printLog(ERR, "Needed at least %llu bytes, only have %llu.\n",
+      llu(sizeof(u8)), llu(*length));
+    printLog(TRACE,
+      "EXIT u8FromBlob(value=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      value, length, boolNames[inPlaceData], boolNames[disableThreadSafety], returnValue);
+    return returnValue; // NULL
   }
   
-  returnValue = u8Copy(value);
+  if (inPlaceData) {
+    // Optimize for this case.
+    returnValue = (void*) value;
+  } else {
+    returnValue = u8Copy(value);
+  }
   if (returnValue != NULL) {
     *length = sizeof(u8);
   } else {
     *length = 0;
   }
   
-  printLog(TRACE, "EXIT u8ToByteArray(value=%u, length=%llu) = {%p}\n", (value == NULL) ? 0 : *((u8*) value), llu(*length), returnValue);
+  printLog(TRACE,
+    "EXIT u8FromBlob(value=%u, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+    (value == NULL) ? 0 : *((u8*) value), llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety],
+    returnValue);
   return returnValue;
 }
 
@@ -875,6 +1005,7 @@ void* u8ToByteArray(const volatile void *value, u64 *length) {
 TypeDescriptor _typeU8 = {
   .name          = "u8",
   .xmlName       = "xs:unsignedByte",
+  .dataIsPointer = false,
   .toString      = u8ToString,
   .toBytes       = u8ToBytes,
   .compare       = u8Compare,
@@ -882,10 +1013,12 @@ TypeDescriptor _typeU8 = {
   .copy          = u8Copy,
   .destroy       = u8Destroy,
   .size          = u8Size,
-  .toByteArray   = u8ToByteArray,
-  .fromByteArray = u8ToByteArray,
+  .toBlob        = u8ToBlob,
+  .fromBlob      = u8FromBlob,
   .hashFunction  = NULL,
   .clear         = clear8,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeU8 = &_typeU8;
 
@@ -896,6 +1029,7 @@ TypeDescriptor *typeU8 = &_typeU8;
 TypeDescriptor _typeU8NoCopy = {
   .name          = "u8",
   .xmlName       = "xs:unsignedByte",
+  .dataIsPointer = true,
   .toString      = u8ToString,
   .toBytes       = u8ToBytes,
   .compare       = u8Compare,
@@ -903,10 +1037,12 @@ TypeDescriptor _typeU8NoCopy = {
   .copy          = shallowCopy,
   .destroy       = (void* (*)(volatile void*)) nullFunction,
   .size          = u8Size,
-  .toByteArray   = u8ToByteArray,
-  .fromByteArray = u8ToByteArray,
+  .toBlob        = u8ToBlob,
+  .fromBlob      = u8FromBlob,
   .hashFunction  = NULL,
   .clear         = clear8,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeU8NoCopy = &_typeU8NoCopy;
 
@@ -1094,52 +1230,110 @@ void *u16Destroy(volatile void *value) {
   return (void*) value;
 }
 
-/// @fn void *u16Size(const volatile void *value)
+/// @fn size_t u16Size(const volatile void *value)
 ///
 /// @brief Return the size of a u16 type.
 ///
 /// @param value A pointer to a u16 variable.
 ///
 /// @return Return the size of a u16 type.
-int u16Size(const volatile void *value) {
-  int size = 0;
-  printLog(TRACE, "ENTER u16Size(value=%u)\n", (value == NULL) ? 0 : *((u16*) value));
+size_t u16Size(const volatile void *value) {
+  size_t size = 0;
+  printLog(TRACE, "ENTER u16Size(value=%p)\n", value);
   
   if (value != NULL) {
     size = sizeof(u16);
   }
   
-  printLog(TRACE, "EXIT u16Size(value=%u) = {%d}\n", (value == NULL) ? 0 : *((u16*) value), size);
+  printLog(TRACE, "EXIT u16Size(value=%p) = {%llu}\n", value, llu(size));
   return size;
 }
 
-/// @fn void* u16ToByteArray(const volatile void *value, u64 *length)
+/// @fn Bytes u16ToBlob(const volatile void *value)
+///
+/// @brief Convert a u16 value to an array of bytes.
+///
+/// @param value A pointer to the u16 value to convert.
+///
+/// @return Returns a Bytes object with the encoded byte array on success,
+/// NULL on failure.
+Bytes u16ToBlob(const volatile void *value) {
+  Bytes returnValue = NULL;
+  printLog(TRACE, "ENTER u16ToBlob(value=%u)\n",
+    (value == NULL) ? 0 : *((u16*) value));
+  
+  if (value == NULL) {
+    printLog(ERR, "Cannot convert to byte array.  Parameter is NULL.\n");
+    printLog(TRACE, "EXIT u16ToBlob(value=%u) = {%p}\n",
+      (value == NULL) ? 0 : *((u16*) value), returnValue);
+    return returnValue;
+  }
+  
+  bytesAddData(&returnValue, value, sizeof(u16));
+  hostToLittleEndian(returnValue, sizeof(u16));
+  // Set the size to match the length.  This is so data structures that are
+  // building byte arrays encode the right amount of data, which does not
+  // include the string terminator in our case.
+  bytesSetSize(returnValue, bytesLength(returnValue));
+  
+  printLog(TRACE, "EXIT u16ToBlob(value=%u) = {%p}\n",
+    (value == NULL) ? 0 : *((u16*) value), returnValue);
+  return returnValue;
+}
+
+/// @fn void* u16FromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety)
 ///
 /// @brief Convert a u16 value to an array of bytes.
 ///
 /// @param value A pointer to the u16 value to convert.
 /// @param length The length of the resulting byte array.
+/// @param inPlaceData Whether the data should be used in place (true) or a
+///   copy should be made and returned (false).
+/// @param disableThreadSafety Whether or not thread safety should be disabled
+///   in the returned data.  Not used by this function.
 ///
 /// @return Returns a pointer to a valid byte array on success, NULL on failure.
-void* u16ToByteArray(const volatile void *value, u64 *length) {
+void* u16FromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety) {
+  (void) disableThreadSafety;
   void *returnValue = NULL;
-  printLog(TRACE, "ENTER u16ToByteArray(value=%u, length=%p)\n", (value == NULL) ? 0 : *((u16*) value), length);
+  printLog(TRACE,
+    "ENTER u16FromBlob(value=%u, length=%p, inPlaceData=%s, disableThreadSafety=%s)\n",
+    (value == NULL) ? 0 : *((u16*) value), length, boolNames[inPlaceData], boolNames[disableThreadSafety]);
   
   if ((value == NULL) || (length == NULL)) {
     printLog(ERR, "Cannot convert to/from byte array.  Parameter is NULL.\n");
-    printLog(TRACE, "EXIT u16ToByteArray(value=%u, length=%p) = {%p}\n", (value == NULL) ? 0 : *((u16*) value), length, returnValue);
-    return returnValue;
+    printLog(TRACE,
+      "EXIT u16FromBlob(value=%u, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      (value == NULL) ? 0 : *((u16*) value), length, boolNames[inPlaceData], boolNames[disableThreadSafety],
+      returnValue);
+    return returnValue; // NULL
+  } else if (*length < sizeof(u16)) {
+    printLog(ERR, "Cannot convert from byte array.  Insufficient data.\n");
+    printLog(ERR, "Needed at least %llu bytes, only have %llu.\n",
+      llu(sizeof(u16)), llu(*length));
+    printLog(TRACE,
+      "EXIT u16FromBlob(value=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      value, length, boolNames[inPlaceData], boolNames[disableThreadSafety], returnValue);
+    return returnValue; // NULL
   }
   
-  returnValue = u16Copy(value);
-  hostToLittleEndian(returnValue, sizeof(u16));
+  if (inPlaceData) {
+    // Optimize for this case.
+    returnValue = (void*) value;
+  } else {
+    returnValue = u16Copy(value);
+  }
+  littleEndianToHost(returnValue, sizeof(u16));
   if (returnValue != NULL) {
     *length = sizeof(u16);
   } else {
     *length = 0;
   }
   
-  printLog(TRACE, "EXIT u16ToByteArray(value=%u, length=%llu) = {%p}\n", (value == NULL) ? 0 : *((u16*) value), llu(*length), returnValue);
+  printLog(TRACE,
+    "EXIT u16FromBlob(value=%u, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+    (value == NULL) ? 0 : *((u16*) value), llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety],
+    returnValue);
   return returnValue;
 }
 
@@ -1150,6 +1344,7 @@ void* u16ToByteArray(const volatile void *value, u64 *length) {
 TypeDescriptor _typeU16 = {
   .name          = "u16",
   .xmlName       = "xs:unsignedShort",
+  .dataIsPointer = false,
   .toString      = u16ToString,
   .toBytes       = u16ToBytes,
   .compare       = u16Compare,
@@ -1157,10 +1352,12 @@ TypeDescriptor _typeU16 = {
   .copy          = u16Copy,
   .destroy       = u16Destroy,
   .size          = u16Size,
-  .toByteArray   = u16ToByteArray,
-  .fromByteArray = u16ToByteArray,
+  .toBlob        = u16ToBlob,
+  .fromBlob      = u16FromBlob,
   .hashFunction  = NULL,
   .clear         = clear16,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeU16 = &_typeU16;
 
@@ -1171,6 +1368,7 @@ TypeDescriptor *typeU16 = &_typeU16;
 TypeDescriptor _typeU16NoCopy = {
   .name          = "u16",
   .xmlName       = "xs:unsignedShort",
+  .dataIsPointer = true,
   .toString      = u16ToString,
   .toBytes       = u16ToBytes,
   .compare       = u16Compare,
@@ -1178,10 +1376,12 @@ TypeDescriptor _typeU16NoCopy = {
   .copy          = shallowCopy,
   .destroy       = (void* (*)(volatile void*)) nullFunction,
   .size          = u16Size,
-  .toByteArray   = u16ToByteArray,
-  .fromByteArray = u16ToByteArray,
+  .toBlob        = u16ToBlob,
+  .fromBlob      = u16FromBlob,
   .hashFunction  = NULL,
   .clear         = clear16,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeU16NoCopy = &_typeU16NoCopy;
 
@@ -1367,52 +1567,110 @@ void *u32Destroy(volatile void *value) {
   return (void*) value;
 }
 
-/// @fn void *u32Size(const volatile void *value)
+/// @fn size_t u32Size(const volatile void *value)
 ///
 /// @brief Return the size of a u32 type.
 ///
 /// @param value A pointer to a u32 variable.
 ///
 /// @return Return the size of a u32 type.
-int u32Size(const volatile void *value) {
-  int size = 0;
-  printLog(TRACE, "ENTER u32Size(value=%u)\n", (value == NULL) ? 0 : *((u32*) value));
+size_t u32Size(const volatile void *value) {
+  size_t size = 0;
+  printLog(TRACE, "ENTER u32Size(value=%p)\n", value);
   
   if (value != NULL) {
     size = sizeof(u32);
   }
   
-  printLog(TRACE, "EXIT u32Size(value=%u) = {%d}\n", (value == NULL) ? 0 : *((u32*) value), size);
+  printLog(TRACE, "EXIT u32Size(value=%p) = {%llu}\n", value, llu(size));
   return size;
 }
 
-/// @fn void* u32ToByteArray(const volatile void *value, u64 *length)
+/// @fn Bytes u32ToBlob(const volatile void *value)
+///
+/// @brief Convert a u32 value to an array of bytes.
+///
+/// @param value A pointer to the u32 value to convert.
+///
+/// @return Returns a Bytes object with the encoded byte array on success,
+/// NULL on failure.
+Bytes u32ToBlob(const volatile void *value) {
+  Bytes returnValue = NULL;
+  printLog(TRACE, "ENTER u32ToBlob(value=%u)\n",
+    (value == NULL) ? 0 : *((u32*) value));
+  
+  if (value == NULL) {
+    printLog(ERR, "Cannot convert to byte array.  Parameter is NULL.\n");
+    printLog(TRACE, "EXIT u32ToBlob(value=%u) = {%p}\n",
+      (value == NULL) ? 0 : *((u32*) value), returnValue);
+    return returnValue;
+  }
+  
+  bytesAddData(&returnValue, value, sizeof(u32));
+  hostToLittleEndian(returnValue, sizeof(u32));
+  // Set the size to match the length.  This is so data structures that are
+  // building byte arrays encode the right amount of data, which does not
+  // include the string terminator in our case.
+  bytesSetSize(returnValue, bytesLength(returnValue));
+  
+  printLog(TRACE, "EXIT u32ToBlob(value=%u) = {%p}\n",
+    (value == NULL) ? 0 : *((u32*) value), returnValue);
+  return returnValue;
+}
+
+/// @fn void* u32FromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety)
 ///
 /// @brief Convert a u32 value to an array of bytes.
 ///
 /// @param value A pointer to the u32 value to convert.
 /// @param length The length of the resulting byte array.
+/// @param inPlaceData Whether the data should be used in place (true) or a
+///   copy should be made and returned (false).
+/// @param disableThreadSafety Whether or not thread safety should be disabled
+///   in the returned data.  Not used by this function.
 ///
 /// @return Returns a pointer to a valid byte array on success, NULL on failure.
-void* u32ToByteArray(const volatile void *value, u64 *length) {
+void* u32FromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety) {
+  (void) disableThreadSafety;
   void *returnValue = NULL;
-  printLog(TRACE, "ENTER u32ToByteArray(value=%u, length=%p)\n", (value == NULL) ? 0 : *((u32*) value), length);
+  printLog(TRACE,
+    "ENTER u32FromBlob(value=%u, length=%p, inPlaceData=%s, disableThreadSafety=%s)\n",
+    (value == NULL) ? 0 : *((u32*) value), length, boolNames[inPlaceData], boolNames[disableThreadSafety]);
   
   if ((value == NULL) || (length == NULL)) {
     printLog(ERR, "Cannot convert to/from byte array.  Parameter is NULL.\n");
-    printLog(TRACE, "EXIT u32ToByteArray(value=%u, length=%p) = {%p}\n", (value == NULL) ? 0 : *((u32*) value), length, returnValue);
-    return returnValue;
+    printLog(TRACE,
+      "EXIT u32FromBlob(value=%u, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      (value == NULL) ? 0 : *((u32*) value), length, boolNames[inPlaceData], boolNames[disableThreadSafety],
+      returnValue);
+    return returnValue; // NULL
+  } else if (*length < sizeof(u32)) {
+    printLog(ERR, "Cannot convert from byte array.  Insufficient data.\n");
+    printLog(ERR, "Needed at least %llu bytes, only have %llu.\n",
+      llu(sizeof(u32)), llu(*length));
+    printLog(TRACE,
+      "EXIT u32FromBlob(value=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      value, length, boolNames[inPlaceData], boolNames[disableThreadSafety], returnValue);
+    return returnValue; // NULL
   }
   
-  returnValue = u32Copy(value);
-  hostToLittleEndian(returnValue, sizeof(u32));
+  if (inPlaceData) {
+    // Optimize for this case.
+    returnValue = (void*) value;
+  } else {
+    returnValue = u32Copy(value);
+  }
+  littleEndianToHost(returnValue, sizeof(u32));
   if (returnValue != NULL) {
     *length = sizeof(u32);
   } else {
     *length = 0;
   }
   
-  printLog(TRACE, "EXIT u32ToByteArray(value=%u, length=%llu) = {%p}\n", (value == NULL) ? 0 : *((u32*) value), llu(*length), returnValue);
+  printLog(TRACE,
+    "EXIT u32FromBlob(value=%u, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+    (value == NULL) ? 0 : *((u32*) value), llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety],
+    returnValue);
   return returnValue;
 }
 
@@ -1423,6 +1681,7 @@ void* u32ToByteArray(const volatile void *value, u64 *length) {
 TypeDescriptor _typeU32 = {
   .name          = "u32",
   .xmlName       = "xs:unsignedInt",
+  .dataIsPointer = false,
   .toString      = u32ToString,
   .toBytes       = u32ToBytes,
   .compare       = u32Compare,
@@ -1430,10 +1689,12 @@ TypeDescriptor _typeU32 = {
   .copy          = u32Copy,
   .destroy       = u32Destroy,
   .size          = u32Size,
-  .toByteArray   = u32ToByteArray,
-  .fromByteArray = u32ToByteArray,
+  .toBlob        = u32ToBlob,
+  .fromBlob      = u32FromBlob,
   .hashFunction  = NULL,
   .clear         = clear32,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeU32 = &_typeU32;
 
@@ -1444,6 +1705,7 @@ TypeDescriptor *typeU32 = &_typeU32;
 TypeDescriptor _typeU32NoCopy = {
   .name          = "u32",
   .xmlName       = "xs:unsignedInt",
+  .dataIsPointer = true,
   .toString      = u32ToString,
   .toBytes       = u32ToBytes,
   .compare       = u32Compare,
@@ -1451,10 +1713,12 @@ TypeDescriptor _typeU32NoCopy = {
   .copy          = shallowCopy,
   .destroy       = (void* (*)(volatile void*)) nullFunction,
   .size          = u32Size,
-  .toByteArray   = u32ToByteArray,
-  .fromByteArray = u32ToByteArray,
+  .toBlob        = u32ToBlob,
+  .fromBlob      = u32FromBlob,
   .hashFunction  = NULL,
   .clear         = clear32,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeU32NoCopy = &_typeU32NoCopy;
 
@@ -1639,52 +1903,110 @@ void *u64Destroy(volatile void *value) {
   return (void*) value;
 }
 
-/// @fn void *u64Size(const volatile void *value)
+/// @fn size_t u64Size(const volatile void *value)
 ///
 /// @brief Return the size of a u64 type.
 ///
 /// @param value A pointer to a u64 variable.
 ///
 /// @return Return the size of a u64 type.
-int u64Size(const volatile void *value) {
-  int size = 0;
+size_t u64Size(const volatile void *value) {
+  size_t size = 0;
   printLog(TRACE, "ENTER u64Size(value=%p)\n", value);
   
   if (value != NULL) {
     size = sizeof(u64);
   }
   
-  printLog(TRACE, "EXIT u64Size(value=%p) = {%d}\n", value, size);
+  printLog(TRACE, "EXIT u64Size(value=%p) = {%llu}\n", value, llu(size));
   return size;
 }
 
-/// @fn void* u64ToByteArray(const volatile void *value, u64 *length)
+/// @fn Bytes u64ToBlob(const volatile void *value)
+///
+/// @brief Convert a u64 value to an array of bytes.
+///
+/// @param value A pointer to the u64 value to convert.
+///
+/// @return Returns a Bytes object with the encoded byte array on success,
+/// NULL on failure.
+Bytes u64ToBlob(const volatile void *value) {
+  Bytes returnValue = NULL;
+  printLog(TRACE, "ENTER u64ToBlob(value=%llu)\n",
+    (value == NULL) ? 0 : llu(*((u64*) value)));
+  
+  if (value == NULL) {
+    printLog(ERR, "Cannot convert to byte array.  Parameter is NULL.\n");
+    printLog(TRACE, "EXIT u64ToBlob(value=%llu) = {%p}\n",
+      (value == NULL) ? 0 : llu(*((u64*) value)), returnValue);
+    return returnValue;
+  }
+  
+  bytesAddData(&returnValue, value, sizeof(u64));
+  hostToLittleEndian(returnValue, sizeof(u64));
+  // Set the size to match the length.  This is so data structures that are
+  // building byte arrays encode the right amount of data, which does not
+  // include the string terminator in our case.
+  bytesSetSize(returnValue, bytesLength(returnValue));
+  
+  printLog(TRACE, "EXIT u64ToBlob(value=%llu) = {%p}\n",
+    (value == NULL) ? 0 : llu(*((u64*) value)), returnValue);
+  return returnValue;
+}
+
+/// @fn void* u64FromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety)
 ///
 /// @brief Convert a u64 value to an array of bytes.
 ///
 /// @param value A pointer to the u64 value to convert.
 /// @param length The length of the resulting byte array.
+/// @param inPlaceData Whether the data should be used in place (true) or a
+///   copy should be made and returned (false).
+/// @param disableThreadSafety Whether or not thread safety should be disabled
+///   in the returned data.  Not used by this function.
 ///
 /// @return Returns a pointer to a valid byte array on success, NULL on failure.
-void* u64ToByteArray(const volatile void *value, u64 *length) {
+void* u64FromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety) {
+  (void) disableThreadSafety;
   void *returnValue = NULL;
-  printLog(TRACE, "ENTER u64ToByteArray(value=%llu, length=%p)\n", (value == NULL) ? 0 : llu(*((u64*) value)), length);
+  printLog(TRACE,
+    "ENTER u64FromBlob(value=%llu, length=%p, inPlaceData=%s, disableThreadSafety=%s)\n",
+    (value == NULL) ? 0 : llu(*((u64*) value)), length, boolNames[inPlaceData], boolNames[disableThreadSafety]);
   
   if ((value == NULL) || (length == NULL)) {
     printLog(ERR, "Cannot convert to/from byte array.  Parameter is NULL.\n");
-    printLog(TRACE, "EXIT u64ToByteArray(value=%llu, length=%p) = {%p}\n", (value == NULL) ? 0 : llu(*((u64*) value)), length, returnValue);
-    return returnValue;
+    printLog(TRACE,
+      "EXIT u64FromBlob(value=%llu, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      (value == NULL) ? 0 : llu(*((u64*) value)), length, boolNames[inPlaceData], boolNames[disableThreadSafety],
+      returnValue);
+    return returnValue; // NULL
+  } else if (*length < sizeof(u64)) {
+    printLog(ERR, "Cannot convert from byte array.  Insufficient data.\n");
+    printLog(ERR, "Needed at least %llu bytes, only have %llu.\n",
+      llu(sizeof(u64)), llu(*length));
+    printLog(TRACE,
+      "EXIT u64FromBlob(value=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      value, length, boolNames[inPlaceData], boolNames[disableThreadSafety], returnValue);
+    return returnValue; // NULL
   }
   
-  returnValue = u64Copy(value);
-  hostToLittleEndian(returnValue, sizeof(u64));
+  if (inPlaceData) {
+    // Optimize for this case.
+    returnValue = (void*) value;
+  } else {
+    returnValue = u64Copy(value);
+  }
+  littleEndianToHost(returnValue, sizeof(u64));
   if (returnValue != NULL) {
     *length = sizeof(u64);
   } else {
     *length = 0;
   }
   
-  printLog(TRACE, "EXIT u64ToByteArray(value=%llu, length=%llu) = {%p}\n", (value == NULL) ? 0 : llu(*((u64*) value)), llu(*length), returnValue);
+  printLog(TRACE,
+    "EXIT u64FromBlob(value=%llu, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+    (value == NULL) ? 0 : llu(*((u64*) value)), llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety],
+    returnValue);
   return returnValue;
 }
 
@@ -1695,6 +2017,7 @@ void* u64ToByteArray(const volatile void *value, u64 *length) {
 TypeDescriptor _typeU64 = {
   .name          = "u64",
   .xmlName       = "xs:unsignedLong",
+  .dataIsPointer = false,
   .toString      = u64ToString,
   .toBytes       = u64ToBytes,
   .compare       = u64Compare,
@@ -1702,10 +2025,12 @@ TypeDescriptor _typeU64 = {
   .copy          = u64Copy,
   .destroy       = u64Destroy,
   .size          = u64Size,
-  .toByteArray   = u64ToByteArray,
-  .fromByteArray = u64ToByteArray,
+  .toBlob        = u64ToBlob,
+  .fromBlob      = u64FromBlob,
   .hashFunction  = NULL,
   .clear         = clear64,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeU64 = &_typeU64;
 
@@ -1716,6 +2041,7 @@ TypeDescriptor *typeU64 = &_typeU64;
 TypeDescriptor _typeU64NoCopy = {
   .name          = "u64",
   .xmlName       = "xs:unsignedLong",
+  .dataIsPointer = true,
   .toString      = u64ToString,
   .toBytes       = u64ToBytes,
   .compare       = u64Compare,
@@ -1723,10 +2049,12 @@ TypeDescriptor _typeU64NoCopy = {
   .copy          = shallowCopy,
   .destroy       = (void* (*)(volatile void*)) nullFunction,
   .size          = u64Size,
-  .toByteArray   = u64ToByteArray,
-  .fromByteArray = u64ToByteArray,
+  .toBlob        = u64ToBlob,
+  .fromBlob      = u64FromBlob,
   .hashFunction  = NULL,
   .clear         = clear64,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeU64NoCopy = &_typeU64NoCopy;
 
@@ -1910,52 +2238,109 @@ void *u128Destroy(volatile void *value) {
   return (void*) value;
 }
 
-/// @fn void *u128Size(const volatile void *value)
+/// @fn size_t u128Size(const volatile void *value)
 ///
 /// @brief Return the size of a u128 type.
 ///
 /// @param value A pointer to a u128 variable.
 ///
 /// @return Return the size of a u128 type.
-int u128Size(const volatile void *value) {
-  int size = 0;
+size_t u128Size(const volatile void *value) {
+  size_t size = 0;
   printLog(TRACE, "ENTER u128Size(value=%p)\n", value);
   
   if (value != NULL) {
     size = sizeof(u128);
   }
   
-  printLog(TRACE, "EXIT u128Size(value=%p) = {%d}\n", value, size);
+  printLog(TRACE, "EXIT u128Size(value=%p) = {%llu}\n", value, llu(size));
   return size;
 }
 
-/// @fn void* u128ToByteArray(const volatile void *value, u64 *length)
+/// @fn Bytes u128ToBlob(const volatile void *value)
+///
+/// @brief Convert a u128 value to an array of bytes.
+///
+/// @param value A pointer to the u128 value to convert.
+///
+/// @return Returns a Bytes object with the encoded byte array on success,
+/// NULL on failure.
+Bytes u128ToBlob(const volatile void *value) {
+  Bytes returnValue = NULL;
+  printLog(TRACE, "ENTER u128ToBlob(value=%p)\n",
+    (value == NULL) ? 0 : value);
+  
+  if (value == NULL) {
+    printLog(ERR, "Cannot convert to byte array.  Parameter is NULL.\n");
+    printLog(TRACE, "EXIT u128ToBlob(value=%p) = {%p}\n",
+      (value == NULL) ? 0 : value, returnValue);
+    return returnValue;
+  }
+  
+  bytesAddData(&returnValue, value, sizeof(u128));
+  hostToLittleEndian(returnValue, sizeof(u128));
+  // Set the size to match the length.  This is so data structures that are
+  // building byte arrays encode the right amount of data, which does not
+  // include the string terminator in our case.
+  bytesSetSize(returnValue, bytesLength(returnValue));
+  
+  printLog(TRACE, "EXIT u128ToBlob(value=%p) = {%p}\n",
+    (value == NULL) ? 0 : value, returnValue);
+  return returnValue;
+}
+
+/// @fn void* u128FromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety)
 ///
 /// @brief Convert a u128 value to an array of bytes.
 ///
 /// @param value A pointer to the u128 value to convert.
 /// @param length The length of the resulting byte array.
+/// @param inPlaceData Whether the data should be used in place (true) or a
+///   copy should be made and returned (false).
+/// @param disableThreadSafety Whether or not thread safety should be disabled
+///   in the returned data.  Not used by this function.
 ///
 /// @return Returns a pointer to a valid byte array on success, NULL on failure.
-void* u128ToByteArray(const volatile void *value, u64 *length) {
+void* u128FromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety) {
+  (void) disableThreadSafety;
   void *returnValue = NULL;
-  printLog(TRACE, "ENTER u128ToByteArray(value=%p, length=%p)\n", value, length);
+  printLog(TRACE,
+    "ENTER u128FromBlob(value=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s)\n",
+    value, length, boolNames[inPlaceData], boolNames[disableThreadSafety]);
   
   if ((value == NULL) || (length == NULL)) {
     printLog(ERR, "Cannot convert to/from byte array.  Parameter is NULL.\n");
-    printLog(TRACE, "EXIT u128ToByteArray(value=%p, length=%p) = {%p}\n", value, length, returnValue);
-    return returnValue;
+    printLog(TRACE,
+      "EXIT u128FromBlob(value=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      value, length, boolNames[inPlaceData], boolNames[disableThreadSafety], returnValue);
+    return returnValue; // NULL
+  } else if (*length < sizeof(u128)) {
+    printLog(ERR, "Cannot convert from byte array.  Insufficient data.\n");
+    printLog(ERR, "Needed at least %llu bytes, only have %llu.\n",
+      llu(sizeof(u128)), llu(*length));
+    printLog(TRACE,
+      "EXIT u128FromBlob(value=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      value, length, boolNames[inPlaceData], boolNames[disableThreadSafety], returnValue);
+    return returnValue; // NULL
   }
   
-  returnValue = u128Copy(value);
-  hostToLittleEndian(returnValue, sizeof(u128));
+  if (inPlaceData) {
+    // Optimize for this case.
+    returnValue = (void*) value;
+  } else {
+    returnValue = u128Copy(value);
+  }
+  littleEndianToHost(returnValue, sizeof(u128));
   if (returnValue != NULL) {
     *length = sizeof(u128);
   } else {
     *length = 0;
   }
   
-  printLog(TRACE, "EXIT u128ToByteArray(value=%p, length=%llu) = {%p}\n", value, llu(*length), returnValue);
+  printLog(TRACE,
+    "EXIT u128FromBlob(value=%p, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+    value, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety],
+    returnValue);
   return returnValue;
 }
 
@@ -1966,6 +2351,7 @@ void* u128ToByteArray(const volatile void *value, u64 *length) {
 TypeDescriptor _typeU128 = {
   .name          = "u128",
   .xmlName       = "xs:nonNegativeInteger",
+  .dataIsPointer = false,
   .toString      = u128ToString,
   .toBytes       = u128ToBytes,
   .compare       = u128Compare,
@@ -1973,10 +2359,12 @@ TypeDescriptor _typeU128 = {
   .copy          = u128Copy,
   .destroy       = u128Destroy,
   .size          = u128Size,
-  .toByteArray   = u128ToByteArray,
-  .fromByteArray = u128ToByteArray,
+  .toBlob        = u128ToBlob,
+  .fromBlob      = u128FromBlob,
   .hashFunction  = NULL,
   .clear         = clear128,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeU128 = &_typeU128;
 
@@ -1987,6 +2375,7 @@ TypeDescriptor *typeU128 = &_typeU128;
 TypeDescriptor _typeU128NoCopy = {
   .name          = "u128",
   .xmlName       = "xs:nonNegativeInteger",
+  .dataIsPointer = true,
   .toString      = u128ToString,
   .toBytes       = u128ToBytes,
   .compare       = u128Compare,
@@ -1994,10 +2383,12 @@ TypeDescriptor _typeU128NoCopy = {
   .copy          = shallowCopy,
   .destroy       = (void* (*)(volatile void*)) nullFunction,
   .size          = u128Size,
-  .toByteArray   = u128ToByteArray,
-  .fromByteArray = u128ToByteArray,
+  .toBlob        = u128ToBlob,
+  .fromBlob      = u128FromBlob,
   .hashFunction  = NULL,
   .clear         = clear128,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeU128NoCopy = &_typeU128NoCopy;
 
@@ -2205,51 +2596,109 @@ void *i8Destroy(volatile void *value) {
   return (void*) value;
 }
 
-/// @fn void *i8Size(const volatile void *value)
+/// @fn size_t i8Size(const volatile void *value)
 ///
 /// @brief Return the size of a i8 type.
 ///
 /// @param value A pointer to a i8 variable.
 ///
 /// @return Return the size of a i8 type.
-int i8Size(const volatile void *value) {
-  int size = 0;
-  printLog(TRACE, "ENTER i8Size(value=%d)\n", (value == NULL) ? 0 : *((i8*) value));
+size_t i8Size(const volatile void *value) {
+  size_t size = 0;
+  printLog(TRACE, "ENTER i8Size(value=%p)\n", value);
   
   if (value != NULL) {
     size = sizeof(i8);
   }
   
-  printLog(TRACE, "EXIT i8Size(value=%d) = {%d}\n", (value == NULL) ? 0 : *((i8*) value), size);
+  printLog(TRACE, "EXIT i8Size(value=%p) = {%llu}\n", value, llu(size));
   return size;
 }
 
-/// @fn void* i8ToByteArray(const volatile void *value, u64 *length)
+/// @fn Bytes i8ToBlob(const volatile void *value)
+///
+/// @brief Convert a i8 value to an array of bytes.
+///
+/// @param value A pointer to the i8 value to convert.
+///
+/// @return Returns a Bytes object with the encoded byte array on success,
+/// NULL on failure.
+Bytes i8ToBlob(const volatile void *value) {
+  Bytes returnValue = NULL;
+  printLog(TRACE, "ENTER i8ToBlob(value=%u)\n",
+    (value == NULL) ? 0 : *((i8*) value));
+  
+  if (value == NULL) {
+    printLog(ERR, "Cannot convert to byte array.  Parameter is NULL.\n");
+    printLog(TRACE, "EXIT i8ToBlob(value=%u) = {%p}\n",
+      (value == NULL) ? 0 : *((i8*) value), returnValue);
+    return returnValue;
+  }
+  
+  bytesAddData(&returnValue, value, sizeof(i8));
+  // Set the size to match the length.  This is so data structures that are
+  // building byte arrays encode the right amount of data, which does not
+  // include the string terminator in our case.
+  bytesSetSize(returnValue, bytesLength(returnValue));
+  
+  printLog(TRACE, "EXIT i8ToBlob(value=%u) = {%p}\n",
+    (value == NULL) ? 0 : *((i8*) value), returnValue);
+  return returnValue;
+}
+
+/// @fn void* i8FromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety)
 ///
 /// @brief Convert a i8 value to an array of bytes.
 ///
 /// @param value A pointer to the i8 value to convert.
 /// @param length The length of the resulting byte array.
+/// @param inPlaceData Whether the data should be used in place (true) or a
+///   copy should be made and returned (false).
+/// @param disableThreadSafety Whether or not thread safety should be disabled
+///   in the returned data.  Not used by this function.
 ///
 /// @return Returns a pointer to a valid byte array on success, NULL on failure.
-void* i8ToByteArray(const volatile void *value, u64 *length) {
+void* i8FromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety) {
+  (void) disableThreadSafety;
   void *returnValue = NULL;
-  printLog(TRACE, "ENTER i8ToByteArray(value=%d, length=%p)\n", (value == NULL) ? 0 : *((i8*) value), length);
+  printLog(TRACE,
+    "ENTER i8FromBlob(value=%d, length=%p, inPlaceData=%s, disableThreadSafety=%s)\n",
+    (value == NULL) ? 0 : *((i8*) value), length, boolNames[inPlaceData], boolNames[disableThreadSafety]);
   
   if ((value == NULL) || (length == NULL)) {
     printLog(ERR, "Cannot convert to/from byte array.  Parameter is NULL.\n");
-    printLog(TRACE, "EXIT i8ToByteArray(value=%d, length=%p) = {%p}\n", (value == NULL) ? 0 : *((i8*) value), length, returnValue);
-    return returnValue;
+    printLog(TRACE,
+      "EXIT i8FromBlob(value=%d, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      (value == NULL) ? 0 : *((i8*) value), length, boolNames[inPlaceData], boolNames[disableThreadSafety],
+      returnValue);
+    return returnValue; // NULL
+  } else if (*length < sizeof(i8)) {
+    printLog(ERR, "Cannot convert from byte array.  Insufficient data.\n");
+    printLog(ERR, "Needed at least %llu bytes, only have %llu.\n",
+      llu(sizeof(i8)), llu(*length));
+    printLog(TRACE,
+      "EXIT i8FromBlob(value=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      value, length, boolNames[inPlaceData], boolNames[disableThreadSafety], returnValue);
+    return returnValue; // NULL
   }
   
-  returnValue = i8Copy(value);
+  if (inPlaceData) {
+    // Optimize for this case.
+    returnValue = (void*) value;
+  } else {
+    returnValue = i8Copy(value);
+  }
+  littleEndianToHost(returnValue, sizeof(i8));
   if (returnValue != NULL) {
     *length = sizeof(i8);
   } else {
     *length = 0;
   }
   
-  printLog(TRACE, "EXIT i8ToByteArray(value=%d, length=%llu) = {%p}\n", (value == NULL) ? 0 : *((i8*) value), llu(*length), returnValue);
+  printLog(TRACE,
+    "EXIT i8FromBlob(value=%d, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+    (value == NULL) ? 0 : *((i8*) value), llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety],
+    returnValue);
   return returnValue;
 }
 
@@ -2260,6 +2709,7 @@ void* i8ToByteArray(const volatile void *value, u64 *length) {
 TypeDescriptor _typeI8 = {
   .name          = "i8",
   .xmlName       = "xs:byte",
+  .dataIsPointer = false,
   .toString      = i8ToString,
   .toBytes       = i8ToBytes,
   .compare       = i8Compare,
@@ -2267,10 +2717,12 @@ TypeDescriptor _typeI8 = {
   .copy          = i8Copy,
   .destroy       = i8Destroy,
   .size          = i8Size,
-  .toByteArray   = i8ToByteArray,
-  .fromByteArray = i8ToByteArray,
+  .toBlob        = i8ToBlob,
+  .fromBlob      = i8FromBlob,
   .hashFunction  = NULL,
   .clear         = clear8,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeI8 = &_typeI8;
 
@@ -2281,6 +2733,7 @@ TypeDescriptor *typeI8 = &_typeI8;
 TypeDescriptor _typeI8NoCopy = {
   .name          = "i8",
   .xmlName       = "xs:byte",
+  .dataIsPointer = true,
   .toString      = i8ToString,
   .toBytes       = i8ToBytes,
   .compare       = i8Compare,
@@ -2288,10 +2741,12 @@ TypeDescriptor _typeI8NoCopy = {
   .copy          = shallowCopy,
   .destroy       = (void* (*)(volatile void*)) nullFunction,
   .size          = i8Size,
-  .toByteArray   = i8ToByteArray,
-  .fromByteArray = i8ToByteArray,
+  .toBlob        = i8ToBlob,
+  .fromBlob      = i8FromBlob,
   .hashFunction  = NULL,
   .clear         = clear8,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeI8NoCopy = &_typeI8NoCopy;
 
@@ -2498,52 +2953,110 @@ void *i16Destroy(volatile void *value) {
   return (void*) value;
 }
 
-/// @fn void *i16Size(const volatile void *value)
+/// @fn size_t i16Size(const volatile void *value)
 ///
 /// @brief Return the size of a i16 type.
 ///
 /// @param value A pointer to a i16 variable.
 ///
 /// @return Return the size of a i16 type.
-int i16Size(const volatile void *value) {
-  int size = 0;
-  printLog(TRACE, "ENTER i16Size(value=%d)\n", (value == NULL) ? 0 : *((i16*) value));
+size_t i16Size(const volatile void *value) {
+  size_t size = 0;
+  printLog(TRACE, "ENTER i16Size(value=%p)\n", value);
   
   if (value != NULL) {
     size = sizeof(i16);
   }
   
-  printLog(TRACE, "EXIT i16Size(value=%d) = {%d}\n", (value == NULL) ? 0 : *((i16*) value), size);
+  printLog(TRACE, "EXIT i16Size(value=%p) = {%llu}\n", value, llu(size));
   return size;
 }
 
-/// @fn void* i16ToByteArray(const volatile void *value, u64 *length)
+/// @fn Bytes i16ToBlob(const volatile void *value)
+///
+/// @brief Convert a i16 value to an array of bytes.
+///
+/// @param value A pointer to the i16 value to convert.
+///
+/// @return Returns a Bytes object with the encoded byte array on success,
+/// NULL on failure.
+Bytes i16ToBlob(const volatile void *value) {
+  Bytes returnValue = NULL;
+  printLog(TRACE, "ENTER i16ToBlob(value=%u)\n",
+    (value == NULL) ? 0 : *((i16*) value));
+  
+  if (value == NULL) {
+    printLog(ERR, "Cannot convert to byte array.  Parameter is NULL.\n");
+    printLog(TRACE, "EXIT i16ToBlob(value=%u) = {%p}\n",
+      (value == NULL) ? 0 : *((i16*) value), returnValue);
+    return returnValue;
+  }
+  
+  bytesAddData(&returnValue, value, sizeof(i16));
+  hostToLittleEndian(returnValue, sizeof(i16));
+  // Set the size to match the length.  This is so data structures that are
+  // building byte arrays encode the right amount of data, which does not
+  // include the string terminator in our case.
+  bytesSetSize(returnValue, bytesLength(returnValue));
+  
+  printLog(TRACE, "EXIT i16ToBlob(value=%u) = {%p}\n",
+    (value == NULL) ? 0 : *((i16*) value), returnValue);
+  return returnValue;
+}
+
+/// @fn void* i16FromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety)
 ///
 /// @brief Convert a i16 value to an array of bytes.
 ///
 /// @param value A pointer to the i16 value to convert.
 /// @param length The length of the resulting byte array.
+/// @param inPlaceData Whether the data should be used in place (true) or a
+///   copy should be made and returned (false).
+/// @param disableThreadSafety Whether or not thread safety should be disabled
+///   in the returned data.  Not used by this function.
 ///
 /// @return Returns a pointer to a valid byte array on success, NULL on failure.
-void* i16ToByteArray(const volatile void *value, u64 *length) {
+void* i16FromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety) {
+  (void) disableThreadSafety;
   void *returnValue = NULL;
-  printLog(TRACE, "ENTER i16ToByteArray(value=%d, length=%p)\n", (value == NULL) ? 0 : *((i16*) value), length);
+  printLog(TRACE,
+    "ENTER i16FromBlob(value=%d, length=%p, inPlaceData=%s, disableThreadSafety=%s)\n",
+    (value == NULL) ? 0 : *((i16*) value), length, boolNames[inPlaceData], boolNames[disableThreadSafety]);
   
   if ((value == NULL) || (length == NULL)) {
     printLog(ERR, "Cannot convert to/from byte array.  Parameter is NULL.\n");
-    printLog(TRACE, "EXIT i16ToByteArray(value=%d, length=%p) = {%p}\n", (value == NULL) ? 0 : *((i16*) value), length, returnValue);
-    return returnValue;
+    printLog(TRACE,
+      "EXIT i16FromBlob(value=%d, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      (value == NULL) ? 0 : *((i16*) value), length, boolNames[inPlaceData], boolNames[disableThreadSafety],
+      returnValue);
+    return returnValue; // NULL
+  } else if (*length < sizeof(i16)) {
+    printLog(ERR, "Cannot convert from byte array.  Insufficient data.\n");
+    printLog(ERR, "Needed at least %llu bytes, only have %llu.\n",
+      llu(sizeof(i16)), llu(*length));
+    printLog(TRACE,
+      "EXIT i16FromBlob(value=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      value, length, boolNames[inPlaceData], boolNames[disableThreadSafety], returnValue);
+    return returnValue; // NULL
   }
   
-  returnValue = i16Copy(value);
-  hostToLittleEndian(returnValue, sizeof(i16));
+  if (inPlaceData) {
+    // Optimize for this case.
+    returnValue = (void*) value;
+  } else {
+    returnValue = i16Copy(value);
+  }
+  littleEndianToHost(returnValue, sizeof(i16));
   if (returnValue != NULL) {
     *length = sizeof(i16);
   } else {
     *length = 0;
   }
   
-  printLog(TRACE, "EXIT i16ToByteArray(value=%d, length=%llu) = {%p}\n", (value == NULL) ? 0 : *((i16*) value), llu(*length), returnValue);
+  printLog(TRACE,
+    "EXIT i16FromBlob(value=%d, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+    (value == NULL) ? 0 : *((i16*) value), llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety],
+    returnValue);
   return returnValue;
 }
 
@@ -2554,6 +3067,7 @@ void* i16ToByteArray(const volatile void *value, u64 *length) {
 TypeDescriptor _typeI16 = {
   .name          = "i16",
   .xmlName       = "xs:short",
+  .dataIsPointer = false,
   .toString      = i16ToString,
   .toBytes       = i16ToBytes,
   .compare       = i16Compare,
@@ -2561,10 +3075,12 @@ TypeDescriptor _typeI16 = {
   .copy          = i16Copy,
   .destroy       = i16Destroy,
   .size          = i16Size,
-  .toByteArray   = i16ToByteArray,
-  .fromByteArray = i16ToByteArray,
+  .toBlob        = i16ToBlob,
+  .fromBlob      = i16FromBlob,
   .hashFunction  = NULL,
   .clear         = clear16,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeI16 = &_typeI16;
 
@@ -2575,6 +3091,7 @@ TypeDescriptor *typeI16 = &_typeI16;
 TypeDescriptor _typeI16NoCopy = {
   .name          = "i16",
   .xmlName       = "xs:short",
+  .dataIsPointer = true,
   .toString      = i16ToString,
   .toBytes       = i16ToBytes,
   .compare       = i16Compare,
@@ -2582,10 +3099,12 @@ TypeDescriptor _typeI16NoCopy = {
   .copy          = shallowCopy,
   .destroy       = (void* (*)(volatile void*)) nullFunction,
   .size          = i16Size,
-  .toByteArray   = i16ToByteArray,
-  .fromByteArray = i16ToByteArray,
+  .toBlob        = i16ToBlob,
+  .fromBlob      = i16FromBlob,
   .hashFunction  = NULL,
   .clear         = clear16,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeI16NoCopy = &_typeI16NoCopy;
 
@@ -2793,52 +3312,110 @@ void *i32Destroy(volatile void *value) {
   return (void*) value;
 }
 
-/// @fn void *i32Size(const volatile void *value)
+/// @fn size_t i32Size(const volatile void *value)
 ///
 /// @brief Return the size of a i32 type.
 ///
 /// @param value A pointer to a i32 variable.
 ///
 /// @return Return the size of a i32 type.
-int i32Size(const volatile void *value) {
-  int size = 0;
-  printLog(TRACE, "ENTER i32Size(value=%d)\n", (value == NULL) ? 0 : *((i32*) value));
+size_t i32Size(const volatile void *value) {
+  size_t size = 0;
+  printLog(TRACE, "ENTER i32Size(value=%p)\n", value);
   
   if (value != NULL) {
     size = sizeof(i32);
   }
   
-  printLog(TRACE, "EXIT i32Size(value=%d) = {%d}\n", (value == NULL) ? 0 : *((i32*) value), size);
+  printLog(TRACE, "EXIT i32Size(value=%p) = {%llu}\n", value, llu(size));
   return size;
 }
 
-/// @fn void* i32ToByteArray(const volatile void *value, u64 *length)
+/// @fn Bytes i32ToBlob(const volatile void *value)
+///
+/// @brief Convert a i32 value to an array of bytes.
+///
+/// @param value A pointer to the i32 value to convert.
+///
+/// @return Returns a Bytes object with the encoded byte array on success,
+/// NULL on failure.
+Bytes i32ToBlob(const volatile void *value) {
+  Bytes returnValue = NULL;
+  printLog(TRACE, "ENTER i32ToBlob(value=%u)\n",
+    (value == NULL) ? 0 : *((i32*) value));
+  
+  if (value == NULL) {
+    printLog(ERR, "Cannot convert to byte array.  Parameter is NULL.\n");
+    printLog(TRACE, "EXIT i32ToBlob(value=%u) = {%p}\n",
+      (value == NULL) ? 0 : *((i32*) value), returnValue);
+    return returnValue;
+  }
+  
+  bytesAddData(&returnValue, value, sizeof(i32));
+  hostToLittleEndian(returnValue, sizeof(i32));
+  // Set the size to match the length.  This is so data structures that are
+  // building byte arrays encode the right amount of data, which does not
+  // include the string terminator in our case.
+  bytesSetSize(returnValue, bytesLength(returnValue));
+  
+  printLog(TRACE, "EXIT i32ToBlob(value=%u) = {%p}\n",
+    (value == NULL) ? 0 : *((i32*) value), returnValue);
+  return returnValue;
+}
+
+/// @fn void* i32FromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety)
 ///
 /// @brief Convert a i32 value to an array of bytes.
 ///
 /// @param value A pointer to the i32 value to convert.
 /// @param length The length of the resulting byte array.
+/// @param inPlaceData Whether the data should be used in place (true) or a
+///   copy should be made and returned (false).
+/// @param disableThreadSafety Whether or not thread safety should be disabled
+///   in the returned data.  Not used by this function.
 ///
 /// @return Returns a pointer to a valid byte array on success, NULL on failure.
-void* i32ToByteArray(const volatile void *value, u64 *length) {
+void* i32FromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety) {
+  (void) disableThreadSafety;
   void *returnValue = NULL;
-  printLog(TRACE, "ENTER i32ToByteArray(value=%d, length=%p)\n", (value == NULL) ? 0 : *((i32*) value), length);
+  printLog(TRACE,
+    "ENTER i32FromBlob(value=%d, length=%p, inPlaceData=%s, disableThreadSafety=%s)\n",
+    (value == NULL) ? 0 : *((i32*) value), length, boolNames[inPlaceData], boolNames[disableThreadSafety]);
   
   if ((value == NULL) || (length == NULL)) {
     printLog(ERR, "Cannot convert to/from byte array.  Parameter is NULL.\n");
-    printLog(TRACE, "EXIT i32ToByteArray(value=%d, length=%p) = {%p}\n", (value == NULL) ? 0 : *((i32*) value), length, returnValue);
-    return returnValue;
+    printLog(TRACE,
+      "EXIT i32FromBlob(value=%d, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      (value == NULL) ? 0 : *((i32*) value), length, boolNames[inPlaceData], boolNames[disableThreadSafety],
+      returnValue);
+    return returnValue; // NULL
+  } else if (*length < sizeof(i32)) {
+    printLog(ERR, "Cannot convert from byte array.  Insufficient data.\n");
+    printLog(ERR, "Needed at least %llu bytes, only have %llu.\n",
+      llu(sizeof(i32)), llu(*length));
+    printLog(TRACE,
+      "EXIT i32FromBlob(value=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      value, length, boolNames[inPlaceData], boolNames[disableThreadSafety], returnValue);
+    return returnValue; // NULL
   }
   
-  returnValue = i32Copy(value);
-  hostToLittleEndian(returnValue, sizeof(i32));
+  if (inPlaceData) {
+    // Optimize for this case.
+    returnValue = (void*) value;
+  } else {
+    returnValue = i32Copy(value);
+  }
+  littleEndianToHost(returnValue, sizeof(i32));
   if (returnValue != NULL) {
     *length = sizeof(i32);
   } else {
     *length = 0;
   }
   
-  printLog(TRACE, "EXIT i32ToByteArray(value=%d, length=%llu) = {%p}\n", (value == NULL) ? 0 : *((i32*) value), llu(*length), returnValue);
+  printLog(TRACE,
+    "EXIT i32FromBlob(value=%d, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+    (value == NULL) ? 0 : *((i32*) value), llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety],
+    returnValue);
   return returnValue;
 }
 
@@ -2849,6 +3426,7 @@ void* i32ToByteArray(const volatile void *value, u64 *length) {
 TypeDescriptor _typeI32 = {
   .name          = "i32",
   .xmlName       = "xs:int",
+  .dataIsPointer = false,
   .toString      = i32ToString,
   .toBytes       = i32ToBytes,
   .compare       = i32Compare,
@@ -2856,10 +3434,12 @@ TypeDescriptor _typeI32 = {
   .copy          = i32Copy,
   .destroy       = i32Destroy,
   .size          = i32Size,
-  .toByteArray   = i32ToByteArray,
-  .fromByteArray = i32ToByteArray,
+  .toBlob        = i32ToBlob,
+  .fromBlob      = i32FromBlob,
   .hashFunction  = NULL,
   .clear         = clear32,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeI32 = &_typeI32;
 
@@ -2870,6 +3450,7 @@ TypeDescriptor *typeI32 = &_typeI32;
 TypeDescriptor _typeI32NoCopy = {
   .name          = "i32",
   .xmlName       = "xs:int",
+  .dataIsPointer = true,
   .toString      = i32ToString,
   .toBytes       = i32ToBytes,
   .compare       = i32Compare,
@@ -2877,10 +3458,12 @@ TypeDescriptor _typeI32NoCopy = {
   .copy          = shallowCopy,
   .destroy       = (void* (*)(volatile void*)) nullFunction,
   .size          = i32Size,
-  .toByteArray   = i32ToByteArray,
-  .fromByteArray = i32ToByteArray,
+  .toBlob        = i32ToBlob,
+  .fromBlob      = i32FromBlob,
   .hashFunction  = NULL,
   .clear         = clear32,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeI32NoCopy = &_typeI32NoCopy;
 
@@ -3087,52 +3670,110 @@ void *i64Destroy(volatile void *value) {
   return (void*) value;
 }
 
-/// @fn void *i64Size(const volatile void *value)
+/// @fn size_t i64Size(const volatile void *value)
 ///
 /// @brief Return the size of a i64 type.
 ///
 /// @param value A pointer to a i64 variable.
 ///
 /// @return Return the size of a i64 type.
-int i64Size(const volatile void *value) {
-  int size = 0;
-  printLog(TRACE, "ENTER i64Size(value=%lld)\n", (value == NULL) ? 0 : lli(*((i64*) value)));
+size_t i64Size(const volatile void *value) {
+  size_t size = 0;
+  printLog(TRACE, "ENTER i64Size(value=%p)\n", value);
   
   if (value != NULL) {
     size = sizeof(i64);
   }
   
-  printLog(TRACE, "EXIT i64Size(value=%lld) = {%d}\n", (value == NULL) ? 0 : lli(*((i64*) value)), size);
+  printLog(TRACE, "EXIT i64Size(value=%p) = {%llu}\n", value, llu(size));
   return size;
 }
 
-/// @fn void* i64ToByteArray(const volatile void *value, u64 *length)
+/// @fn Bytes i64ToBlob(const volatile void *value)
+///
+/// @brief Convert a i64 value to an array of bytes.
+///
+/// @param value A pointer to the i64 value to convert.
+///
+/// @return Returns a Bytes object with the encoded byte array on success,
+/// NULL on failure.
+Bytes i64ToBlob(const volatile void *value) {
+  Bytes returnValue = NULL;
+  printLog(TRACE, "ENTER i64ToBlob(value=%lld)\n",
+    (value == NULL) ? 0 : lld(*((i64*) value)));
+  
+  if (value == NULL) {
+    printLog(ERR, "Cannot convert to byte array.  Parameter is NULL.\n");
+    printLog(TRACE, "EXIT i64ToBlob(value=%lld) = {%p}\n",
+      (value == NULL) ? 0 : lld(*((i64*) value)), returnValue);
+    return returnValue;
+  }
+  
+  bytesAddData(&returnValue, value, sizeof(i64));
+  hostToLittleEndian(returnValue, sizeof(i64));
+  // Set the size to match the length.  This is so data structures that are
+  // building byte arrays encode the right amount of data, which does not
+  // include the string terminator in our case.
+  bytesSetSize(returnValue, bytesLength(returnValue));
+  
+  printLog(TRACE, "EXIT i64ToBlob(value=%lld) = {%p}\n",
+    (value == NULL) ? 0 : lld(*((i64*) value)), returnValue);
+  return returnValue;
+}
+
+/// @fn void* i64FromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety)
 ///
 /// @brief Convert a i64 value to an array of bytes.
 ///
 /// @param value A pointer to the i64 value to convert.
 /// @param length The length of the resulting byte array.
+/// @param inPlaceData Whether the data should be used in place (true) or a
+///   copy should be made and returned (false).
+/// @param disableThreadSafety Whether or not thread safety should be disabled
+///   in the returned data.  Not used by this function.
 ///
 /// @return Returns a pointer to a valid byte array on success, NULL on failure.
-void* i64ToByteArray(const volatile void *value, u64 *length) {
+void* i64FromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety) {
+  (void) disableThreadSafety;
   void *returnValue = NULL;
-  printLog(TRACE, "ENTER i64ToByteArray(value=%lld, length=%p)\n", (value == NULL) ? 0 : lli(*((i64*) value)), length);
+  printLog(TRACE,
+    "ENTER i64FromBlob(value=%lld, length=%p, inPlaceData=%s, disableThreadSafety=%s)\n",
+    (value == NULL) ? 0 : lld(*((i64*) value)), length, boolNames[inPlaceData], boolNames[disableThreadSafety]);
   
   if ((value == NULL) || (length == NULL)) {
     printLog(ERR, "Cannot convert to/from byte array.  Parameter is NULL.\n");
-    printLog(TRACE, "EXIT i64ToByteArray(value=%lld, length=%p) = {%p}\n", (value == NULL) ? 0 : lli(*((i64*) value)), length, returnValue);
-    return returnValue;
+    printLog(TRACE,
+      "EXIT i64FromBlob(value=%lld, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      (value == NULL) ? 0 : lld(*((i64*) value)), length, boolNames[inPlaceData], boolNames[disableThreadSafety],
+      returnValue);
+    return returnValue; // NULL
+  } else if (*length < sizeof(i64)) {
+    printLog(ERR, "Cannot convert from byte array.  Insufficient data.\n");
+    printLog(ERR, "Needed at least %llu bytes, only have %llu.\n",
+      llu(sizeof(i64)), llu(*length));
+    printLog(TRACE,
+      "EXIT i64FromBlob(value=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      value, length, boolNames[inPlaceData], boolNames[disableThreadSafety], returnValue);
+    return returnValue; // NULL
   }
   
-  returnValue = i64Copy(value);
-  hostToLittleEndian(returnValue, sizeof(i64));
+  if (inPlaceData) {
+    // Optimize for this case.
+    returnValue = (void*) value;
+  } else {
+    returnValue = i64Copy(value);
+  }
+  littleEndianToHost(returnValue, sizeof(i64));
   if (returnValue != NULL) {
     *length = sizeof(i64);
   } else {
     *length = 0;
   }
   
-  printLog(TRACE, "EXIT i64ToByteArray(value=%lld, length=%llu) = {%p}\n", (value == NULL) ? 0 : lli(*((i64*) value)), llu(*length), returnValue);
+  printLog(TRACE,
+    "EXIT i64FromBlob(value=%lld, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+    (value == NULL) ? 0 : lld(*((i64*) value)), llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety],
+    returnValue);
   return returnValue;
 }
 
@@ -3143,6 +3784,7 @@ void* i64ToByteArray(const volatile void *value, u64 *length) {
 TypeDescriptor _typeI64 = {
   .name          = "i64",
   .xmlName       = "xs:long",
+  .dataIsPointer = false,
   .toString      = i64ToString,
   .toBytes       = i64ToBytes,
   .compare       = i64Compare,
@@ -3150,10 +3792,12 @@ TypeDescriptor _typeI64 = {
   .copy          = i64Copy,
   .destroy       = i64Destroy,
   .size          = i64Size,
-  .toByteArray   = i64ToByteArray,
-  .fromByteArray = i64ToByteArray,
+  .toBlob        = i64ToBlob,
+  .fromBlob      = i64FromBlob,
   .hashFunction  = NULL,
   .clear         = clear64,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeI64 = &_typeI64;
 
@@ -3164,6 +3808,7 @@ TypeDescriptor *typeI64 = &_typeI64;
 TypeDescriptor _typeI64NoCopy = {
   .name          = "i64",
   .xmlName       = "xs:long",
+  .dataIsPointer = true,
   .toString      = i64ToString,
   .toBytes       = i64ToBytes,
   .compare       = i64Compare,
@@ -3171,10 +3816,12 @@ TypeDescriptor _typeI64NoCopy = {
   .copy          = shallowCopy,
   .destroy       = (void* (*)(volatile void*)) nullFunction,
   .size          = i64Size,
-  .toByteArray   = i64ToByteArray,
-  .fromByteArray = i64ToByteArray,
+  .toBlob        = i64ToBlob,
+  .fromBlob      = i64FromBlob,
   .hashFunction  = NULL,
   .clear         = clear64,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeI64NoCopy = &_typeI64NoCopy;
 
@@ -3379,52 +4026,110 @@ void *i128Destroy(volatile void *value) {
   return (void*) value;
 }
 
-/// @fn void *i128Size(const volatile void *value)
+/// @fn size_t i128Size(const volatile void *value)
 ///
 /// @brief Return the size of a i128 type.
 ///
 /// @param value A pointer to a i128 variable.
 ///
 /// @return Return the size of a i128 type.
-int i128Size(const volatile void *value) {
-  int size = 0;
+size_t i128Size(const volatile void *value) {
+  size_t size = 0;
   printLog(TRACE, "ENTER i128Size(value=%p)\n", value);
   
   if (value != NULL) {
     size = sizeof(i128);
   }
   
-  printLog(TRACE, "EXIT i128Size(value=%p) = {%d}\n", value, size);
+  printLog(TRACE, "EXIT i128Size(value=%p) = {%llu}\n", value, llu(size));
   return size;
 }
 
-/// @fn void* i128ToByteArray(const volatile void *value, u64 *length)
+/// @fn Bytes i128ToBlob(const volatile void *value)
+///
+/// @brief Convert a i128 value to an array of bytes.
+///
+/// @param value A pointer to the i128 value to convert.
+///
+/// @return Returns a Bytes object with the encoded byte array on success,
+/// NULL on failure.
+Bytes i128ToBlob(const volatile void *value) {
+  Bytes returnValue = NULL;
+  printLog(TRACE, "ENTER i128ToBlob(value=%p)\n",
+    (value == NULL) ? 0 : value);
+  
+  if (value == NULL) {
+    printLog(ERR, "Cannot convert to byte array.  Parameter is NULL.\n");
+    printLog(TRACE, "EXIT i128ToBlob(value=%p) = {%p}\n",
+      (value == NULL) ? 0 : value, returnValue);
+    return returnValue;
+  }
+  
+  bytesAddData(&returnValue, value, sizeof(i128));
+  hostToLittleEndian(returnValue, sizeof(i128));
+  // Set the size to match the length.  This is so data structures that are
+  // building byte arrays encode the right amount of data, which does not
+  // include the string terminator in our case.
+  bytesSetSize(returnValue, bytesLength(returnValue));
+  
+  printLog(TRACE, "EXIT i128ToBlob(value=%p) = {%p}\n",
+    (value == NULL) ? 0 : value, returnValue);
+  return returnValue;
+}
+
+/// @fn void* i128FromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety)
 ///
 /// @brief Convert a i128 value to an array of bytes.
 ///
 /// @param value A pointer to the i128 value to convert.
 /// @param length The length of the resulting byte array.
+/// @param inPlaceData Whether the data should be used in place (true) or a
+///   copy should be made and returned (false).
+/// @param disableThreadSafety Whether or not thread safety should be disabled
+///   in the returned data.  Not used by this function.
 ///
 /// @return Returns a pointer to a valid byte array on success, NULL on failure.
-void* i128ToByteArray(const volatile void *value, u64 *length) {
+void* i128FromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety) {
+  (void) disableThreadSafety;
   void *returnValue = NULL;
-  printLog(TRACE, "ENTER i128ToByteArray(value=%p, length=%p)\n", value, length);
+  printLog(TRACE,
+    "ENTER i128FromBlob(value=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s)\n",
+    value, length, boolNames[inPlaceData], boolNames[disableThreadSafety]);
   
   if ((value == NULL) || (length == NULL)) {
     printLog(ERR, "Cannot convert to/from byte array.  Parameter is NULL.\n");
-    printLog(TRACE, "EXIT i128ToByteArray(value=%p, length=%p) = {%p}\n", value, length, returnValue);
-    return returnValue;
+    printLog(TRACE,
+      "EXIT i128FromBlob(value=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      value, length, boolNames[inPlaceData], boolNames[disableThreadSafety],
+      returnValue);
+    return returnValue; // NULL
+  } else if (*length < sizeof(i128)) {
+    printLog(ERR, "Cannot convert from byte array.  Insufficient data.\n");
+    printLog(ERR, "Needed at least %llu bytes, only have %llu.\n",
+      llu(sizeof(i128)), llu(*length));
+    printLog(TRACE,
+      "EXIT i128FromBlob(value=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      value, length, boolNames[inPlaceData], boolNames[disableThreadSafety], returnValue);
+    return returnValue; // NULL
   }
   
-  returnValue = i128Copy(value);
-  hostToLittleEndian(returnValue, sizeof(i128));
+  if (inPlaceData) {
+    // Optimize for this case.
+    returnValue = (void*) value;
+  } else {
+    returnValue = i128Copy(value);
+  }
+  littleEndianToHost(returnValue, sizeof(i128));
   if (returnValue != NULL) {
     *length = sizeof(i128);
   } else {
     *length = 0;
   }
   
-  printLog(TRACE, "EXIT i128ToByteArray(value=%p, length=%llu) = {%p}\n", value, llu(*length), returnValue);
+  printLog(TRACE,
+    "EXIT i128FromBlob(value=%p, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+    value, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety],
+    returnValue);
   return returnValue;
 }
 
@@ -3435,6 +4140,7 @@ void* i128ToByteArray(const volatile void *value, u64 *length) {
 TypeDescriptor _typeI128 = {
   .name          = "i128",
   .xmlName       = "xs:integer",
+  .dataIsPointer = false,
   .toString      = i128ToString,
   .toBytes       = i128ToBytes,
   .compare       = i128Compare,
@@ -3442,10 +4148,12 @@ TypeDescriptor _typeI128 = {
   .copy          = i128Copy,
   .destroy       = i128Destroy,
   .size          = i128Size,
-  .toByteArray   = i128ToByteArray,
-  .fromByteArray = i128ToByteArray,
+  .toBlob        = i128ToBlob,
+  .fromBlob      = i128FromBlob,
   .hashFunction  = NULL,
   .clear         = clear128,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeI128 = &_typeI128;
 
@@ -3456,6 +4164,7 @@ TypeDescriptor *typeI128 = &_typeI128;
 TypeDescriptor _typeI128NoCopy = {
   .name          = "i128",
   .xmlName       = "xs:integer",
+  .dataIsPointer = true,
   .toString      = i128ToString,
   .toBytes       = i128ToBytes,
   .compare       = i128Compare,
@@ -3463,10 +4172,12 @@ TypeDescriptor _typeI128NoCopy = {
   .copy          = shallowCopy,
   .destroy       = (void* (*)(volatile void*)) nullFunction,
   .size          = i128Size,
-  .toByteArray   = i128ToByteArray,
-  .fromByteArray = i128ToByteArray,
+  .toBlob        = i128ToBlob,
+  .fromBlob      = i128FromBlob,
   .hashFunction  = NULL,
   .clear         = clear128,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeI128NoCopy = &_typeI128NoCopy;
 
@@ -3517,12 +4228,8 @@ Bytes floatToBytes(const volatile void *value) {
   }
   
   Bytes floatBytes = NULL;
-  char *floatString = NULL;
   float floatValue = *((float*) value);
-  if (asprintf(&floatString, "%f", floatValue) > 0) {
-    bytesAddStr(&floatBytes, floatString);
-  }
-  floatString = stringDestroy(floatString);
+  abprintf(&floatBytes, "%f", floatValue);
   
   printLog(TRACE, "EXIT floatToBytes(value=%f) = {%s}\n",
     *((float*) value), floatBytes);
@@ -3634,51 +4341,109 @@ void *floatDestroy(volatile void *value) {
   return (void*) value;
 }
 
-/// @fn void *floatSize(const volatile void *value)
+/// @fn size_t floatSize(const volatile void *value)
 ///
 /// @brief Return the size of a float type.
 ///
 /// @param value A pointer to a float variable.
 ///
 /// @return Return the size of a float type.
-int floatSize(const volatile void *value) {
-  int size = 0;
-  printLog(TRACE, "ENTER floatSize(value=%f)\n", (value == NULL) ? 0 : *((float*) value));
+size_t floatSize(const volatile void *value) {
+  size_t size = 0;
+  printLog(TRACE, "ENTER floatSize(value=%p)\n", value);
   
   if (value != NULL) {
     size = sizeof(float);
   }
   
-  printLog(TRACE, "EXIT floatSize(value=%f) = {%d}\n", (value == NULL) ? 0 : *((float*) value), size);
+  printLog(TRACE, "EXIT floatSize(value=%p) = {%llu}\n", value, llu(size));
   return size;
 }
 
-/// @fn void* floatToByteArray(const volatile void *value, u64 *length)
+/// @fn Bytes floatToBlob(const volatile void *value)
+///
+/// @brief Convert a float value to an array of bytes.
+///
+/// @param value A pointer to the float value to convert.
+///
+/// @return Returns a Bytes object with the encoded byte array on success,
+/// NULL on failure.
+Bytes floatToBlob(const volatile void *value) {
+  Bytes returnValue = NULL;
+  printLog(TRACE, "ENTER floatToBlob(value=%f)\n",
+    (value == NULL) ? 0 : *((float*) value));
+  
+  if (value == NULL) {
+    printLog(ERR, "Cannot convert to byte array.  Parameter is NULL.\n");
+    printLog(TRACE, "EXIT floatToBlob(value=%f) = {%p}\n",
+      (value == NULL) ? 0 : *((float*) value), returnValue);
+    return returnValue;
+  }
+  
+  bytesAddData(&returnValue, value, sizeof(float));
+  // Set the size to match the length.  This is so data structures that are
+  // building byte arrays encode the right amount of data, which does not
+  // include the string terminator in our case.
+  bytesSetSize(returnValue, bytesLength(returnValue));
+  
+  printLog(TRACE, "EXIT floatToBlob(value=%f) = {%p}\n",
+    (value == NULL) ? 0 : *((float*) value), returnValue);
+  return returnValue;
+}
+
+/// @fn void* floatFromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety)
 ///
 /// @brief Convert a float value to an array of bytes.
 ///
 /// @param value A pointer to the float value to convert.
 /// @param length The length of the resulting byte array.
+/// @param inPlaceData Whether the data should be used in place (true) or a
+///   copy should be made and returned (false).
+/// @param disableThreadSafety Whether or not thread safety should be disabled
+///   in the returned data.  Not used by this function.
 ///
 /// @return Returns a pointer to a valid byte array on success, NULL on failure.
-void* floatToByteArray(const volatile void *value, u64 *length) {
+void* floatFromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety) {
+  (void) disableThreadSafety;
   void *returnValue = NULL;
-  printLog(TRACE, "ENTER floatToByteArray(value=%f, length=%p)\n", (value == NULL) ? 0 : *((float*) value), length);
+  printLog(TRACE,
+    "ENTER floatFromBlob(value=%f, length=%p, inPlaceData=%s, disableThreadSafety=%s)\n",
+    (value == NULL) ? 0 : *((float*) value), length, boolNames[inPlaceData], boolNames[disableThreadSafety]);
   
   if ((value == NULL) || (length == NULL)) {
-    printLog(ERR, "Cannot convert to/from byte array.  length is NULL.\n");
-    printLog(TRACE, "EXIT floatToByteArray(value=%f, length=%p) = {%p}\n", (value == NULL) ? 0 : *((float*) value), length, returnValue);
-    return returnValue;
+    printLog(ERR, "Cannot convert to/from byte array.  Parameter is NULL.\n");
+    printLog(TRACE,
+      "EXIT floatFromBlob(value=%f, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      (value == NULL) ? 0 : *((float*) value), length, boolNames[inPlaceData], boolNames[disableThreadSafety],
+      returnValue);
+    return returnValue; // NULL
+  } else if (*length < sizeof(float)) {
+    printLog(ERR, "Cannot convert from byte array.  Insufficient data.\n");
+    printLog(ERR, "Needed at least %llu bytes, only have %llu.\n",
+      llu(sizeof(float)), llu(*length));
+    printLog(TRACE,
+      "EXIT floatFromBlob(value=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      value, length, boolNames[inPlaceData], boolNames[disableThreadSafety], returnValue);
+    return returnValue; // NULL
   }
   
-  returnValue = floatCopy(value);
+  if (inPlaceData) {
+    // Optimize for this case.
+    returnValue = (void*) value;
+  } else {
+    returnValue = floatCopy(value);
+  }
+  littleEndianToHost(returnValue, sizeof(float));
   if (returnValue != NULL) {
     *length = sizeof(float);
   } else {
     *length = 0;
   }
   
-  printLog(TRACE, "EXIT floatToByteArray(value=%f, length=%llu) = {%p}\n", (value == NULL) ? 0 : *((float*) value), llu(*length), returnValue);
+  printLog(TRACE,
+    "EXIT floatFromBlob(value=%f, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+    (value == NULL) ? 0 : *((float*) value), llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety],
+    returnValue);
   return returnValue;
 }
 
@@ -3689,6 +4454,7 @@ void* floatToByteArray(const volatile void *value, u64 *length) {
 TypeDescriptor _typeFloat = {
   .name          = "float",
   .xmlName       = "xs:float",
+  .dataIsPointer = false,
   .toString      = floatToString,
   .toBytes       = floatToBytes,
   .compare       = floatCompare,
@@ -3696,10 +4462,12 @@ TypeDescriptor _typeFloat = {
   .copy          = floatCopy,
   .destroy       = floatDestroy,
   .size          = floatSize,
-  .toByteArray   = floatToByteArray,
-  .fromByteArray = floatToByteArray,
+  .toBlob        = floatToBlob,
+  .fromBlob      = floatFromBlob,
   .hashFunction  = NULL,
   .clear         = clearFloat,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeFloat = &_typeFloat;
 
@@ -3710,6 +4478,7 @@ TypeDescriptor *typeFloat = &_typeFloat;
 TypeDescriptor _typeFloatNoCopy = {
   .name          = "float",
   .xmlName       = "xs:float",
+  .dataIsPointer = true,
   .toString      = floatToString,
   .toBytes       = floatToBytes,
   .compare       = floatCompare,
@@ -3717,10 +4486,12 @@ TypeDescriptor _typeFloatNoCopy = {
   .copy          = shallowCopy,
   .destroy       = (void* (*)(volatile void*)) nullFunction,
   .size          = floatSize,
-  .toByteArray   = floatToByteArray,
-  .fromByteArray = floatToByteArray,
+  .toBlob        = floatToBlob,
+  .fromBlob      = floatFromBlob,
   .hashFunction  = NULL,
   .clear         = clearFloat,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeFloatNoCopy = &_typeFloatNoCopy;
 
@@ -3771,12 +4542,8 @@ Bytes doubleToBytes(const volatile void *value) {
   }
   
   Bytes doubleBytes = NULL;
-  char *doubleString = NULL;
   double doubleValue = *((double*) value);
-  if (asprintf(&doubleString, "%f", doubleValue) > 0) {
-    bytesAddStr(&doubleBytes, doubleString);
-  }
-  doubleString = stringDestroy(doubleString);
+  abprintf(&doubleBytes, "%lf", doubleValue);
   
   printLog(TRACE, "EXIT doubleToBytes(value=%f) = {%s}\n",
     *((double*) value), doubleBytes);
@@ -3888,51 +4655,109 @@ void *doubleDestroy(volatile void *value) {
   return (void*) value;
 }
 
-/// @fn void *doubleSize(const volatile void *value)
+/// @fn size_t doubleSize(const volatile void *value)
 ///
 /// @brief Return the size of a double type.
 ///
 /// @param value A pointer to a double variable.
 ///
 /// @return Return the size of a double type.
-int doubleSize(const volatile void *value) {
-  int size = 0;
-  printLog(TRACE, "ENTER doubleSize(value=%lf)\n", (value == NULL) ? 0 : *((double*) value));
+size_t doubleSize(const volatile void *value) {
+  size_t size = 0;
+  printLog(TRACE, "ENTER doubleSize(value=%p)\n", value);
   
   if (value != NULL) {
     size = sizeof(double);
   }
   
-  printLog(TRACE, "EXIT doubleSize(value=%lf) = {%d}\n", (value == NULL) ? 0 : *((double*) value), size);
+  printLog(TRACE, "EXIT doubleSize(value=%p) = {%llu}\n", value, llu(size));
   return size;
 }
 
-/// @fn void* doubleToByteArray(const volatile void *value, u64 *length)
+/// @fn Bytes doubleToBlob(const volatile void *value)
+///
+/// @brief Convert a double value to an array of bytes.
+///
+/// @param value A pointer to the double value to convert.
+///
+/// @return Returns a Bytes object with the encoded byte array on success,
+/// NULL on failure.
+Bytes doubleToBlob(const volatile void *value) {
+  Bytes returnValue = NULL;
+  printLog(TRACE, "ENTER doubleToBlob(value=%lf)\n",
+    (value == NULL) ? 0 : *((double*) value));
+  
+  if (value == NULL) {
+    printLog(ERR, "Cannot convert to byte array.  Parameter is NULL.\n");
+    printLog(TRACE, "EXIT doubleToBlob(value=%lf) = {%p}\n",
+      (value == NULL) ? 0 : *((double*) value), returnValue);
+    return returnValue;
+  }
+  
+  bytesAddData(&returnValue, value, sizeof(double));
+  // Set the size to match the length.  This is so data structures that are
+  // building byte arrays encode the right amount of data, which does not
+  // include the string terminator in our case.
+  bytesSetSize(returnValue, bytesLength(returnValue));
+  
+  printLog(TRACE, "EXIT doubleToBlob(value=%lf) = {%p}\n",
+    (value == NULL) ? 0 : *((double*) value), returnValue);
+  return returnValue;
+}
+
+/// @fn void* doubleFromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety)
 ///
 /// @brief Convert a double value to an array of bytes.
 ///
 /// @param value A pointer to the double value to convert.
 /// @param length The length of the resulting byte array.
+/// @param inPlaceData Whether the data should be used in place (true) or a
+///   copy should be made and returned (false).
+/// @param disableThreadSafety Whether or not thread safety should be disabled
+///   in the returned data.  Not used by this function.
 ///
 /// @return Returns a pointer to a valid byte array on success, NULL on failure.
-void* doubleToByteArray(const volatile void *value, u64 *length) {
+void* doubleFromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety) {
+  (void) disableThreadSafety;
   void *returnValue = NULL;
-  printLog(TRACE, "ENTER doubleToByteArray(value=%lf, length=%p)\n", (value == NULL) ? 0 : *((double*) value), length);
+  printLog(TRACE,
+    "ENTER doubleFromBlob(value=%lf, length=%p, inPlaceData=%s, disableThreadSafety=%s)\n",
+    (value == NULL) ? 0 : *((double*) value), length, boolNames[inPlaceData], boolNames[disableThreadSafety]);
   
   if ((value == NULL) || (length == NULL)) {
-    printLog(ERR, "Cannot convert to byte array.  Parameter is NULL.\n");
-    printLog(TRACE, "EXIT doubleToByteArray(value=%lf, length=%p) = {%p}\n", (value == NULL) ? 0 : *((double*) value), length, returnValue);
-    return returnValue;
+    printLog(ERR, "Cannot convert to/from byte array.  Parameter is NULL.\n");
+    printLog(TRACE,
+      "EXIT doubleFromBlob(value=%lf, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      (value == NULL) ? 0 : *((double*) value), length, boolNames[inPlaceData], boolNames[disableThreadSafety],
+      returnValue);
+    return returnValue; // NULL
+  } else if (*length < sizeof(double)) {
+    printLog(ERR, "Cannot convert from byte array.  Insufficient data.\n");
+    printLog(ERR, "Needed at least %llu bytes, only have %llu.\n",
+      llu(sizeof(double)), llu(*length));
+    printLog(TRACE,
+      "EXIT doubleFromBlob(value=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      value, length, boolNames[inPlaceData], boolNames[disableThreadSafety], returnValue);
+    return returnValue; // NULL
   }
   
-  returnValue = doubleCopy(value);
+  if (inPlaceData) {
+    // Optimize for this case.
+    returnValue = (void*) value;
+  } else {
+    returnValue = doubleCopy(value);
+  }
+  littleEndianToHost(returnValue, sizeof(double));
   if (returnValue != NULL) {
     *length = sizeof(double);
   } else {
     *length = 0;
   }
   
-  printLog(TRACE, "EXIT doubleToByteArray(value=%lf, length=%llu) = {%p}\n", (value == NULL) ? 0 : *((double*) value), llu(*length), returnValue);
+  printLog(TRACE,
+    "EXIT doubleFromBlob(value=%lf, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+    (value == NULL) ? 0 : *((double*) value), llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety],
+    returnValue);
   return returnValue;
 }
 
@@ -3943,6 +4768,7 @@ void* doubleToByteArray(const volatile void *value, u64 *length) {
 TypeDescriptor _typeDouble = {
   .name          = "double",
   .xmlName       = "xs:double",
+  .dataIsPointer = false,
   .toString      = doubleToString,
   .toBytes       = doubleToBytes,
   .compare       = doubleCompare,
@@ -3950,10 +4776,12 @@ TypeDescriptor _typeDouble = {
   .copy          = doubleCopy,
   .destroy       = doubleDestroy,
   .size          = doubleSize,
-  .toByteArray   = doubleToByteArray,
-  .fromByteArray = doubleToByteArray,
+  .toBlob        = doubleToBlob,
+  .fromBlob      = doubleFromBlob,
   .hashFunction  = NULL,
   .clear         = clearDouble,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeDouble = &_typeDouble;
 
@@ -3964,6 +4792,7 @@ TypeDescriptor *typeDouble = &_typeDouble;
 TypeDescriptor _typeDoubleNoCopy = {
   .name          = "double",
   .xmlName       = "xs:double",
+  .dataIsPointer = true,
   .toString      = doubleToString,
   .toBytes       = doubleToBytes,
   .compare       = doubleCompare,
@@ -3971,10 +4800,12 @@ TypeDescriptor _typeDoubleNoCopy = {
   .copy          = shallowCopy,
   .destroy       = (void* (*)(volatile void*)) nullFunction,
   .size          = doubleSize,
-  .toByteArray   = doubleToByteArray,
-  .fromByteArray = doubleToByteArray,
+  .toBlob        = doubleToBlob,
+  .fromBlob      = doubleFromBlob,
   .hashFunction  = NULL,
   .clear         = clearDouble,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeDoubleNoCopy = &_typeDoubleNoCopy;
 
@@ -4141,94 +4972,94 @@ void *longDoubleDestroy(volatile void *value) {
   return (void*) value;
 }
 
-/// @fn void *longDoubleSize(const volatile void *value)
+/// @fn size_t longDoubleSize(const volatile void *value)
 ///
-/// @brief Return the size of a long double type.
+/// @brief Return the size of a longDouble type.
 ///
-/// @param value A pointer to a long double variable.
+/// @param value A pointer to a longDouble variable.
 ///
-/// @return Return the size of a long double type.
-int longDoubleSize(const volatile void *value) {
-  int size = 0;
+/// @return Return the size of a longDouble type.
+size_t longDoubleSize(const volatile void *value) {
+  size_t size = 0;
   printLog(TRACE, "ENTER longDoubleSize(value=%p)\n", value);
   
   if (value != NULL) {
-    size = sizeof(long double);
+    size = sizeof(longDouble);
   }
   
-  printLog(TRACE, "EXIT longDoubleSize(value=%p) = {%d}\n", value, size);
+  printLog(TRACE, "EXIT longDoubleSize(value=%p) = {%llu}\n", value, llu(size));
   return size;
 }
 
-/// @fn void* longDoubleToByteArray(const volatile void *value, u64 *length)
+/// @fn Bytes longDoubleToBlob(const volatile void *value)
 ///
-/// @brief Convert a long double value to an array of bytes.
+/// @brief Convert a longDouble value to an array of bytes.
 ///
-/// @param value A pointer to the long double value to convert.
-/// @param length The length of the resulting byte array.
+/// @param value A pointer to the longDouble value to convert.
 ///
-/// @return Returns a pointer to a valid byte array on success, NULL on failure.
-void* longDoubleToByteArray(const volatile void *value, u64 *length) {
-  void *returnValue = NULL;
-  printLog(TRACE, "ENTER longDoubleToByteArray(value=%p, length=%p)\n",
-    value, length);
+/// @return Returns a Bytes object with the encoded byte array on success,
+/// NULL on failure.
+Bytes longDoubleToBlob(const volatile void *value) {
+  Bytes returnValue = NULL;
+  printLog(TRACE, "ENTER longDoubleToBlob(value=%Lf)\n",
+    (value == NULL) ? 0 : *((longDouble*) value));
   
-  if ((value == NULL) || (length == NULL)) {
+  if (value == NULL) {
     printLog(ERR, "Cannot convert to byte array.  Parameter is NULL.\n");
-    printLog(TRACE, "EXIT longDoubleToByteArray(value=%p, length=%p) = {%p}\n",
-      value, length, returnValue);
+    printLog(TRACE, "EXIT longDoubleToBlob(value=%Lf) = {%p}\n",
+      (value == NULL) ? 0 : *((longDouble*) value), returnValue);
     return returnValue;
   }
   
-  Bytes longDoubleBytes = NULL;
-  long double longDoubleValue = *((long double*) value);
-  abprintf(&longDoubleBytes, "%.100Lf", longDoubleValue);
+  longDouble longDoubleValue = *((longDouble*) value);
+  abprintf(&returnValue, "%.100Lf", longDoubleValue);
+  printLog(TRACE, "returnValue = %s\n", (char*) returnValue);
   
-  if (longDoubleBytes != NULL) {
-    returnValue = typeBytes->toByteArray(longDoubleBytes, length);
-    longDoubleBytes = bytesDestroy(longDoubleBytes);
-  } else {
-    *length = 0;
-  }
-  printLog(DEBUG, "returnValue = %s\n", (char*) returnValue);
-  
-  printLog(TRACE, "EXIT longDoubleToByteArray(value=%Lf, length=%llu) = {%p}\n",
-    *((longDouble*) value), llu(*length), returnValue);
+  printLog(TRACE, "EXIT longDoubleToBlob(value=%Lf) = {%p}\n",
+    (value == NULL) ? 0 : *((longDouble*) value), returnValue);
   return returnValue;
 }
 
-/// @fn void* longDoubleFromByteArray(const volatile void *value, u64 *length)
+/// @fn void* longDoubleFromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety)
 ///
 /// @brief Convert a long double value to an array of bytes.
 ///
 /// @param value A pointer to the long double value to convert.
 /// @param length The length of the resulting byte array.
+/// @param inPlaceData Whether the data should be used in place (true) or a
+///   copy should be made and returned (false).
+/// @param disableThreadSafety Whether or not thread safety should be disabled
+///   in the returned data.  Not used by this function.
 ///
 /// @return Returns a pointer to a valid byte array on success, NULL on failure.
-void* longDoubleFromByteArray(const volatile void *value, u64 *length) {
+void* longDoubleFromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety) {
+  (void) disableThreadSafety;
   void *returnValue = NULL;
-  printLog(TRACE, "ENTER longDoubleFromByteArray(value=%p, length=%p)\n",
-    value, length);
+  printLog(TRACE,
+    "ENTER longDoubleFromBlob(value=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s)\n",
+    value, length, boolNames[inPlaceData], boolNames[disableThreadSafety]);
   
   if ((value == NULL) || (length == NULL)) {
     printLog(ERR, "Cannot convert from byte array.  Parameter is NULL.\n");
-    printLog(TRACE, "EXIT longDoubleFromByteArray(value=%p, length=%p) = {%p}\n",
-      value, length, returnValue);
+    printLog(TRACE,
+      "EXIT longDoubleFromBlob(value=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      value, length, boolNames[inPlaceData], boolNames[disableThreadSafety], returnValue);
     return returnValue;
   }
   printLog(DEBUG, "value = %s\n", (char*) value);
   
-  Bytes longDoubleBytes = (Bytes) typeBytes->fromByteArray(value, length);
-  if (longDoubleBytes != NULL) {
-    returnValue = (long double*) malloc(sizeof(long double));
-    if (returnValue != NULL) {
-      sscanf((char*) longDoubleBytes, "%Lf", (long double*) returnValue);
-    }
-    longDoubleBytes = bytesDestroy(longDoubleBytes);
+  // There's no way to use the data in place for this encoding, so there's no
+  // case for that here.  Just ignore the parameter.
+  (void) inPlaceData;
+  returnValue = (long double*) malloc(sizeof(long double));
+  if (returnValue != NULL) {
+    sscanf(str(value), "%Lf", (long double*) returnValue);
+    *length = strlen(str(value)) + 1;
   }
   
-  printLog(TRACE, "EXIT longDoubleFromByteArray(value=%p, length=%llu) = {%LF}\n",
-    value, llu(*length), *((longDouble*) returnValue));
+  printLog(TRACE,
+    "EXIT longDoubleFromBlob(value=%p, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%LF}\n",
+    value, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety], *((longDouble*) returnValue));
   return returnValue;
 }
 
@@ -4239,6 +5070,7 @@ void* longDoubleFromByteArray(const volatile void *value, u64 *length) {
 TypeDescriptor _typeLongDouble = {
   .name          = "longDouble",
   .xmlName       = "xs:decimal",
+  .dataIsPointer = false,
   .toString      = longDoubleToString,
   .toBytes       = longDoubleToBytes,
   .compare       = longDoubleCompare,
@@ -4246,10 +5078,12 @@ TypeDescriptor _typeLongDouble = {
   .copy          = longDoubleCopy,
   .destroy       = longDoubleDestroy,
   .size          = longDoubleSize,
-  .toByteArray   = longDoubleToByteArray,
-  .fromByteArray = longDoubleFromByteArray,
+  .toBlob        = longDoubleToBlob,
+  .fromBlob      = longDoubleFromBlob,
   .hashFunction  = NULL,
   .clear         = clearLongDouble,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeLongDouble = &_typeLongDouble;
 
@@ -4260,6 +5094,7 @@ TypeDescriptor *typeLongDouble = &_typeLongDouble;
 TypeDescriptor _typeLongDoubleNoCopy = {
   .name          = "longDouble",
   .xmlName       = "xs:decimal",
+  .dataIsPointer = true,
   .toString      = longDoubleToString,
   .toBytes       = longDoubleToBytes,
   .compare       = longDoubleCompare,
@@ -4267,10 +5102,12 @@ TypeDescriptor _typeLongDoubleNoCopy = {
   .copy          = shallowCopy,
   .destroy       = (void* (*)(volatile void*)) nullFunction,
   .size          = longDoubleSize,
-  .toByteArray   = longDoubleToByteArray,
-  .fromByteArray = longDoubleFromByteArray,
+  .toBlob        = longDoubleToBlob,
+  .fromBlob      = longDoubleFromBlob,
   .hashFunction  = NULL,
   .clear         = clearLongDouble,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeLongDoubleNoCopy = &_typeLongDoubleNoCopy;
 
@@ -4352,7 +5189,10 @@ int stringCompare(const volatile void *valueA, const volatile void *valueB) {
   }
   
   returnValue = strcmp((char*) valueA, (char*) valueB);
-  printLog(TRACE, "EXIT stringCompare(valueA=%p, valueB=%p) = {%d}\n", valueA, valueB, returnValue);
+  // If we made it this far, strcmp didn't segfault, so we can assume both
+  // values are printable strings.
+  printLog(TRACE, "EXIT stringCompare(valueA=\"%s\", valueB=\"%s\") = {%d}\n",
+    str(valueA), str(valueB), returnValue);
   return returnValue;
 }
 
@@ -4401,26 +5241,54 @@ void *stringCopy(const volatile void *value) {
   return (void*) valueCopy;
 }
 
-/// @fn void *stringSize(const volatile void *value)
+/// @fn size_t stringSize(const volatile void *value)
 ///
 /// @brief Return the size of a string type.
 ///
 /// @param value A pointer to a string variable.
 ///
 /// @return Return the size of a string type.
-int stringSize(const volatile void *value) {
-  int size = 0;
+size_t stringSize(const volatile void *value) {
+  size_t size = 0;
   printLog(TRACE, "ENTER stringSize(value=%p)\n", value);
   
   if (value != NULL) {
     size = strlen((char*) value) + 1;
   }
   
-  printLog(TRACE, "EXIT stringSize(value=%p) = {%d}\n", value, size);
+  printLog(TRACE, "EXIT stringSize(value=%p) = {%llu}\n", value, llu(size));
   return size;
 }
 
-/// @fn void* stringToByteArray(const volatile void *value, u64 *length)
+/// @fn Bytes stringToBlob(const volatile void *value)
+///
+/// @brief Convert a string value to an array of bytes.
+///
+/// @param value A pointer to the string value to convert.
+/// @param length The length of the resulting byte array.
+///
+/// @return Returns a Bytes object with the encoded byte array on success,
+/// NULL on failure.
+Bytes stringToBlob(const volatile void *value) {
+  Bytes returnValue = NULL;
+  printLog(TRACE, "ENTER stringToBlob(value=\"%s\")\n",
+    (value == NULL) ? "" : (char*) value);
+  
+  if (value == NULL) {
+    printLog(ERR, "Cannot convert to byte array.  Parameter is NULL.\n");
+    printLog(TRACE, "EXIT stringToBlob(value=\"%s\") = {%p}\n",
+      (value == NULL) ? "" : (char*) value, returnValue);
+    return returnValue;
+  }
+  
+  bytesAddStr(&returnValue, str(value));
+  
+  printLog(TRACE, "EXIT stringToBlob(value=\"%s\") = {%p}\n",
+    (value == NULL) ? "" : (char*) value, returnValue);
+  return returnValue;
+}
+
+/// @fn void* stringFromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety)
 ///
 /// @brief Convert a string value to an array of bytes.
 ///
@@ -4428,24 +5296,38 @@ int stringSize(const volatile void *value) {
 /// @param length The length of the resulting byte array.
 ///
 /// @return Returns a pointer to a valid byte array on success, NULL on failure.
-void* stringToByteArray(const volatile void *value, u64 *length) {
+void* stringFromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety) {
+  (void) disableThreadSafety;
   void *returnValue = NULL;
-  printLog(TRACE, "ENTER stringToByteArray(value=\"%s\", length=%p)\n", (value == NULL) ? "" : (char*) value, length);
+  printLog(TRACE,
+    "ENTER stringFromBlob(value=\"%s\", length=%p, inPlaceData=%s, disableThreadSafety=%s)\n",
+    (value == NULL) ? "" : (char*) value, length, boolNames[inPlaceData], boolNames[disableThreadSafety]);
   
   if ((value == NULL) || (length == NULL)) {
     printLog(ERR, "Cannot convert to/from byte array.  Parameter is NULL.\n");
-    printLog(TRACE, "EXIT stringToByteArray(value=\"%s\", length=%p) = {%p}\n", (value == NULL) ? "" : (char*) value, length, returnValue);
+    printLog(TRACE,
+      "EXIT stringFromBlob(value=\"%s\", length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      (value == NULL) ? "" : (char*) value, length, boolNames[inPlaceData], boolNames[disableThreadSafety],
+      returnValue);
     return returnValue;
   }
   
-  returnValue = stringCopy(value);
+  if (inPlaceData) {
+    // Optimize for this case.
+    returnValue = (void*) value;
+  } else {
+    returnValue = stringCopy(value);
+  }
   if (returnValue != NULL) {
     *length = strlen((char*) value) + 1;
   } else {
     *length = 0;
   }
   
-  printLog(TRACE, "EXIT stringToByteArray(value=\"%s\", length=%llu) = {%p}\n", (value == NULL) ? "" : (char*) value, llu(*length), returnValue);
+  printLog(TRACE,
+    "EXIT stringFromBlob(value=\"%s\", length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+    (value == NULL) ? "" : (char*) value, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety],
+    returnValue);
   return returnValue;
 }
 
@@ -4497,17 +5379,20 @@ u64 stringHashFunction(const volatile void *value) {
 TypeDescriptor _typeString = {
   .name          = "string",
   .xmlName       = "xs:string",
+  .dataIsPointer = true,
   .toString      = stringToString,
   .toBytes       = stringToBytes,
   .compare       = stringCompare,
   .create        = stringCreate,
   .copy          = stringCopy,
-  .destroy       = (void* (*)(volatile void*)) stringDestroy,
+  .destroy       = pointerDestroyFunction,
   .size          = stringSize,
-  .toByteArray   = stringToByteArray,
-  .fromByteArray = stringToByteArray,
+  .toBlob        = stringToBlob,
+  .fromBlob      = stringFromBlob,
   .hashFunction  = stringHashFunction,
   .clear         = clearString,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeString = &_typeString;
 
@@ -4581,6 +5466,7 @@ u64 stringCiHashFunction(const volatile void *value) {
 TypeDescriptor _typeStringNoCopy = {
   .name          = "string",
   .xmlName       = "xs:string",
+  .dataIsPointer = true,
   .toString      = stringToString,
   .toBytes       = stringToBytes,
   .compare       = stringCompare,
@@ -4588,10 +5474,12 @@ TypeDescriptor _typeStringNoCopy = {
   .copy          = shallowCopy,
   .destroy       = (void* (*)(volatile void*)) nullFunction,
   .size          = stringSize,
-  .toByteArray   = stringToByteArray,
-  .fromByteArray = stringToByteArray,
-  .hashFunction  = NULL,
+  .toBlob        = stringToBlob,
+  .fromBlob      = stringFromBlob,
+  .hashFunction  = stringHashFunction,
   .clear         = clearString,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeStringNoCopy = &_typeStringNoCopy;
 
@@ -4602,17 +5490,20 @@ TypeDescriptor *typeStringNoCopy = &_typeStringNoCopy;
 TypeDescriptor _typeStringCi = {
   .name          = "case-insensitive string",
   .xmlName       = "xs:string",
+  .dataIsPointer = true,
   .toString      = stringToString,
   .toBytes       = stringToBytes,
   .compare       = _strcmpci,
   .create        = stringCreate,
   .copy          = stringCopy,
-  .destroy       = (void* (*)(volatile void*)) stringDestroy,
+  .destroy       = pointerDestroyFunction,
   .size          = stringSize,
-  .toByteArray   = stringToByteArray,
-  .fromByteArray = stringToByteArray,
+  .toBlob        = stringToBlob,
+  .fromBlob      = stringFromBlob,
   .hashFunction  = stringCiHashFunction,
   .clear         = clearString,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeStringCi = &_typeStringCi;
 
@@ -4624,6 +5515,7 @@ TypeDescriptor *typeStringCi = &_typeStringCi;
 TypeDescriptor _typeStringCiNoCopy = {
   .name          = "case-insensitive string",
   .xmlName       = "xs:string",
+  .dataIsPointer = true,
   .toString      = stringToString,
   .toBytes       = stringToBytes,
   .compare       = _strcmpci,
@@ -4631,10 +5523,12 @@ TypeDescriptor _typeStringCiNoCopy = {
   .copy          = shallowCopy,
   .destroy       = (void* (*)(volatile void*)) nullFunction,
   .size          = stringSize,
-  .toByteArray   = stringToByteArray,
-  .fromByteArray = stringToByteArray,
+  .toBlob        = stringToBlob,
+  .fromBlob      = stringFromBlob,
   .hashFunction  = stringCiHashFunction,
   .clear         = clearString,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeStringCiNoCopy = &_typeStringCiNoCopy;
 
@@ -4696,11 +5590,7 @@ Bytes pointerToBytes(const volatile void *value) {
   printLog(TRACE, "ENTER pointerToBytes(value=%p)\n", value);
   
   Bytes pointerBytes = NULL;
-  char *pointerString = NULL;
-  if (asprintf(&pointerString, "%p", value) > 0) {
-    bytesAddStr(&pointerBytes, pointerString);
-  }
-  pointerString = stringDestroy(pointerString);
+  abprintf(&pointerBytes, "0x%llx", llu((intptr_t) value));
   
   printLog(TRACE, "EXIT pointerToBytes(value=%p) = {%s}\n", value, pointerBytes);
   return pointerBytes;
@@ -4732,100 +5622,110 @@ int pointerCompare(const volatile void *valueA, const volatile void *valueB) {
   }
 }
 
-/// @fn void *pointerSize(const volatile void *value)
+/// @fn size_t pointerSize(const volatile void *value)
 ///
-/// @brief Return the size of a u64 type.
+/// @brief Return the size of a pointer type.
 ///
-/// @param value A pointer to a u64 variable.
+/// @param value A pointer variable.
 ///
-/// @return Return the size of a u64 type.
-int pointerSize(const volatile void *value) {
+/// @return This function always returns 0.
+size_t pointerSize(const volatile void *value) {
   (void) value; // In case logging is disabled.
-  int size = 0;
+  size_t size = 0;
   printLog(TRACE, "ENTER pointerSize(value=%p)\n", value);
   
-  size = 0;
-  
-  printLog(TRACE, "EXIT pointerSize(value=%p) = {%d}\n", value, size);
+  printLog(TRACE, "EXIT pointerSize(value=%p) = {%llu}\n", value, llu(size));
   return size;
 }
 
-/// @fn void* pointerToByteArray(const volatile void *value, u64 *length)
+/// @fn Bytes pointerToBlob(const volatile void *value)
 ///
 /// @brief Convert a pointer value to an array of bytes.
 ///
 /// @param value A pointer value.
 /// @param length The length of the resulting byte array.
 ///
-/// @return Returns an allocated copy of the value of the pointer provided on
-/// success, NULL on failure.
-void* pointerToByteArray(const volatile void *value, u64 *length) {
-  printLog(TRACE, "ENTER pointerToByteArray(value=%p, length=%p)\n",
-    value, length);
-  void *returnValue = NULL;
-  
-  if (length == NULL) { // not checking for NULL value pointer since that's valid
-    printLog(ERR, "Cannot convert to byte array.  length is NULL.\n");
-    printLog(TRACE, "EXIT pointerToByteArray(value=%p, length=%p) = {%p}\n",
-      value, length, returnValue);
+/// @return Returns a Bytes object with the encoded byte array on success,
+/// NULL on failure.
+Bytes pointerToBlob(const volatile void *value) {
+  printLog(TRACE, "ENTER pointerToBlob(value=%p)\n",
+    value);
+  Bytes returnValue = NULL;
+  if (value == NULL) {
+    // No-op.
+    printLog(TRACE, "EXIT pointerToBlob(value=%p) = {%p}\n",
+      value, returnValue);
     return returnValue;
   }
   
-  returnValue = malloc(sizeof(void*));
-  if (returnValue == NULL) {
-    // No memory.  Cannot continue.
-    *length = 0;
-    printLog(TRACE, "EXIT pointerToByteArray(value=%p, length=%llu) = {%p}\n",
-      value, llu(*length), returnValue);
-    return returnValue;
-  }
-  *((void**) returnValue) = (void*) value;
-  *length = sizeof(void*);
+  bytesAddData(&returnValue, &value, sizeof(void*));
+  // Set the size to match the length.  This is so data structures that are
+  // building byte arrays encode the right amount of data, which does not
+  // include the string terminator in our case.
+  bytesSetSize(returnValue, bytesLength(returnValue));
   
-  printLog(TRACE, "EXIT pointerToByteArray(value=%p, length=%llu) = {%p}\n",
-    value, llu(*length), returnValue);
+  printLog(TRACE, "EXIT pointerToBlob(value=%p) = {%p}\n",
+    value, returnValue);
   return returnValue;
 }
 
-/// @fn void* pointerFromByteArray(const volatile void *value, u64 *length)
+/// @fn void* pointerFromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety)
 ///
 /// @brief Convert an array of bytes to a pointer value.
 ///
 /// @param array A pointer to an array of bytes holding a pointer value.
 /// @param length The number of bytes consumed by the function in converting
 ///   the data to a pointer value.
+/// @param inPlaceData Whether the data should be used in place (true) or a
+///   copy should be made and returned (false).
+/// @param disableThreadSafety Whether or not thread safety should be disabled
+///   in the returned data.  Not used by this function.
 ///
 /// @return Returns an allocated copy of the value of the pointer provided on
 /// success, NULL on failure.
-void* pointerFromByteArray(const volatile void *array, u64 *length) {
-  printLog(TRACE, "ENTER pointerFromByteArray(array=%p, length=%p)\n",
-    array, length);
+void* pointerFromBlob(const volatile void *array, u64 *length, bool inPlaceData, bool disableThreadSafety) {
+  (void) disableThreadSafety;
+  printLog(TRACE,
+    "ENTER pointerFromBlob(array=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s)\n",
+    array, length, boolNames[inPlaceData], boolNames[disableThreadSafety]);
   void *returnValue = NULL;
   
   if ((array == NULL) || (length == NULL)) {
     printLog(ERR, "Cannot convert from byte array.  Parameter is NULL.\n");
     printLog(TRACE,
-      "EXIT pointerFromByteArray(array=%p, length=%p) = {%p}\n",
-      array, length, returnValue);
-    return returnValue;
+      "EXIT pointerFromBlob(array=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      array, length, boolNames[inPlaceData], boolNames[disableThreadSafety], returnValue);
+    return returnValue; // NULL
+  } else if (*length < sizeof(void*)) {
+    printLog(ERR, "Cannot convert from byte array.  Insufficient data.\n");
+    printLog(ERR, "Needed at least %llu bytes, only have %llu.\n",
+      llu(sizeof(void*)), llu(*length));
+    printLog(TRACE,
+      "EXIT pointerFromBlob(array=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      array, length, boolNames[inPlaceData], boolNames[disableThreadSafety], returnValue);
+    return returnValue; // NULL
   }
   
+  // In this case, the data is the same irrespective of the value of
+  // inPlaceData, so just ignore the parameter.
+  (void) inPlaceData;
   returnValue = *((void**) array);
   *length = sizeof(void*);
   
-  printLog(TRACE, "EXIT pointerFromByteArray(array=%p, length=%llu) = {%p}\n",
-    array, llu(*length), returnValue);
+  printLog(TRACE,
+    "EXIT pointerFromBlob(array=%p, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+    array, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety], returnValue);
   return returnValue;
 }
 
-/// @fn void* pointerDestroy(volatile void *pointer)
+/// @fn void* pointerDestroyFunction(volatile void *pointer)
 ///
 /// @brief Destroy a generic pointer of any type (void*) and return NULL.
 ///
 /// @param pointer A pointer to any type of a block of memory to free.
 ///
 /// @return This function always returns NULL.
-void* pointerDestroy(volatile void *pointer) {
+void* pointerDestroyFunction(volatile void *pointer) {
   free((void*) pointer);
   return NULL;
 }
@@ -4858,17 +5758,20 @@ u64 pointerHashFunction(const volatile void *value) {
 TypeDescriptor _typePointer = {
   .name          = "Pointer",
   .xmlName       = NULL,
+  .dataIsPointer = true,
   .toString      = pointerToString,
   .toBytes       = pointerToBytes,
   .compare       = pointerCompare,
   .create        = (void* (*)(const volatile void*, ...)) nullFunction,
   .copy          = (void* (*)(const volatile void*)) shallowCopy,
-  .destroy       = pointerDestroy,
+  .destroy       = pointerDestroyFunction,
   .size          = pointerSize,
-  .toByteArray   = pointerToByteArray,
-  .fromByteArray = pointerFromByteArray,
+  .toBlob        = pointerToBlob,
+  .fromBlob      = pointerFromBlob,
   .hashFunction  = pointerHashFunction,
   .clear         = clearNull,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typePointer = &_typePointer;
 
@@ -4879,8 +5782,9 @@ TypeDescriptor *typePointer = &_typePointer;
 ///   This type takes no ownerhip of the pointer and the memory is not freed
 ///   via the destroy call.
 TypeDescriptor _typePointerNoCopy = {
-  .name          = "PointerNoCopy",
+  .name          = "Pointer",
   .xmlName       = NULL,
+  .dataIsPointer = true,
   .toString      = pointerToString,
   .toBytes       = pointerToBytes,
   .compare       = pointerCompare,
@@ -4888,10 +5792,12 @@ TypeDescriptor _typePointerNoCopy = {
   .copy          = (void* (*)(const volatile void*)) shallowCopy,
   .destroy       = (void* (*)(volatile void*)) nullFunction,
   .size          = pointerSize,
-  .toByteArray   = pointerToByteArray,
-  .fromByteArray = pointerFromByteArray,
+  .toBlob        = pointerToBlob,
+  .fromBlob      = pointerFromBlob,
   .hashFunction  = pointerHashFunction,
   .clear         = clearNull,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typePointerNoCopy = &_typePointerNoCopy;
 TypeDescriptor *typePointerNoOwn = &_typePointerNoCopy;
@@ -5023,105 +5929,143 @@ void *bytesCopy(const volatile void *value) {
   return (void*) valueCopy;
 }
 
-/// @fn void *_bytesSize(const volatile void *value)
+/// @fn size_t _bytesSize(const volatile void *value)
 ///
 /// @brief Return the size of a Bytes type.
 ///
 /// @param value A pointer to a Bytes variable.
 ///
 /// @return Return the size of a Bytes type.
-int _bytesSize(const volatile void *value) {
-  int size = 0;
+size_t _bytesSize(const volatile void *value) {
+  size_t size = 0;
   printLog(TRACE, "ENTER _bytesSize(value=%p)\n", value);
   
   if (value != NULL) {
-    size = bytesLength((Bytes) value);
+    size = (size_t) bytesLength((Bytes) value);
   }
   
-  printLog(TRACE, "EXIT _bytesSize(value=%p) = {%d}\n", value, size);
+  printLog(TRACE, "EXIT _bytesSize(value=%p) = {%llu}\n", value, llu(size));
   return size;
 }
 
-/// @fn void* bytesToByteArray(const volatile void *value, u64 *length)
+/// @fn Bytes bytesToBlob(const volatile void *value)
 ///
 /// @brief Convert a Bytes value to an array of bytes.
 ///
 /// @param value A pointer to the Bytes value to convert.
-/// @param length The length of the resulting byte array.
 ///
-/// @return Returns a pointer to a valid byte array on success, NULL on failure.
-void* bytesToByteArray(const volatile void *value, u64 *length) {
-  void *returnValue = NULL;
-  printLog(TRACE, "ENTER bytesToByteArray(value=%p, length=%p)\n", value, length);
+/// @return Returns a Bytes object with the encoded byte array on success,
+/// NULL on failure.
+Bytes bytesToBlob(const volatile void *value) {
+  Bytes returnValue = NULL;
+  printLog(TRACE, "ENTER bytesToBlob(value=%p)\n", value);
   
-  if ((value == NULL) || (length == NULL)) {
-    printLog(ERR, "Cannot convert to byte array.  Parameter is NULL.\n");
-    printLog(TRACE, "EXIT bytesToByteArray(value=%p, length=%p) = {%p}\n",
-      value, length, returnValue);
+  if (value == NULL) {
+    // No-op.
+    printLog(TRACE, "EXIT bytesToBlob(value=%p) = {%p}\n",
+      value, returnValue);
     return returnValue;
   }
   
   Bytes bytesValue = (Bytes) value;
-  u64 valueLength = bytesLength(bytesValue);
-  returnValue = malloc(valueLength + sizeof(u64));
-  if (returnValue == NULL) {
-    LOG_MALLOC_FAILURE();
-    *length = 0;
-    return returnValue;
-  }
+  BytesHeader *bytesHeader
+    = (BytesHeader*) (bytesValue - sizeof(BytesHeader));
+  // The BytesHeader is two (2) 64-bit values, so there should be no issue with
+  // packing or data alignment here.
+  bytesAddData(&returnValue,
+    bytesHeader, bytesLength(bytesValue) + sizeof(BytesHeader) + 1);
   
-  // Copy the data.
-  *((u64*) returnValue) = valueLength;
-  bytesValue = ((Bytes) returnValue) + sizeof(u64);
-  memcpy((void*) bytesValue, (void*) value, valueLength);
-  *length = valueLength + sizeof(u64);
+  bytesHeader = (BytesHeader*) returnValue;
+  bytesValue = ((Bytes) bytesHeader) + sizeof(BytesHeader);
+  // Truncate the size of the copy to only what was allocated.
+  bytesSetSize(bytesValue, bytesLength(bytesValue) + 1);
+  hostToLittleEndian(&bytesHeader->length, sizeof(bytesHeader->length));
+  hostToLittleEndian(&bytesHeader->size, sizeof(bytesHeader->size));
   
-  printLog(TRACE, "EXIT bytesToByteArray(value=%p, length=%llu) = {%p}\n",
-    value, llu(*length), returnValue);
+  // Truncate the size of the Bytes we return to only the bytes object we
+  // allocated (no final NULL byte or anything else).
+  bytesValue = (Bytes) returnValue;
+  bytesSetSize(bytesValue, bytesLength(bytesValue));
+  
+  printLog(TRACE, "EXIT bytesToBlob(value=%p) = {%p}\n",
+    value, returnValue);
   return returnValue;
 }
 
-/// @fn void* bytesFromByteArray(const volatile void *value, u64 *length)
+/// @fn void* bytesFromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety)
 ///
 /// @brief Convert a byte array representation of Bytes to bytes.
 ///
 /// @param value A pointer to the byte array value to convert.
 /// @param length The length of the input byte array on call.  The number of
 ///   bytes consumed by this function on return.
+/// @param inPlaceData Whether the data should be used in place (true) or a
+///   copy should be made and returned (false).
+/// @param disableThreadSafety Whether or not thread safety should be disabled
+///   in the returned data.  Not used by this function.
 ///
 /// @return Returns a pointer to a valid Bytes object on success, NULL on failure.
-void* bytesFromByteArray(const volatile void *value, u64 *length) {
-  Bytes returnValue = NULL;
-  printLog(TRACE, "ENTER bytesFromByteArray(value=%p, length=%p)\n", value, length);
+void* bytesFromBlob(const volatile void *value, u64 *length, bool inPlaceData, bool disableThreadSafety) {
+  (void) disableThreadSafety;
+  void *returnValue = NULL;
+  printLog(TRACE,
+    "ENTER bytesFromBlob(value=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s)\n",
+    value, length, boolNames[inPlaceData], boolNames[disableThreadSafety]);
   
   if ((value == NULL) || (length == NULL)) {
     printLog(ERR, "Cannot convert from byte array.  Parameter is NULL.\n");
-    printLog(TRACE, "EXIT bytesFromByteArray(value=%p, length=%p) = {%p}\n",
-      value, length, returnValue);
-    return (void*) returnValue;
+    printLog(TRACE,
+      "EXIT bytesFromBlob(value=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      value, length, boolNames[inPlaceData], boolNames[disableThreadSafety], returnValue);
+    return (void*) returnValue; // NULL
+  } else if (*length < sizeof(BytesHeader)) {
+    printLog(ERR, "Cannot convert from byte array.  Insufficient data.\n");
+    printLog(ERR, "Needed at least %llu bytes, only have %llu.\n",
+      llu(sizeof(BytesHeader)), llu(*length));
+    printLog(TRACE,
+      "EXIT bytesFromBlob(value=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      value, length, boolNames[inPlaceData], boolNames[disableThreadSafety], returnValue);
+    return returnValue; // NULL
   }
   
-  u64 valueLength = *((u64*) value);
+  BytesHeader *bytesHeader = (BytesHeader*) value;
+  littleEndianToHost(&bytesHeader->length, sizeof(bytesHeader->length));
+  littleEndianToHost(&bytesHeader->size, sizeof(bytesHeader->size));
+  
+  // Move the pointer back to the beginning of the data.  The BytesHeader is
+  // two (2) 64-bit values, so there should be no issue with packing or data
+  // alignment here.
+  Bytes bytesValue = ((Bytes) value) + sizeof(BytesHeader);
+  // We want the size here, not the length.  The size attribute holds the full
+  // amount of allocated memory while the length attribute just tells us how
+  // many bytes are valid.
+  u64 valueLength = bytesSize(bytesValue);
   if (valueLength > *length) {
     printLog(ERR, "Cannot convert from byte array.  Insufficient data.\n");
     printLog(ERR, "Needed at least %llu bytes, only have %llu.\n",
-      llu(valueLength), llu(*length));
-    printLog(TRACE, "EXIT bytesFromByteArray(value=%p, length=%p) = {%p}\n",
-      value, length, returnValue);
+      llu(valueLength + sizeof(BytesHeader)), llu(*length));
+    printLog(TRACE,
+      "EXIT bytesFromBlob(value=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      value, length, boolNames[inPlaceData], boolNames[disableThreadSafety], returnValue);
     return (void*) returnValue;
   }
   
-  Bytes bytesValue = ((Bytes) value) + sizeof(u64);
-  bytesAddData(&returnValue, bytesValue, valueLength);
+  if (inPlaceData) {
+    // Optimize for this case.
+    returnValue = (void*) bytesValue;
+  } else {
+    bytesAddBytes((Bytes*) &returnValue, bytesValue);
+  }
   if (returnValue != NULL) {
-    *length = valueLength + sizeof(u64);
+    *length = valueLength + sizeof(BytesHeader);
   } else {
     *length = 0;
   }
   
-  printLog(TRACE, "EXIT bytesFromByteArray(value=%p, length=%llu) = {%p}\n",
-    value, llu(*length), returnValue);
-  return (void*) returnValue;
+  printLog(TRACE,
+    "EXIT bytesFromBlob(value=%p, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+    value, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety], returnValue);
+  return returnValue;
 }
 
 /// @fn int _bytesCompare(const volatile void *s1, const volatile void *s2)
@@ -5146,6 +6090,7 @@ int _bytesCompare(const volatile void *valueA, const volatile void *valueB) {
 TypeDescriptor _typeBytes = {
   .name          = "bytes",
   .xmlName       = "",
+  .dataIsPointer = true,
   .toString      = bytesToString,
   .toBytes       = bytesToBytes,
   .compare       = _bytesCompare,
@@ -5153,10 +6098,12 @@ TypeDescriptor _typeBytes = {
   .copy          = bytesCopy,
   .destroy       = (void* (*)(volatile void*)) bytesDestroy,
   .size          = _bytesSize,
-  .toByteArray   = bytesToByteArray,
-  .fromByteArray = bytesFromByteArray,
+  .toBlob        = bytesToBlob,
+  .fromBlob      = bytesFromBlob,
   .hashFunction  = NULL,
   .clear         = clearBytes,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeBytes = &_typeBytes;
 
@@ -5174,6 +6121,7 @@ TypeDescriptor *typeBytes = &_typeBytes;
 TypeDescriptor _typeBytesNoCopy = {
   .name          = "bytes",
   .xmlName       = "",
+  .dataIsPointer = true,
   .toString      = bytesToString,
   .toBytes       = bytesToBytes,
   .compare       = _bytesCompare,
@@ -5181,10 +6129,12 @@ TypeDescriptor _typeBytesNoCopy = {
   .copy          = shallowCopy,
   .destroy       = (void* (*)(volatile void*)) nullFunction,
   .size          = _bytesSize,
-  .toByteArray   = bytesToByteArray,
-  .fromByteArray = bytesFromByteArray,
+  .toBlob        = bytesToBlob,
+  .fromBlob      = bytesFromBlob,
   .hashFunction  = NULL,
   .clear         = clearBytes,
+  .toXml         = NULL,
+  .toJson        = NULL,
 };
 TypeDescriptor *typeBytesNoCopy = &_typeBytesNoCopy;
 
@@ -5200,6 +6150,8 @@ extern TypeDescriptor _typeHashTable;
 extern TypeDescriptor _typeHashTableNoCopy;
 extern TypeDescriptor _typeVector;
 extern TypeDescriptor _typeVectorNoCopy;
+//// extern TypeDescriptor _typeArray;
+//// extern TypeDescriptor _typeArrayNoCopy;
 
 /// @var typeDescriptors
 ///
@@ -5251,6 +6203,8 @@ TypeDescriptor *typeDescriptors[] = {
   &_typeHashTableNoCopy,
   &_typeVector,
   &_typeVectorNoCopy,
+  //// &_typeArray,
+  //// &_typeArrayNoCopy,
   &_typePointer,
   &_typePointerNoCopy,
   (TypeDescriptor*) STOP
@@ -5292,14 +6246,17 @@ void initTypeDescriptorTable(void) {
   _typeDescriptorsToIndexes = htCreate(typePointerNoOwn);
   if (_typeDescriptorsToIndexes == NULL) {
     LOG_MALLOC_FAILURE();
-    _initTypeDescriptorTableInProgress = false;
+    // Leave _initTypeDescriptorTableInProgress set to true to force a linear
+    // search.
     return;
   }
   
   _indexesToTypeDescriptors = htCreate(typeI64);
   if (_indexesToTypeDescriptors == NULL) {
     LOG_MALLOC_FAILURE();
-    _initTypeDescriptorTableInProgress = false;
+    _typeDescriptorsToIndexes = htDestroy(_typeDescriptorsToIndexes);
+    // Leave _initTypeDescriptorTableInProgress set to true to force a linear
+    // search.
     return;
   }
   
@@ -5321,25 +6278,25 @@ void initTypeDescriptorTable(void) {
 i64 getIndexFromTypeDescriptor(TypeDescriptor *typeDescriptor) {
   i64 index = -1;
   
-  if (_initTypeDescriptorTableInProgress == false) {
+  if (typeDescriptor == NULL) {
+    return index; // -1
+  }
+  
+  // Run a linear search on the array first since that's faster.
+  for (i64 i = 0; typeDescriptors[i] != STOP; i++) {
+    if (typeDescriptors[i] == typeDescriptor) {
+      index = i;
+      break;
+    }
+  }
+  if ((index == -1) && (_initTypeDescriptorTableInProgress == false)) {
     call_once(&_typeDescriptorTablesSetup, initTypeDescriptorTable);
     
-    if (typeDescriptor == NULL) {
-      return index; // -1
-    }
-    
+    // Try the hash table.
     i64 *tsIndex = (i64*) htGetValue(_typeDescriptorsToIndexes, typeDescriptor);
     if (tsIndex != NULL) {
       index = *tsIndex;
     } // else index remains -1
-  } else {
-    // Run a linear search while we're in the middle of initialization.
-    for (i64 i = 0; typeDescriptors[i] != STOP; i++) {
-      if (typeDescriptors[i] == typeDescriptor) {
-        index = i;
-        break;
-      }
-    }
   }
   
   return index;
@@ -5351,8 +6308,14 @@ i64 getIndexFromTypeDescriptor(TypeDescriptor *typeDescriptor) {
 ///
 /// @return Returns the number of known type descriptors as an integer value.
 u64 getNumTypeDescriptors() {
-  call_once(&_typeDescriptorTablesSetup, initTypeDescriptorTable);
-  return _typeDescriptorsToIndexes->size;
+  if (_initTypeDescriptorTableInProgress == false) {
+    call_once(&_typeDescriptorTablesSetup, initTypeDescriptorTable);
+    return _typeDescriptorsToIndexes->size;
+  } else {
+    u64 numTypeDescriptors = 0;
+    for (; typeDescriptors[numTypeDescriptors] != STOP; numTypeDescriptors++);
+    return numTypeDescriptors;
+  }
 }
 
 /// @fn int registerTypeDescriptor(TypeDescriptor *typeDescriptor)
@@ -5371,20 +6334,26 @@ int registerTypeDescriptor(TypeDescriptor *typeDescriptor) {
     return 0;
   }
   
-  mtx_lock(_typeDescriptorsToIndexes->lock);
-  mtx_lock(_indexesToTypeDescriptors->lock);
+  int returnValue = 0;
+  if (_initTypeDescriptorTableInProgress == false) {
+    mtx_lock(_typeDescriptorsToIndexes->lock);
+    mtx_lock(_indexesToTypeDescriptors->lock);
+    
+    i64 numTypeDescriptors = (i64) _typeDescriptorsToIndexes->size;
+    
+    htAddEntry(_typeDescriptorsToIndexes,
+      typeDescriptor, &numTypeDescriptors, typeI64);
+    htAddEntry(_indexesToTypeDescriptors,
+      &numTypeDescriptors, typeDescriptor, typePointerNoOwn);
+    
+    mtx_unlock(_indexesToTypeDescriptors->lock);
+    mtx_unlock(_typeDescriptorsToIndexes->lock);
+  } else {
+    // The tables are not setup and there's nothing we can do.  Fail.
+    returnValue = -1;
+  }
   
-  i64 numTypeDescriptors = (i64) _typeDescriptorsToIndexes->size;
-  
-  htAddEntry(_typeDescriptorsToIndexes,
-    typeDescriptor, &numTypeDescriptors, typeI64);
-  htAddEntry(_indexesToTypeDescriptors,
-    &numTypeDescriptors, typeDescriptor, typePointerNoOwn);
-  
-  mtx_unlock(_indexesToTypeDescriptors->lock);
-  mtx_unlock(_typeDescriptorsToIndexes->lock);
-  
-  return 0;
+  return returnValue;
 }
 
 /// @fn TypeDescriptor* getTypeDescriptorFromIndex(i64 typeDescriptorIndex)
@@ -5399,8 +6368,21 @@ int registerTypeDescriptor(TypeDescriptor *typeDescriptor) {
 TypeDescriptor* getTypeDescriptorFromIndex(i64 typeDescriptorIndex) {
   call_once(&_typeDescriptorTablesSetup, initTypeDescriptorTable);
   
-  TypeDescriptor *typeDescriptor = (TypeDescriptor*)
-    htGetValue(_indexesToTypeDescriptors, &typeDescriptorIndex);
+  TypeDescriptor *typeDescriptor = NULL;
+  if (typeDescriptorIndex < 0) {
+    // Invalid index.
+    return typeDescriptor; // NULL
+  }
+  
+  // Try the array first since that's faster.
+  if (typeDescriptorIndex
+    < ((i64) ((sizeof(typeDescriptors) / sizeof(TypeDescriptor*)) - 1))
+  ) {
+    typeDescriptor = typeDescriptors[typeDescriptorIndex];
+  } else if (_initTypeDescriptorTableInProgress == false) {
+    typeDescriptor = (TypeDescriptor*)
+      htGetValue(_indexesToTypeDescriptors, &typeDescriptorIndex);
+  }
   
   return typeDescriptor;
 }
@@ -5670,34 +6652,28 @@ bool SMALL_TYPE##UnitTest() { \
     return false; \
   } \
    \
-  newValue = (SMALL_TYPE*) type##BIG_TYPE->toByteArray(NULL, NULL); \
-  if (newValue != NULL) { \
-    printLog(ERR, "type%s->toByteArray(NULL, NULL) did not return NULL.\n", \
+  Bytes byteArray = type##BIG_TYPE->toBlob(NULL); \
+  if (byteArray != NULL) { \
+    printLog(ERR, "type%s->toBlob(NULL) did not return NULL.\n", \
       #BIG_TYPE); \
     return false; \
   } \
-  newValue = (SMALL_TYPE*) type##BIG_TYPE->toByteArray(NULL, &length); \
-  if (newValue != NULL) { \
-    printLog(ERR, "type%s->toByteArray(NULL, &length) did not return NULL.\n", \
+  byteArray = type##BIG_TYPE->toBlob(&value1); \
+  if (byteArray == NULL) { \
+    printLog(ERR, "type%s->toBlob(NULL) returned NULL for non-NULL input.\n", \
       #BIG_TYPE); \
     return false; \
   } \
-  newValue = (SMALL_TYPE*) type##BIG_TYPE->toByteArray(&value1, NULL); \
-  if (newValue != NULL) { \
-    printLog(ERR, "type%s->toByteArray(&value1, NULL) did not return NULL.\n", \
-      #BIG_TYPE); \
-    return false; \
-  } \
-  void *byteArray = type##BIG_TYPE->toByteArray(&value1, &length); \
-  newValue = (SMALL_TYPE*) type##BIG_TYPE->fromByteArray(byteArray, &length); \
-  byteArray = (SMALL_TYPE*) pointerDestroy(byteArray); \
+  length = bytesLength(byteArray); \
+  newValue = (SMALL_TYPE*) type##BIG_TYPE->fromBlob(byteArray, &length, false, false); \
+  byteArray = bytesDestroy(byteArray); \
   if (newValue == NULL) { \
-    printLog(ERR, "type%s->toByteArray returned NULL for non-NULL input.\n", \
+    printLog(ERR, "type%s->fromBlob returned NULL for non-NULL input.\n", \
       #BIG_TYPE); \
     return false; \
   } \
   if (type##BIG_TYPE->compare(newValue, &value1) != 0) { \
-    printLog(ERR, "type%s->toByteArray(&value1, &length) did not yield a " \
+    printLog(ERR, "type%s->toBlob(&value1) did not yield a " \
       "pointer to a %s equal to value1.\n", #BIG_TYPE, #SMALL_TYPE); \
     char *valueString = type##BIG_TYPE->toString(&value1); \
     printLog(ERR, "value1 = %s\n", valueString); \
@@ -5710,21 +6686,21 @@ bool SMALL_TYPE##UnitTest() { \
   } \
   newValue = (SMALL_TYPE*) pointerDestroy(newValue); \
    \
-  newValue = (SMALL_TYPE*) type##BIG_TYPE->fromByteArray(NULL, NULL); \
+  newValue = (SMALL_TYPE*) type##BIG_TYPE->fromBlob(NULL, NULL, false, false); \
   if (newValue != NULL) { \
-    printLog(ERR, "type%s->fromByteArray(NULL, NULL) did not return NULL.\n", \
+    printLog(ERR, "type%s->fromBlob(NULL, NULL, false, false) did not return NULL.\n", \
       #BIG_TYPE); \
     return false; \
   } \
-  newValue = (SMALL_TYPE*) type##BIG_TYPE->fromByteArray(NULL, &length); \
+  newValue = (SMALL_TYPE*) type##BIG_TYPE->fromBlob(NULL, &length, false, false); \
   if (newValue != NULL) { \
-    printLog(ERR, "type%s->fromByteArray(NULL, &length) did not return " \
+    printLog(ERR, "type%s->fromBlob(NULL, &length, false, false) did not return " \
       "NULL.\n", #BIG_TYPE); \
     return false; \
   } \
-  newValue = (SMALL_TYPE*) type##BIG_TYPE->fromByteArray(&value1, NULL); \
+  newValue = (SMALL_TYPE*) type##BIG_TYPE->fromBlob(&value1, NULL, false, false); \
   if (newValue != NULL) { \
-    printLog(ERR, "type%s->fromByteArray(&value1, NULL) did not return " \
+    printLog(ERR, "type%s->fromBlob(&value1, NULL, false, false) did not return " \
       "NULL.\n", #BIG_TYPE); \
     return false; \
   } \
@@ -5767,6 +6743,39 @@ bool stringUnitTest() { \
   char *string = NULL; \
   char *newValue = NULL; \
   u64 length = 0; \
+   \
+  if (!firstFourEq(NULL, NULL)) { \
+    printLog(ERR, "firstFourEq(NULL, NULL) returned false.\n"); \
+    return false; \
+  } \
+  if (!firstFourEq("", "")) { \
+    printLog(ERR, "firstFourEq(\"\", \"\") returned false.\n"); \
+    return false; \
+  } \
+  if (!firstFourEq("RUNNING", "RUNNING")) { \
+    printLog(ERR, "firstFourEq(\"RUNNING\", \"RUNNING\") returned false.\n"); \
+    return false; \
+  } \
+  if (firstFourEq("RUNNING", "PASS")) { \
+    printLog(ERR, "firstFourEq(\"RUNNING\", \"PASS\") returned true.\n"); \
+    return false; \
+  } \
+  if (firstFourEq(NULL, "PASS")) { \
+    printLog(ERR, "firstFourEq(NULL, \"PASS\") returned true.\n"); \
+    return false; \
+  } \
+  if (firstFourEq("", "PASS")) { \
+    printLog(ERR, "firstFourEq(\"\", \"PASS\") returned true.\n"); \
+    return false; \
+  } \
+  if (firstFourEq("RUNNING", NULL)) { \
+    printLog(ERR, "firstFourEq(\"RUNNING\", NULL) returned true.\n"); \
+    return false; \
+  } \
+  if (firstFourEq("RUNNING", "")) { \
+    printLog(ERR, "firstFourEq(\"RUNNING\", \"\") returned true.\n"); \
+    return false; \
+  } \
    \
   string = typeString->toString(NULL); \
   if (strcmp(string, "(null)") != 0) { \
@@ -5881,77 +6890,66 @@ bool stringUnitTest() { \
     return false; \
   } \
    \
-  newValue = (char*) typeString->toByteArray(NULL, NULL); \
+  Bytes bytesValue = typeString->toBlob(NULL); \
   if (newValue != NULL) { \
-    printLog(ERR, "type%s->toByteArray(NULL, NULL) did not return NULL.\n", \
+    printLog(ERR, "type%s->toBlob(NULL) did not return NULL.\n", \
       "String"); \
     return false; \
   } \
-  newValue = (char*) typeString->toByteArray(NULL, &length); \
-  if (newValue != NULL) { \
-    printLog(ERR, "type%s->toByteArray(NULL, &length) did not return NULL.\n", \
+  bytesValue = typeString->toBlob(value1); \
+  length = bytesSize(bytesValue); \
+  if (bytesValue == NULL) { \
+    printLog(ERR, "type%s->toBlob returned NULL for non-NULL input.\n", \
       "String"); \
     return false; \
   } \
-  newValue = (char*) typeString->toByteArray(value1, NULL); \
-  if (newValue != NULL) { \
-    printLog(ERR, "type%s->toByteArray(&value1, NULL) did not return NULL.\n", \
-      "String"); \
-    return false; \
-  } \
-  newValue = (char*) typeString->toByteArray(value1, &length); \
-  if (newValue == NULL) { \
-    printLog(ERR, "type%s->toByteArray returned NULL for non-NULL input.\n", \
-      "String"); \
-    return false; \
-  } \
-  if (typeString->compare(newValue, value1) != 0) { \
-    printLog(ERR, "type%s->toByteArray(&value1, &length) did not yield a " \
+  if (typeString->compare(bytesValue, value1) != 0) { \
+    printLog(ERR, "type%s->toBlob(&value1) did not yield a " \
       "pointer to a %s equal to value1.\n", "String", "string"); \
     return false; \
   } \
   if (length != 63) { \
-    printLog(ERR, "type%s->toByteArray(&value1, &length) did not yield a " \
-      "length of %d.\n", "String", 63); \
+    printLog(ERR, "type%s->toBlob(&value1) yielded a length of " \
+      "%lld instead of %d.\n", "String", lld(length), 63); \
     return false; \
   } \
-  newValue = stringDestroy(newValue); \
    \
-  newValue = (char*) typeString->fromByteArray(NULL, NULL); \
+  newValue = (char*) typeString->fromBlob(NULL, NULL, false, false); \
   if (newValue != NULL) { \
-    printLog(ERR, "type%s->fromByteArray(NULL, NULL) did not return NULL.\n", \
+    printLog(ERR, "type%s->fromBlob(NULL, NULL, false, false) did not return NULL.\n", \
       "String"); \
     return false; \
   } \
-  newValue = (char*) typeString->fromByteArray(NULL, &length); \
+  newValue = (char*) typeString->fromBlob(NULL, &length, false, false); \
   if (newValue != NULL) { \
-    printLog(ERR, "type%s->fromByteArray(NULL, &length) did not return " \
+    printLog(ERR, "type%s->fromBlob(NULL, &length, false, false) did not return " \
       "NULL.\n", "String"); \
     return false; \
   } \
-  newValue = (char*) typeString->fromByteArray(value1, NULL); \
+  newValue = (char*) typeString->fromBlob(bytesValue, NULL, false, false); \
   if (newValue != NULL) { \
-    printLog(ERR, "type%s->fromByteArray(&value1, NULL) did not return " \
+    printLog(ERR, "type%s->fromBlob(&value1, NULL, false, false) did not return " \
       "NULL.\n", "String"); \
     return false; \
   } \
-  newValue = (char*) typeString->fromByteArray(value1, &length); \
+  newValue = (char*) typeString->fromBlob(bytesValue, &length, false, false); \
   if (newValue == NULL) { \
-    printLog(ERR, "type%s->fromByteArray returned NULL for non-NULL input.\n", \
+    printLog(ERR, "type%s->fromBlob returned NULL for non-NULL input.\n", \
       "String"); \
     return false; \
   } \
   if (typeString->compare(newValue, value1) != 0) { \
-    printLog(ERR, "type%s->fromByteArray(&value1, &length) did not yield a " \
+    printLog(ERR, "type%s->fromBlob(&value1, &length, false, false) did not yield a " \
       "pointer to a %s equal to value1.\n", "String", "string"); \
     return false; \
   } \
   if (length != 63) { \
-    printLog(ERR, "type%s->fromByteArray(&value1, &length) did not yield a " \
+    printLog(ERR, "type%s->fromBlob(&value1, &length, false, false) did not yield a " \
       "length of %d.\n", "String", 63); \
     return false; \
   } \
   newValue = stringDestroy(newValue); \
+  bytesValue = bytesDestroy(bytesValue); \
    \
   return true; \
 }
@@ -6081,70 +7079,58 @@ bool pointerUnitTest() { \
     return false; \
   } \
    \
-  newValue = (char*) typePointerNoCopy->toByteArray(NULL, NULL); \
-  if (newValue != NULL) { \
-    printLog(ERR, "type%s->toByteArray(NULL, NULL) did not return NULL.\n", \
+  Bytes byteArray = typePointerNoCopy->toBlob(NULL); \
+  if (byteArray != NULL) { \
+    printLog(ERR, "type%s->toBlob(NULL) did not return NULL.\n", \
       "PointerNoCopy"); \
     return false; \
   } \
-  newValue = (char*) typePointerNoCopy->toByteArray(NULL, &length); \
-  if (newValue == NULL) { \
-    printLog(ERR, "type%s->toByteArray(NULL, &length) returned NULL.\n", \
-      "PointerNoCopy"); \
-    return false; \
-  } \
-  newValue = stringDestroy(newValue); \
-  newValue = (char*) typePointerNoCopy->toByteArray(value1, NULL); \
-  if (newValue != NULL) { \
-    printLog(ERR, "type%s->toByteArray(&value1, NULL) did not return NULL.\n", \
-      "PointerNoCopy"); \
-    return false; \
-  } \
-  newValue = (char*) typePointerNoCopy->toByteArray(value1, &length); \
-  if (newValue == NULL) { \
-    printLog(ERR, "type%s->toByteArray returned NULL value.\n", \
+  byteArray = typePointerNoCopy->toBlob(value1); \
+  length = bytesLength(byteArray); \
+  if (byteArray == NULL) { \
+    printLog(ERR, "type%s->toBlob returned NULL value.\n", \
       "PointerNoCopy"); \
     return false; \
   } \
   newValue = stringDestroy(newValue); \
   if ((length != 8) && (length != 4)) { \
     printLog(ERR, \
-      "type%s->toByteArray(&value1, &length) yielded a length of %llu " \
+      "type%s->toBlob(&value1) yielded a length of %llu " \
       "instead of 8 or 4.\n", "PointerNoCopy", llu(length)); \
     return false; \
   } \
-  newValue = stringDestroy(newValue); \
    \
-  newValue = (char*) typePointerNoCopy->fromByteArray(NULL, NULL); \
+  newValue = (char*) typePointerNoCopy->fromBlob(NULL, NULL, false, false); \
   if (newValue != NULL) { \
-    printLog(ERR, "type%s->fromByteArray(NULL, NULL) did not return NULL.\n", \
+    printLog(ERR, "type%s->fromBlob(NULL, NULL, false, false) did not return NULL.\n", \
       "PointerNoCopy"); \
     return false; \
   } \
-  newValue = (char*) typePointerNoCopy->fromByteArray(NULL, &length); \
+  newValue = (char*) typePointerNoCopy->fromBlob(NULL, &length, false, false); \
   if (newValue != NULL) { \
-    printLog(ERR, "type%s->fromByteArray(NULL, &length) did not return " \
+    printLog(ERR, "type%s->fromBlob(NULL, &length, false, false) did not return " \
       "NULL.\n", "PointerNoCopy"); \
     return false; \
   } \
-  newValue = (char*) typePointerNoCopy->fromByteArray(value1, NULL); \
+  newValue = (char*) typePointerNoCopy->fromBlob(byteArray, NULL, false, false); \
   if (newValue != NULL) { \
-    printLog(ERR, "type%s->fromByteArray(&value1, NULL) did not return " \
+    printLog(ERR, "type%s->fromBlob(&value1, NULL, false, false) did not return " \
       "NULL.\n", "PointerNoCopy"); \
     return false; \
   } \
-  newValue = (char*) typePointerNoCopy->fromByteArray(&value1, &length); \
+  newValue = (char*) typePointerNoCopy->fromBlob(byteArray, &length, false, false); \
   if (newValue == NULL) { \
-    printLog(ERR, "type%s->fromByteArray returned NULL value.\n", \
+    printLog(ERR, "type%s->fromBlob returned NULL value.\n", \
       "PointerNoCopy"); \
     return false; \
   } \
   if ((length != 8) && (length != 4)) { \
     printLog(ERR, \
-      "type%s->fromByteArray(&value1, &length) yielded a length of %llu " \
+      "type%s->fromBlob(&value1, &length, false, false) yielded a length of %llu " \
       "instead of 8 or 4.\n", "PointerNoCopy", llu(length)); \
     return false; \
   } \
+  byteArray = bytesDestroy(byteArray); \
   /* value returned is a true pointer (to an invalid memory location) and */ \
   /* cannot be free'd */ \
    \
@@ -6307,82 +7293,74 @@ bool bytesUnitTest() { \
       "Bytes"); \
     return false; \
   } \
-  if (typeBytes->size(bytesValue1) != (int) strlen(value1)) { \
+  if (typeBytes->size(bytesValue1) != strlen(value1)) { \
     printLog(ERR, "type%s->size did not return %d for non-NULL pointer.\n", \
       "Bytes", 63); \
     return false; \
   } \
    \
-  newValue = (char*) typeBytes->toByteArray(NULL, NULL); \
-  if (newValue != NULL) { \
-    printLog(ERR, "type%s->toByteArray(NULL, NULL) did not return NULL.\n", \
+  Bytes byteArray = typeBytes->toBlob(NULL); \
+  if (byteArray != NULL) { \
+    printLog(ERR, "type%s->toBlob(NULL) did not return NULL.\n", \
       "Bytes"); \
     return false; \
   } \
-  newValue = (char*) typeBytes->toByteArray(NULL, &length); \
-  if (newValue != NULL) { \
-    printLog(ERR, "type%s->toByteArray(NULL, &length) did not return NULL.\n", \
+  byteArray = typeBytes->toBlob(bytesValue1); \
+  if (byteArray == NULL) { \
+    printLog(ERR, "type%s->toBlob returned NULL for non-NULL input.\n", \
       "Bytes"); \
     return false; \
   } \
-  newValue = (char*) typeBytes->toByteArray(bytesValue1, NULL); \
-  if (newValue != NULL) { \
-    printLog(ERR, "type%s->toByteArray(&bytesValue1, NULL) did not return NULL.\n", \
-      "Bytes"); \
+  length = bytesLength(byteArray); \
+  if (length != 63 + sizeof(BytesHeader)) { \
+    printLog(ERR, "type%s->toBlob(&bytesValue1) yielded a " \
+      "length of %llu instead of %llu.\n", \
+      "Bytes", llu(length), llu(63 + sizeof(BytesHeader))); \
     return false; \
   } \
-  newValue = (char*) typeBytes->toByteArray(bytesValue1, &length); \
-  if (newValue == NULL) { \
-    printLog(ERR, "type%s->toByteArray returned NULL for non-NULL input.\n", \
-      "Bytes"); \
-    return false; \
-  } \
-  if (length != 62 + 8) { \
-    printLog(ERR, "type%s->toByteArray(&bytesValue1, &length) did not yield a " \
-      "length of %d.\n", "Bytes", 62 + 8); \
-    return false; \
-  } \
-  if (strncmp(newValue + sizeof(u64), value1, strlen(value1)) != 0) { \
-    printLog(ERR, "type%s->toByteArray(&bytesValue1, &length) did not yield " \
+  if (strncmp(str(byteArray + sizeof(BytesHeader)), value1, strlen(value1)) != 0) { \
+    printLog(ERR, "type%s->toBlob(&bytesValue1) did not yield " \
       "\"%s\".\n", "Bytes", value1); \
     return false; \
   } \
    \
-  char *newValue2 = (char*) typeBytes->fromByteArray(NULL, NULL); \
+  char *newValue2 = (char*) typeBytes->fromBlob(NULL, NULL, false, false); \
   if (newValue2 != NULL) { \
-    printLog(ERR, "type%s->fromByteArray(NULL, NULL) did not return NULL.\n", \
+    printLog(ERR, "type%s->fromBlob(NULL, NULL, false, false) did not return NULL.\n", \
       "Bytes"); \
     return false; \
   } \
-  newValue2 = (char*) typeBytes->fromByteArray(NULL, &length); \
+  newValue2 = (char*) typeBytes->fromBlob(NULL, &length, false, false); \
   if (newValue2 != NULL) { \
-    printLog(ERR, "type%s->fromByteArray(NULL, &length) did not return " \
+    printLog(ERR, "type%s->fromBlob(NULL, &length, false, false) did not return " \
       "NULL.\n", "Bytes"); \
     return false; \
   } \
-  newValue2 = (char*) typeBytes->fromByteArray(newValue, NULL); \
+  newValue2 = (char*) typeBytes->fromBlob(byteArray, NULL, false, false); \
   if (newValue2 != NULL) { \
-    printLog(ERR, "type%s->fromByteArray(newValue, NULL) did not return " \
+    printLog(ERR, "type%s->fromBlob(newValue, NULL, false, false) did not return " \
       "NULL.\n", "Bytes"); \
     return false; \
   } \
-  newValue2 = (char*) typeBytes->fromByteArray(newValue, &length); \
+  newValue2 = (char*) typeBytes->fromBlob(byteArray, &length, false, false); \
   if (newValue2 == NULL) { \
-    printLog(ERR, "type%s->fromByteArray returned NULL for non-NULL input.\n", \
+    printLog(ERR, \
+      "type%s->fromBlob(newValue, &length, false, false) returned NULL for non-NULL input.\n", \
       "Bytes"); \
     return false; \
   } \
-  if (length != 62 + 8) { \
-    printLog(ERR, "type%s->fromByteArray(newValue, &length) yielded a " \
-      "length of %llu instead of %d.\n", "Bytes", llu(length), 62 + 8); \
+  if (length != 63 + sizeof(BytesHeader)) { \
+    printLog(ERR, "type%s->fromBlob(newValue, &length, false, false) yielded a " \
+      "length of %llu instead of %llu.\n", "Bytes", \
+      llu(length), llu(63 + sizeof(BytesHeader))); \
     return false; \
   } \
   if (typeBytes->compare(bytesValue1, newValue2) != 0) { \
-    printLog(ERR, "type%s->fromByteArray(newValue, &length) did not yield a " \
+    printLog(ERR, "type%s->fromBlob(newValue, &length, false, false) did not yield a " \
       "pointer to %s equal to bytesValue1.\n", "Bytes", "bytes"); \
     return false; \
   } \
-  newValue = stringDestroy(newValue); \
+  byteArray = bytesDestroy(byteArray); \
   newValue2 = (char*) typeBytes->destroy(newValue2); \
    \
   bytesAddData(&bytesValue1, "", 1); \
@@ -6447,6 +7425,92 @@ bool structUnitTest() {
     return false;
   }
   
+  return true;
+}
+
+#include "Scope.h"
+bool valueToStringUnitTest() {
+  scopeBegin();
+  
+  bool boolValue = true;
+  i8 i8Value = 1;
+  u8 u8Value = 1;
+  i16 i16Value = 1;
+  u16 u16Value = 1;
+  i32 i32Value = 1;
+  u32 u32Value = 1;
+  i64 i64Value = 1;
+  u64 u64Value = 1;
+  float floatValue = 1.0;
+  double doubleValue = 1.0;
+  long double longDoubleValue = 1.0;
+  ZEROINIT(List listValue);
+  ZEROINIT(Queue queueValue);
+  ZEROINIT(Stack stackValue);
+  ZEROINIT(RedBlackTree redBlackTreeValue);
+  ZEROINIT(HashTable hashTableValue);
+  ZEROINIT(Vector vectorValue);
+  
+  char *stringValue = NULL;
+  
+  stringValue = 
+    str(scopeAdd(valueToString(boolValue), pointerDestroyFunction));
+  printLog(INFO, "valueToString(boolValue) = %s\n", stringValue);
+  stringValue = 
+    str(scopeAdd(valueToString(i8Value), pointerDestroyFunction));
+  printLog(INFO, "valueToString(i8Value) = %s\n", stringValue);
+  stringValue = 
+    str(scopeAdd(valueToString(u8Value), pointerDestroyFunction));
+  printLog(INFO, "valueToString(u8Value) = %s\n", stringValue);
+  stringValue = 
+    str(scopeAdd(valueToString(i16Value), pointerDestroyFunction));
+  printLog(INFO, "valueToString(i16Value) = %s\n", stringValue);
+  stringValue = 
+    str(scopeAdd(valueToString(u16Value), pointerDestroyFunction));
+  printLog(INFO, "valueToString(u16Value) = %s\n", stringValue);
+  stringValue = 
+    str(scopeAdd(valueToString(i32Value), pointerDestroyFunction));
+  printLog(INFO, "valueToString(i32Value) = %s\n", stringValue);
+  stringValue = 
+    str(scopeAdd(valueToString(u32Value), pointerDestroyFunction));
+  printLog(INFO, "valueToString(u32Value) = %s\n", stringValue);
+  stringValue = 
+    str(scopeAdd(valueToString(i64Value), pointerDestroyFunction));
+  printLog(INFO, "valueToString(i64Value) = %s\n", stringValue);
+  stringValue = 
+    str(scopeAdd(valueToString(u64Value), pointerDestroyFunction));
+  printLog(INFO, "valueToString(u64Value) = %s\n", stringValue);
+  stringValue = 
+    str(scopeAdd(valueToString(floatValue), pointerDestroyFunction));
+  printLog(INFO, "valueToString(floatValue) = %s\n", stringValue);
+  stringValue = 
+    str(scopeAdd(valueToString(doubleValue), pointerDestroyFunction));
+  printLog(INFO, "valueToString(doubleValue) = %s\n", stringValue);
+  stringValue = 
+    str(scopeAdd(valueToString(longDoubleValue), pointerDestroyFunction));
+  printLog(INFO, "valueToString(longDoubleValue) = %s\n", stringValue);
+  stringValue = 
+    str(scopeAdd(valueToString(listValue), pointerDestroyFunction));
+  printLog(INFO, "valueToString(listValue) = %s\n", stringValue);
+  stringValue = 
+    str(scopeAdd(valueToString(queueValue), pointerDestroyFunction));
+  printLog(INFO, "valueToString(queueValue) = %s\n", stringValue);
+  stringValue = 
+    str(scopeAdd(valueToString(stackValue), pointerDestroyFunction));
+  printLog(INFO, "valueToString(stackValue) = %s\n", stringValue);
+  stringValue = 
+    str(scopeAdd(valueToString(redBlackTreeValue), pointerDestroyFunction));
+  printLog(INFO, "valueToString(redBlackTreeValue) = %s\n", stringValue);
+  stringValue = 
+    str(scopeAdd(valueToString(hashTableValue), pointerDestroyFunction));
+  printLog(INFO, "valueToString(hashTableValue) = %s\n", stringValue);
+  stringValue = 
+    str(scopeAdd(valueToString(vectorValue), pointerDestroyFunction));
+  printLog(INFO, "valueToString(vectorValue) = %s\n", stringValue);
+  
+  (void) stringValue;
+  
+  scopeEnd();
   return true;
 }
 

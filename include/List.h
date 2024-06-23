@@ -11,7 +11,7 @@
 /// @details           This library underpins both queue and stack.
 ///
 /// @copyright
-///                   Copyright (c) 2012-2023 James Card
+///                   Copyright (c) 2012-2024 James Card
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a
 /// copy of this software and associated documentation files (the "Software"),
@@ -48,7 +48,8 @@ extern "C"
 {
 #endif
 
-List *listCreate(TypeDescriptor *keyType);
+List *listCreate_(TypeDescriptor *keyType, bool disableThreadSafety, ...);
+#define listCreate(keyType, ...) listCreate_(keyType, ##__VA_ARGS__, 0)
 ListNode *listAddFrontEntry_(List *list, const volatile void *key, const volatile void *value, TypeDescriptor *type, ...);
 #define listAddFrontEntry(list, key, value, ...) listAddFrontEntry_(list, key, value, ##__VA_ARGS__, NULL)
 ListNode *listAddBackEntry_(List *list, const volatile void *key, const volatile void *value, TypeDescriptor *type, ...);
@@ -64,14 +65,16 @@ List* listDestroy(List *list);
 char *listToString(const List *list);
 Bytes listToBytes(const List *list);
 List *xmlToList(const char *inputData);
-char *listToXml_(const List *list, const char *elementName, bool indent, ...);
+Bytes listToXml_(const List *list, const char *elementName, bool indent, ...);
 #define listToXml(list, elementName, ...) \
   listToXml_(list, elementName, ##__VA_ARGS__, false)
 int listCompare(const List *listA, const List *listB);
 List *listCopy(const List *list);
-int listSize(const volatile void *value);
-void *listToByteArray(const List *list, u64 *length);
-List *listFromByteArray(const volatile void *array, u64 *length);
+size_t listSize(const volatile void *value);
+Bytes listToBlob(const List *list);
+List *listFromBlob_(const volatile void *array, u64 *length, bool inPlaceData, bool disableThreadSafety, ...);
+#define listFromBlob(array, length, ...) \
+  listFromBlob_(array, length, ##__VA_ARGS__, 0, 0)
 Bytes listToJson(const List *list);
 List* jsonToList(const char *jsonText, long long int *position);
 char* listToKeyValueString(const List *list, const char *separator);

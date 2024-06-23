@@ -11,7 +11,7 @@
 /// @details
 ///
 /// @copyright
-///                   Copyright (c) 2012-2023 James Card
+///                   Copyright (c) 2012-2024 James Card
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a
 /// copy of this software and associated documentation files (the "Software"),
@@ -58,15 +58,9 @@ extern "C"
 #define RSA_LIB_MAX_PLAINTEXT_SIZE 980
 
 EVP_PKEY *rsaLoadKeyFromString(const unsigned char *key);
-extern EVP_PKEY *(*rsaLoadPublicKeyFromString)(const unsigned char *key);
-extern EVP_PKEY *(*rsaLoadPrivateKeyFromString)(const unsigned char *key);
-extern EVP_PKEY *rsaLoadPublicKeyFromFile(const char *fileName);
-extern EVP_PKEY *rsaLoadPrivateKeyFromFile(const char *fileName);
-void *rsaEncrypt(void *data, u32 *length, EVP_PKEY *publicKey);
-extern void *(*rsaPublicEncrypt)(void *data, u32 *length, EVP_PKEY *publicKey);
-extern void *(*rsaPrivateDecrypt)(void *data, u32 *length, EVP_PKEY *privateKey);
-void *rsaPrivateEncrypt(void *data, u32 *length, EVP_PKEY *privateKey);
-void *rsaPublicDecrypt(void *data, u32 *length, EVP_PKEY *publicKey);
+EVP_PKEY *rsaLoadKeyFromFile(const char *fileName);
+Bytes rsaEncrypt(const volatile void *data, u64 length, EVP_PKEY *pkey);
+Bytes rsaDecrypt(const volatile void *data, u64 length, EVP_PKEY *pkey);
 void rsaPrintLastError();
 
 #ifdef __cplusplus

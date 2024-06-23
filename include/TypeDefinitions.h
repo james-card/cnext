@@ -12,7 +12,7 @@
 /// @details
 ///
 /// @copyright
-///                   Copyright (c) 2012-2023 James Card
+///                   Copyright (c) 2012-2024 James Card
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a
 /// copy of this software and associated documentation files (the "Software"),
@@ -98,7 +98,7 @@ typedef struct BytesHeader {
 } BytesHeader;
 
 typedef unsigned char Byte;
-typedef volatile Byte *Bytes;
+typedef Byte *Bytes;
 
 
 #define llu(x)   ((long long unsigned int) (x))
@@ -139,7 +139,24 @@ typedef volatile Byte *Bytes;
   (((i64) low)  << 0) \
 )
 
-#define STOP ((void*) -1)
+#define STOP               ((void*) -1)
+#define VOID_POINTER_TRUE  ((void*) ((intptr_t) true))
+#define VOID_POINTER_FALSE ((void*) ((intptr_t) false))
+
+#define tssInc(tss) \
+  do { \
+    intptr_t tssVal = (intptr_t) tss_get(tss); \
+    tssVal++; \
+    tss_set(tss, (void*) tssVal); \
+  } while (0)
+#define tssDec(tss) \
+  do { \
+    intptr_t tssVal = (intptr_t) tss_get(tss); \
+    tssVal--; \
+    tss_set(tss, (void*) tssVal); \
+  } while (0)
+#define tssEqual(tss, val) \
+  ((intptr_t) tss_get(tss) == (intptr_t) val)
 
 #ifdef __cplusplus
 #ifdef _MSC_VER
@@ -166,8 +183,9 @@ typedef volatile Byte *Bytes;
 #pragma warning(disable : 4996)
 #endif // _MSC_VER
 
-#define MAX(x, y) (((x) > (y)) ? (x) : (y))
-#define MIN(x, y) (((x) < (y)) ? (x) : (y))
+#define MAX(x, y) (((x) > (y)) ? (x) : (y) )
+#define MIN(x, y) (((x) < (y)) ? (x) : (y) )
+#define ABS(x)    (((x) >= 0 ) ? (x) : (-x))
 
 #define structcmp(struct1, struct2) \
   ((sizeof(struct1) == sizeof(struct2)) \
@@ -177,7 +195,14 @@ typedef volatile Byte *Bytes;
     : -1 \
   )
 
+#define numElements(array) ((int) (sizeof(array) / sizeof(array[0])))
+#define zeroArray(array) \
+  for (size_t ii = 0; ii < numElements(array); ++ii) array[ii] = 0
+
 typedef void (*Destructor)(void*);
+
+#define ptrDiff(larger, smaller) \
+  (u64) (((uintptr_t) larger) - ((uintptr_t) smaller))
 
 #ifdef __cplusplus
 } // extern "C"

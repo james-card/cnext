@@ -14,7 +14,7 @@
 ///                    library is aware of lists and hash tables.
 ///
 /// @copyright
-///                   Copyright (c) 2012-2023 James Card
+///                   Copyright (c) 2012-2024 James Card
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a
 /// copy of this software and associated documentation files (the "Software"),
@@ -120,7 +120,8 @@ extern "C"
 // #define DEBUG_ASSERT 1
 
 
-RedBlackTree *rbTreeCreate(TypeDescriptor *keyType);
+RedBlackTree *rbTreeCreate_(TypeDescriptor *keyType, bool disableThreadSafety, ...);
+#define rbTreeCreate(keyType, ...) rbTreeCreate_(keyType, ##__VA_ARGS__, 0)
 RedBlackNode *rbInsert_(RedBlackTree *tree, const volatile void *key,
   const volatile void *value, TypeDescriptor *type, ...);
 #define rbInsert(tree, key, value, ...) \
@@ -130,9 +131,10 @@ extern RedBlackNode* (*rbTreeAddEntry_)(RedBlackTree *tree,
 #define rbTreeAddEntry(tree, key, value, ...) \
   rbTreeAddEntry_(tree, key, value, ##__VA_ARGS__, NULL)
 RedBlackNode *rbQuery(const RedBlackTree *tree, const volatile void *key);
+#define rbTreeGetEntry rbQuery
 void *rbTreeGetValue(const RedBlackTree *tree, const volatile void *key);
 int rbTreeRemove(RedBlackTree *tree, const volatile void *key);
-void rbDestroyNode(RedBlackTree*, RedBlackNode*);
+int rbTreeDestroyNode(RedBlackTree*, RedBlackNode*);
 RedBlackTree *rbTreeDestroy(RedBlackTree*);
 RedBlackNode *rbTreePredecessor(RedBlackTree*, RedBlackNode*);
 RedBlackNode *rbTreeSuccessor(RedBlackTree*, RedBlackNode*);
@@ -149,9 +151,14 @@ void *rbSafeMalloc(size_t size);
 int rbTreeCompare(const RedBlackTree *treeA, const RedBlackTree *treeB);
 RedBlackTree *rbTreeCopy(const RedBlackTree *tree);
 RedBlackTree* listToRbTree(const List *list);
+#define rbTreeToBlob(tree) listToBlob((List*) tree)
 #define rbTreeToJson(tree) listToJson((List*) tree)
 RedBlackTree* jsonToRedBlackTree(const char *jsonText, long long int *position);
+RedBlackTree *xmlToRedBlackTree(const char *inputData);
 i32 rbTreeClear(RedBlackTree *tree);
+RedBlackTree *rbTreeFromBlob_(const volatile void *array, u64 *length, bool inPlaceData, bool disableThreadSafety, ...);
+#define rbTreeFromBlob(array, length, ...) \
+  rbTreeFromBlob_(array, length, ##__VA_ARGS__, 0, 0)
 bool redBlackTreeUnitTest();
 
 #ifdef __cplusplus

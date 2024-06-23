@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                     Copyright (c) 2012-2023 James Card                     //
+//                     Copyright (c) 2012-2024 James Card                     //
 //                                                                            //
 // Permission is hereby granted, free of charge, to any person obtaining a    //
 // copy of this software and associated documentation files (the "Software"), //
@@ -33,6 +33,20 @@
 #include <openssl/decoder.h>
 
 #define PADDING RSA_PKCS1_OAEP_PADDING
+
+/// @def LOG_MALLOC_FAILURE
+///
+/// @brief Attempt to log a memory allocation failure to standard error.
+/// Cannot make use of anything that would allocate memory.
+/// This is intended to be a last gasp for the program.
+#define LOG_MALLOC_FAILURE() \
+    do { \
+      fputs(__FILE__, stderr); \
+      fputs(":", stderr); \
+      fputs(__func__, stderr); \
+      fputs(".", stderr); \
+      fputs(STRINGIFY(__LINE__) ": malloc failure\n", stderr); \
+    } while (0)
 
 /// @note To generate a new private key:
 /// openssl genrsa -out private.pem <RSA_LIB_KEY_LENGTH>
@@ -93,317 +107,173 @@ EVP_PKEY *rsaLoadKeyFromString(const unsigned char *key) {
   return pkey;
 }
 
-EVP_PKEY *(*rsaLoadPublicKeyFromString)(const unsigned char *key)
-  = rsaLoadKeyFromString;
-EVP_PKEY *(*rsaLoadPrivateKeyFromString)(const unsigned char *key)
-  = rsaLoadKeyFromString;
-
-/// @fn EVP_PKEY *rsaLoadPublicKeyFromFile(const char *fileName)
+/// @fn EVP_PKEY *rsaLoadKeyFromFile(const char *fileName)
 ///
-/// @brief Load the public key that will be used by an instance of this
+/// @brief Load the key that will be used by an instance of this
 /// library from a file.
 ///
-/// @param fileName The path to PEM-fomratted text representing the public key.
+/// @param fileName The name of the file to load the key from.
 ///
-/// @return Returns an EVP_PKEY public key on success, NULL on failure.
-EVP_PKEY *rsaLoadPublicKeyFromFile(const char *fileName) {
+/// @return Returns an EVP_PKEY key on success, NULL on failure.
+EVP_PKEY *rsaLoadKeyFromFile(const char *fileName) {
   Bytes key = getFileContent(fileName);
-  bytesAddData(&key, "", 1); // Make a string from the bytes.
-  EVP_PKEY *publicKey = rsaLoadPublicKeyFromString(ustr(key));
+  EVP_PKEY *pkey = rsaLoadKeyFromString(ustr(key));
   key = bytesDestroy(key);
-  return publicKey;
+  
+  return pkey;
 }
 
-/// @fn int EVP_PKEY *rsaLoadPrivateKeyFromFile(const char *fileName)
-///
-/// @brief Load the private key that will be used by an instance of this
-/// library.
-///
-/// @param fileName The path to PEM-fomratted text representing the private key.
-///
-/// @return Returns an EVP_PKEY private key on success, NULL on failure.
-EVP_PKEY *rsaLoadPrivateKeyFromFile(const char *fileName) {
-  Bytes key = getFileContent(fileName);
-  bytesAddData(&key, "", 1); // Make a string from the bytes.
-  EVP_PKEY *privateKey = rsaLoadPrivateKeyFromString(ustr(key));
-  key = bytesDestroy(key);
-  return privateKey;
-}
-
-/*******************************************************************************
-
-/// @fn void *rsaEncrypt(void *data, u32 *length, EVP_PKEY *publicKey)
+/// @fn Bytes rsaEncrypt(const volatile void *data, u64 length, EVP_PKEY *pkey)
 ///
 /// @brief Peform public key encryption on data of arbitrary length.
 ///
 /// @param data The plaintext data to encrypt.
 /// @param length The length of the plaintext data.
+/// @param pkey A pointer to a previously-initialized EVP_PKEY object.
 ///
-/// @return On success, a pointer to the cyphertext is returned and the value
-/// of length is modified to reflect the size of the cyphertext.  On failure,
-/// NULL is returned and the value of length is set to 0.
-void *rsaEncrypt(void *data, u32 *length, EVP_PKEY *publicKey) {
-  if (publicKey == NULL) {
-    fprintf(stderr, "Key not loaded.  Cannot encrypt.\n");
-    *length = 0;
-    return NULL;
-  }
+/// @return Returns a Bytes object with the cyphertext on success, NULL on
+/// failure.
+Bytes rsaEncrypt(const volatile void *data, u64 length, EVP_PKEY *pkey) {
+  Bytes cyphertext = NULL;
+  EVP_PKEY_CTX *context = NULL;
+  size_t cyphertextLength = 0;
   
-  // Get an encryption engine to work with.
-  ENGINE_load_builtin_engines();
-  ENGINE *eng = ENGINE_get_first();
-  if (eng == NULL) {
-    fprintf(stderr, "Engine not loaded.  Cannot encrypt.\n");
-    *length = 0;
-    return NULL;
-  } else if (!ENGINE_init(eng)) {
-    fprintf(stderr, "Engine not initialized.  Cannot encrypt.\n");
-    ENGINE_free(eng);
-    *length = 0;
-    return NULL;
-  } else if (!ENGINE_set_default_RSA(eng)) {
-    fprintf(stderr, "Could not set default RSA on engine.  Cannot encrypt.\n");
-    ENGINE_finish(eng);
-    ENGINE_free(eng);
-    *length = 0;
-    return NULL;
+  if (pkey == NULL) {
+    fprintf(stderr, "Key not loaded.  Cannot encrypt.\n");
+    goto exit; // return NULL
   }
-  ENGINE_set_default_DSA(eng);
-  ENGINE_set_default_ciphers(eng);
   
   // Setup the context.
-  EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(publicKey, eng);
-  if (ctx == NULL) {
+  context = EVP_PKEY_CTX_new(pkey, NULL);
+  if (context == NULL) {
     fprintf(stderr, "Could not get key context.  Cannot encrypt.\n");
-    ENGINE_finish(eng);
-    ENGINE_free(eng);
-    *length = 0;
-    return NULL;
-  } else if (EVP_PKEY_encrypt_init(ctx) <= 0) {
+    rsaPrintLastError();
+    goto exit; // return NULL
+  } else if (EVP_PKEY_encrypt_init(context) <= 0) {
     fprintf(stderr,
       "Could not initialize encryption context.  Cannot encrypt.\n");
-    EVP_PKEY_CTX_free(ctx);
-    ENGINE_finish(eng);
-    ENGINE_free(eng);
-    *length = 0;
-    return NULL;
-  } else if (EVP_PKEY_CTX_set_rsa_padding(ctx, PADDING) <= 0) {
+    rsaPrintLastError();
+    goto evpPkeyCtxFree; // return NULL
+  } else if (EVP_PKEY_CTX_set_rsa_padding(context, PADDING) <= 0) {
     fprintf(stderr,
       "Could not set padding on encryption context.  Cannot encrypt.\n");
-    EVP_PKEY_CTX_free(ctx);
-    ENGINE_finish(eng);
-    ENGINE_free(eng);
-    *length = 0;
-    return NULL;
-  }
-  
-  ZEROINIT(unsigned char buffer[RSA_LIB_BUFFER_SIZE]);
-  int inputLength = *length;
-  char *encryptedData = NULL;
-  int outputLength = RSA_LIB_BUFFER_SIZE;
-  int bytesEncrypted = 0;
-  int returnValue = 0;
-  while (inputLength > RSA_LIB_MAX_PLAINTEXT_SIZE) {
-    returnValue = EVP_PKEY_encrypt(ctx, buffer, &outputLength,
-      (unsigned char*) data, RSA_LIB_MAX_PLAINTEXT_SIZE);
-    if (returnValue < 0) {
-      fprintf(stderr, "Encrypt failed.\n");
-      rsaPrintLastError();
-      encryptedData = (char*) pointerDestroy(encryptedData);
-      EVP_PKEY_CTX_free(ctx);
-      ENGINE_finish(eng);
-      ENGINE_free(eng);
-      *length = 0;
-      return NULL;
-    }
-    data = (void*) ((char*) data + RSA_LIB_MAX_PLAINTEXT_SIZE);
-    inputLength -= RSA_LIB_MAX_PLAINTEXT_SIZE;
-    dataAddData((void**) &encryptedData, outputLength, buffer, bytesEncrypted);
-    outputLength += bytesEncrypted;
-  }
-  returnValue = EVP_PKEY_encrypt(ctx, buffer, &outputLength,
-    (unsigned char*) data, RSA_LIB_MAX_PLAINTEXT_SIZE);
-  if (returnValue < 0) {
-    fprintf(stderr, "Encrypt failed.\n");
     rsaPrintLastError();
-    encryptedData = (char*) pointerDestroy(encryptedData);
-    EVP_PKEY_CTX_free(ctx);
-    ENGINE_finish(eng);
-    ENGINE_free(eng);
-    *length = 0;
-    return NULL;
+    goto evpPkeyCtxFree; // return NULL
   }
-  dataAddData((void**) &encryptedData, outputLength, buffer, bytesEncrypted);
-  outputLength += bytesEncrypted;
   
-  EVP_PKEY_CTX_free(ctx);
-  ENGINE_finish(eng);
-  ENGINE_free(eng);
-  *length = outputLength;
-  return encryptedData;
+  if (EVP_PKEY_encrypt(context, NULL, &cyphertextLength,
+    ustr(data), length) <= 0
+  ) {
+    fprintf(stderr,
+      "Could not determine length of cyphertext.  Cannot encrypt.\n");
+    rsaPrintLastError();
+    goto evpPkeyCtxFree; // return NULL
+  }
+  
+  if (cyphertextLength == 0) {
+    fprintf(stderr, "Invalid input data.  Cannot decrypt.\n");
+    rsaPrintLastError();
+    goto evpPkeyCtxFree; // return NULL
+  }
+  
+  bytesAllocate(&cyphertext, (u64) cyphertextLength);
+  if (cyphertext == NULL) {
+    LOG_MALLOC_FAILURE();
+    goto evpPkeyCtxFree; // return NULL
+  }
+  
+  if (EVP_PKEY_encrypt(context, ustr(cyphertext), &cyphertextLength,
+    ustr(data), length) <= 0
+  ) {
+    fprintf(stderr, "Could not encrypt data.\n");
+    rsaPrintLastError();
+    cyphertext = bytesDestroy(cyphertext);
+    goto evpPkeyCtxFree; // return NULL
+  }
+  bytesSetLength(cyphertext, (u64) cyphertextLength);
+  cyphertext[cyphertextLength] = '\0';
+  
+evpPkeyCtxFree:
+  EVP_PKEY_CTX_free(context);
+exit:
+  return cyphertext;
 }
 
-void *(*rsaPublicEncrypt)(void *data, u32 *length, EVP_PKEY *publicKey)
-  = rsaEncrypt;
-void *(*rsaPrivateDecrypt)(void *data, u32 *length, EVP_PKEY *privateKey)
-  = rsaEncrypt;
-
-/// @fn void *rsaPrivateDecrypt(void *data, u32 *length, EVP_PKEY *privateKey)
+/// @fn Bytes rsaDecrypt(const volatile void *data, u64 length, EVP_PKEY *pkey)
 ///
 /// @brief Peform private key decryption on data of arbitrary length.
 ///
-/// @param data The cyphertext data to encrypt.
-/// @param length The length of the cyphertext data.
+/// @param data The encrypted data to decrypt.
+/// @param length The length of the data data.
+/// @param pkey A pointer to a previously-initialized EVP_PKEY object.
 ///
-/// @return On success, a pointer to the plaintext is returned and the value
-/// of length is modified to reflect the size of the plaintext.  On failure,
-/// NULL is returned and the value of length is set to 0.
-void *rsaPrivateDecrypt(void *data, u32 *length, EVP_PKEY *privateKey) {
-  if (privateKey == NULL) {
-    fprintf(stderr, "Private key not loaded.  Cannot decrypt.\n");
-    return NULL;
-  }
-
-  ZEROINIT(unsigned char buffer[RSA_LIB_BUFFER_SIZE]);
-  int inputLength = *length;
-  char *decryptedData = NULL;
-  int outputLength = 0;
-  int returnValue = 0;
-  while (inputLength > RSA_LIB_BUFFER_SIZE) {
-    returnValue = RSA_private_decrypt(RSA_LIB_BUFFER_SIZE, (unsigned char*) data, buffer, privateKey, PADDING);
-    if (returnValue < 0) {
-      fprintf(stderr, "Private decrypt failed.\n");
-      rsaPrintLastError();
-      decryptedData = (char*) pointerDestroy(decryptedData);
-      *length = 0;
-      return NULL;
-    }
-    data = (void*) ((char*) data + RSA_LIB_BUFFER_SIZE);
-    inputLength -= RSA_LIB_BUFFER_SIZE;
-    dataAddData((void**) &decryptedData, outputLength, buffer, returnValue);
-    outputLength += returnValue;
-  }
-  returnValue = RSA_private_decrypt(inputLength, (unsigned char*) data, buffer, privateKey, PADDING);
-  if (returnValue < 0) {
-    fprintf(stderr, "Private decrypt failed.\n");
-    rsaPrintLastError();
-    decryptedData = (char*) pointerDestroy(decryptedData);
-    *length = 0;
-    return NULL;
-  }
-  dataAddData((void**) &decryptedData, outputLength, buffer, returnValue);
-  outputLength += returnValue;
+/// @return Returns a Bytes object with the plaintext data on success, NULL on
+/// failure.
+Bytes rsaDecrypt(const volatile void *data, u64 length, EVP_PKEY *pkey) {
+  Bytes plaintext = NULL;
+  EVP_PKEY_CTX *context = NULL;
+  size_t plaintextLength = 0;
   
-  *length = outputLength;
-  return decryptedData;
-}
-
-/// @note Private key encryption only supports RSA_PKCS1_PADDING and
-/// RSA_NO_PADDING.  RSA_NO_PADDING is insecure, so defautlting to
-/// RSA_PKCS1_PADDING.
-
-/// @fn void *rsaPrivateEncrypt(void *data, u32 *length, EVP_PKEY *privateKey)
-///
-/// @brief Peform private key encryption on data of arbitrary length.
-///
-/// @param data The plaintext data to encrypt.
-/// @param length The length of the plaintext data.
-///
-/// @return On success, a pointer to the cyphertext is returned and the value
-/// of length is modified to reflect the size of the cyphertext.  On failure,
-/// NULL is returned and the value of length is set to 0.
-void *rsaPrivateEncrypt(void *data, u32 *length, EVP_PKEY *privateKey) {
-  if (privateKey == NULL) {
-    fprintf(stderr, "Private key not loaded.  Cannot encrypt.\n");
-    *length = 0;
-    return NULL;
+  if (pkey == NULL) {
+    fprintf(stderr, "Key not loaded.  Cannot decrypt.\n");
+    goto exit; // return NULL
   }
-
-  ZEROINIT(unsigned char buffer[RSA_LIB_BUFFER_SIZE]);
-  int inputLength = *length;
-  char *encryptedData = NULL;
-  int outputLength = 0;
-  int returnValue = 0;
-  while (inputLength > RSA_LIB_MAX_PLAINTEXT_SIZE) {
-    returnValue = RSA_private_encrypt(RSA_LIB_MAX_PLAINTEXT_SIZE, (unsigned char*) data, buffer, privateKey, RSA_PKCS1_PADDING);
-    if (returnValue < 0) {
-      fprintf(stderr, "Private encrypt failed.\n");
-      rsaPrintLastError();
-      encryptedData = (char*) pointerDestroy(encryptedData);
-      *length = 0;
-      return NULL;
-    }
-    data = (void*) ((char*) data + RSA_LIB_MAX_PLAINTEXT_SIZE);
-    inputLength -= RSA_LIB_MAX_PLAINTEXT_SIZE;
-    dataAddData((void**) &encryptedData, outputLength, buffer, returnValue);
-    outputLength += returnValue;
-  }
-  returnValue = RSA_private_encrypt(inputLength, (unsigned char*) data, buffer, privateKey, RSA_PKCS1_PADDING);
-  if (returnValue < 0) {
-    fprintf(stderr, "Private encrypt failed.\n");
-    rsaPrintLastError();
-    encryptedData = (char*) pointerDestroy(encryptedData);
-    *length = 0;
-    return NULL;
-  }
-  dataAddData((void**) &encryptedData, outputLength, buffer, returnValue);
-  outputLength += returnValue;
   
-  *length = outputLength;
-  return encryptedData;
-}
-
-/// @fn void *rsaPublicDecrypt(void *data, u32 *length, EVP_PKEY *publicKey)
-///
-/// @brief Peform public key decryption on data of arbitrary length.
-///
-/// @param data The cyphertext data to encrypt.
-/// @param length The length of the cyphertext data.
-///
-/// @return On success, a pointer to the plaintext is returned and the value
-/// of length is modified to reflect the size of the plaintext.  On failure,
-/// NULL is returned and the value of length is set to 0.
-void *rsaPublicDecrypt(void *data, u32 *length, EVP_PKEY *publicKey) {
-  if (publicKey == NULL) {
-    fprintf(stderr, "Public key not loaded.  Cannot decrypt.\n");
-    return NULL;
-  }
-
-  ZEROINIT(unsigned char buffer[RSA_LIB_BUFFER_SIZE]);
-  int inputLength = *length;
-  char *decryptedData = NULL;
-  int outputLength = 0;
-  int returnValue = 0;
-  while (inputLength > RSA_LIB_BUFFER_SIZE) {
-    returnValue = RSA_public_decrypt(RSA_LIB_BUFFER_SIZE, (unsigned char*) data, buffer, publicKey, RSA_PKCS1_PADDING);
-    if (returnValue < 0) {
-      fprintf(stderr, "Public decrypt failed.\n");
-      rsaPrintLastError();
-      decryptedData = (char*) pointerDestroy(decryptedData);
-      *length = 0;
-      return NULL;
-    }
-    data = (void*) ((char*) data + RSA_LIB_BUFFER_SIZE);
-    inputLength -= RSA_LIB_BUFFER_SIZE;
-    dataAddData((void**) &decryptedData, outputLength, buffer, returnValue);
-    outputLength += returnValue;
-  }
-  returnValue = RSA_public_decrypt(inputLength, (unsigned char*) data, buffer, publicKey, RSA_PKCS1_PADDING);
-  if (returnValue < 0) {
-    fprintf(stderr, "Public decrypt failed.\n");
+  // Setup the context.
+  context = EVP_PKEY_CTX_new(pkey, NULL);
+  if (context == NULL) {
+    fprintf(stderr, "Could not get key context.  Cannot decrypt.\n");
     rsaPrintLastError();
-    decryptedData = (char*) pointerDestroy(decryptedData);
-    *length = 0;
-    return NULL;
+    goto exit; // return NULL
+  } else if (EVP_PKEY_decrypt_init(context) <= 0) {
+    fprintf(stderr,
+      "Could not initialize decryption context.  Cannot decrypt.\n");
+    rsaPrintLastError();
+    goto evpPkeyCtxFree; // return NULL
+  } else if (EVP_PKEY_CTX_set_rsa_padding(context, PADDING) <= 0) {
+    fprintf(stderr,
+      "Could not set padding on decryption context.  Cannot decrypt.\n");
+    rsaPrintLastError();
+    goto evpPkeyCtxFree; // return NULL
   }
-  dataAddData((void**) &decryptedData, outputLength, buffer, returnValue);
-  outputLength += returnValue;
   
-  *length = outputLength;
-  return decryptedData;
+  if (EVP_PKEY_decrypt(context, NULL, &plaintextLength,
+    ustr(data), length) <= 0
+  ) {
+    fprintf(stderr,
+      "Could not determine length of plaintext.  Cannot decrypt.\n");
+    rsaPrintLastError();
+    goto evpPkeyCtxFree; // return NULL
+  }
+  
+  if (plaintextLength == 0) {
+    fprintf(stderr, "Invalid cyphertext.  Cannot decrypt.\n");
+    rsaPrintLastError();
+    goto evpPkeyCtxFree; // return NULL
+  }
+  
+  bytesAllocate(&plaintext, (u64) plaintextLength);
+  if (plaintext == NULL) {
+    LOG_MALLOC_FAILURE();
+    goto evpPkeyCtxFree; // return NULL
+  }
+  
+  if (EVP_PKEY_decrypt(context, ustr(plaintext), &plaintextLength,
+    ustr(data), length) <= 0
+  ) {
+    fprintf(stderr, "Could not decrypt data.\n");
+    rsaPrintLastError();
+    plaintext = bytesDestroy(plaintext);
+    goto evpPkeyCtxFree; // return NULL
+  }
+  bytesSetLength(plaintext, (u64) plaintextLength);
+  plaintext[plaintextLength] = '\0';
+  
+evpPkeyCtxFree:
+  EVP_PKEY_CTX_free(context);
+exit:
+  return plaintext;
 }
-
-*******************************************************************************/
 
 /// @fn void rsaPrintLastError()
 ///
@@ -411,10 +281,10 @@ void *rsaPublicDecrypt(void *data, u32 *length, EVP_PKEY *publicKey) {
 ///
 /// @return This function returns no value.
 void rsaPrintLastError() {
-  char *error = (char*) malloc(130);
+  char error[4096];
   ERR_load_crypto_strings();
   ERR_error_string(ERR_get_error(), error);
-  fprintf(stderr, "%s\n", error);
-  error = stringDestroy(error);
+  fputs(error, stderr);
+  fputs("\n", stderr);
 }
 

@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                     Copyright (c) 2012-2023 James Card                     //
+//                     Copyright (c) 2012-2024 James Card                     //
 //                                                                            //
 // Permission is hereby granted, free of charge, to any person obtaining a    //
 // copy of this software and associated documentation files (the "Software"), //
@@ -39,7 +39,9 @@
 #endif
 
 #include "Sockets.h"
+#ifdef TLS_SOCKETS_ENABLED
 #include "RsaLib.h"
+#endif
 
 const char *SocketTypeNames[NUM_SOCKET_TYPES] = {
   "SERVER",
@@ -119,7 +121,7 @@ void updateSocketString(Socket *sock) {
 int socketsMsleep(int milliseconds) {
   int returnValue = 0;
   
-#ifdef _MSC_VER
+#ifdef _WIN32
   Sleep(milliseconds);
 #else // POSIX
   struct timespec sleepTime = {0, milliseconds * 1000000};
@@ -138,12 +140,12 @@ int rawSocketsInit() {
   printLog(TRACE, "ENTER rawSocketsInit()\n");
   
   if (rawSocketsInitialized == false) {
-#ifndef _MSC_VER
+#ifndef _WIN32
     // Ignore SIGPIPE errors.
     signal(SIGPIPE, SIG_IGN);
 #endif
     
-#ifdef _MSC_VER
+#ifdef _WIN32
     WSADATA wsaData = { 0 };
     int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
     if (iResult != 0) {
@@ -188,13 +190,13 @@ int socketSetNonblocking(Socket *sock) {
   int returnValue = 0;
   
   mtx_lock(&sock->lock);
-#ifdef _MSC_VER
-  int nonblocking = 1;
+#ifdef _WIN32
+  u_long nonblocking = 1;
   returnValue = ioctlsocket(sock->sockfd, FIONBIO, &nonblocking);
 #else // POSIX
   returnValue
     = fcntl(sock->sockfd, F_SETFL, fcntl(sock->sockfd, F_GETFL) | O_NONBLOCK);
-#endif // _MSC_VER
+#endif // _WIN32
   
   if (returnValue == NO_ERROR) {
     // Mark the socket as non-blocking.
@@ -237,14 +239,14 @@ int socketSetBlocking(Socket *sock) {
   int returnValue = 0;
   
   mtx_lock(&sock->lock);
-#ifdef _MSC_VER
-  int nonblocking = 0;
+#ifdef _WIN32
+  u_long nonblocking = 0;
   returnValue = ioctlsocket(sock->sockfd, FIONBIO, &nonblocking);
 #else // POSIX
   returnValue
     = fcntl(sock->sockfd, F_SETFL,
       fcntl(sock->sockfd, F_GETFL) & (~O_NONBLOCK));
-#endif // _MSC_VER
+#endif // _WIN32
   
   if (returnValue == NO_ERROR) {
     // Mark the socket as blocking.
@@ -311,7 +313,6 @@ int rawSocketConnectWatch(void *args) {
   
   bool connectedCopy = *connected;
   (void) connectedCopy; // In case logging isn't enabled.
-  args = pointerDestroy(args);
   rawSocketConnectWatchArgs = NULL;
   
   printLog(TRACE,
@@ -342,6 +343,7 @@ int rawSocketConnect(int sockfd, const struct sockaddr *address,
     "timeoutMilliseconds=%d)\n", sockfd, address, addressLength,
     timeoutMilliseconds);
   
+  ZEROINIT(thrd_t rawSocketConnectWatchThread);
   RawSocketConnectWatchArgs *rawSocketConnectWatchArgs = NULL;
   
   if (timeoutMilliseconds > 0) {
@@ -355,28 +357,29 @@ int rawSocketConnect(int sockfd, const struct sockaddr *address,
     rawSocketConnectWatchArgs->connected = false;
     rawSocketConnectWatchArgs->timeoutMilliseconds = timeoutMilliseconds;
     
-    ZEROINIT(thrd_t rawSocketConnectWatchThread);
     if (thrd_create(&rawSocketConnectWatchThread, rawSocketConnectWatch,
-      (void*) rawSocketConnectWatchArgs) == thrd_success
+      (void*) rawSocketConnectWatchArgs) != thrd_success
     ) {
-      // We don't actually need the return value of rawSocketConnectWatch.  If
-      // it forcibly closes the socket, the return value of connect will be -1.
-      // We can therefore skip the thrd_join and save ourselves time in the
-      // success case, which is the expected normal case.
-      thrd_detach(rawSocketConnectWatchThread);
-    } else {
       // Starting the thread failed.  Free the memory it was supposed to free.
       rawSocketConnectWatchArgs = (RawSocketConnectWatchArgs*)
         pointerDestroy(rawSocketConnectWatchArgs);
-      rawSocketConnectWatchArgs = NULL;
     }
   }
   
   int returnValue = connect(sockfd, address, addressLength);
-  if ((timeoutMilliseconds > 0) && (returnValue > -1)) {
-    if (rawSocketConnectWatchArgs != NULL) {
-      rawSocketConnectWatchArgs->connected = true;
-    }
+  if ((timeoutMilliseconds > 0) && (rawSocketConnectWatchArgs != NULL)) {
+    rawSocketConnectWatchArgs->connected = true;
+    // We don't actually need the return value of rawSocketConnectWatch.  If
+    // it forcibly closes the socket, the return value of connect will be -1.
+    // We can therefore skip the thrd_join and save ourselves time in the
+    // success case, which is the expected normal case.
+    thrd_join(rawSocketConnectWatchThread, NULL);
+    rawSocketConnectWatchArgs = (RawSocketConnectWatchArgs*)
+      pointerDestroy(rawSocketConnectWatchArgs);
+  }
+  
+  if (returnValue < 0) {
+    printLog(ERR, "%s", strerror(errno));
   }
   
   printLog(TRACE,
@@ -1045,6 +1048,7 @@ int configureTlsClientSocket(Socket *sock, int timeoutMilliseconds) {
         printLog(ERR, "%s\n", error);
       }
       error = stringDestroy(error);
+      SSL_CTX_free(sslContext);
       printLog(TRACE,
         "EXIT configureTlsClientSocket(sock=%p, timeoutMilliseconds=%d) "
         "= {-5}\n", (void*) sock, timeoutMilliseconds);
@@ -1596,6 +1600,127 @@ void getIpAddress(char **address) {
   return;
 }
 
+/// @fn size_t getAddressSize(const char *address)
+///
+/// @brief Get the size, in bits, of an IP address (32 for IPv4, 128 for IPv6).
+///
+/// @param address The IP address to check.
+///
+/// @return Returns a size_t with the size, in bits, of the address.
+size_t getAddressSize(const char *address) {
+  printLog(TRACE, "ENTER getAddressSize(address=%s)\n", strOrNull(address));
+  
+  size_t numAddressBits = 0;
+  
+  if (address == NULL) {
+    // No address.  Nothing we can do.
+    printLog(TRACE, "EXIT getAddressSize(address=NULL) = {0}\n");
+    return numAddressBits;
+  }
+  
+  int byte1 = 0;
+  int byte2 = 0;
+  int byte3 = 0;
+  int byte4 = 0;
+  
+  numAddressBits = 128;
+  if (sscanf(address, "%d.%d.%d.%d", &byte1, &byte2, &byte3, &byte4) == 4) {
+    numAddressBits = 32;
+  }
+  
+  printLog(TRACE, "EXIT getAddressSize(address=\"%s\") = {%llu}\n",
+    address, llu(numAddressBits));
+  return numAddressBits;
+}
+
+/// @fn char *getNetworkAddress(const char *ipAddress, size_t numFixedBits)
+///
+/// @brief Make an address netmask given an IP address in string form and the
+/// number of fixed bits in the address.
+///
+/// @param ipAddress An IPv4 or IPv6 address in string form.
+/// @param numFixedBits The number of fixed bits in the address.
+///
+/// @note IPv6 is not yet supported by this function.
+///
+/// @return Returns a string representation of the network's address.
+char *getNetworkAddress(const char *ipAddress, size_t numFixedBits) {
+  printLog(TRACE, "ENTER getNetworkAddress(ipAddress=%s, numFixedBits=%llu)\n",
+    strOrNull(ipAddress), llu(numFixedBits));
+  
+  char *netmask = NULL;
+  if (ipAddress == NULL) {
+    // No ipAddress.  Nothing we can do.
+    straddstr(&netmask, "");
+    printLog(TRACE,
+      "EXIT getNetworkAddress(ipAddress=%s, numFixedBits=%llu) = {%s}\n",
+      strOrNull(ipAddress), llu(numFixedBits), netmask);
+    return netmask;
+  }
+  
+  size_t addressSize = getAddressSize(ipAddress);
+  if (addressSize == 0) {
+    printLog(ERR, "Could not determine size of address \"%s\".\n", ipAddress);
+    straddstr(&netmask, "");
+    printLog(TRACE,
+      "EXIT getNetworkAddress(ipAddress=%s, numFixedBits=%llu) = {%s}\n",
+      strOrNull(ipAddress), llu(numFixedBits), netmask);
+    return netmask;
+  } else if (numFixedBits > addressSize) {
+    printLog(ERR,
+      "Number of requested fixed bits %llu is larger than address size %llu.\n",
+      llu(numFixedBits), llu(addressSize));
+    straddstr(&netmask, "");
+    printLog(TRACE,
+      "EXIT getNetworkAddress(ipAddress=%s, numFixedBits=%llu) = {%s}\n",
+      strOrNull(ipAddress), llu(numFixedBits), netmask);
+    return netmask;
+  } else if (addressSize == 128) {
+    printLog(ERR,
+      "IPv6 addresses are not currently supported by this function.\n");
+    straddstr(&netmask, "");
+    printLog(TRACE,
+      "EXIT getNetworkAddress(ipAddress=%s, numFixedBits=%llu) = {%s}\n",
+      strOrNull(ipAddress), llu(numFixedBits), netmask);
+    return netmask;
+  }
+  
+  // OK.  We have a usable IPv4 network address.  Make the network address.
+  // First, parse the address into a 32-bit number.
+  uint32_t addressBytes[4];
+  if (sscanf(ipAddress, "%u.%u.%u.%u",
+    &addressBytes[0], &addressBytes[1], &addressBytes[2], &addressBytes[3])
+    != 4
+  ) {
+    printLog(ERR, "Could not parse IP address \"%s\".\n", ipAddress);
+    straddstr(&netmask, "");
+    printLog(TRACE,
+      "EXIT getNetworkAddress(ipAddress=%s, numFixedBits=%llu) = {%s}\n",
+      strOrNull(ipAddress), llu(numFixedBits), netmask);
+    return netmask;
+  }
+  uint32_t addressInt
+    = (addressBytes[0] << 24)
+    | (addressBytes[1] << 16)
+    | (addressBytes[2] <<  8)
+    | (addressBytes[3] <<  0);
+  uint32_t netmaskInt = 0xffffffff << (32 - numFixedBits);
+  addressInt &= netmaskInt;
+  addressBytes[0] = (addressInt & 0xff000000) >> 24;
+  addressBytes[1] = (addressInt & 0x00ff0000) >> 16;
+  addressBytes[2] = (addressInt & 0x0000ff00) >>  8;
+  addressBytes[3] = (addressInt & 0x000000ff) >>  0;
+  
+  (void) asprintf(&netmask, "%u.%u.%u.%u/%llu",
+    addressBytes[0], addressBytes[1], addressBytes[2], addressBytes[3],
+    llu(numFixedBits));
+  
+  printLog(TRACE,
+    "EXIT getNetworkAddress(ipAddress=%s, numFixedBits=%llu) = {%s}\n",
+    strOrNull(ipAddress), llu(numFixedBits), netmask);
+  return netmask;
+}
+
 /// @fn Socket* socketDestroy(Socket *sock)
 ///
 /// @brief Close and deallocate the relevant portions of a Socket data
@@ -1661,7 +1786,7 @@ int socketSend(Socket *sock, const volatile void *buf, int len) {
   ssize_t bytesSent = 0, totalBytesSent = 0;
   const char *bufferPointer = (const char*) buf;
   int flags = 0;
-#ifndef _MSC_VER
+#ifndef _WIN32
   // Ignore sigpipe errors on the POSIX send command
   flags = MSG_NOSIGNAL;
 #endif
@@ -1686,6 +1811,7 @@ int socketSend(Socket *sock, const volatile void *buf, int len) {
     printLog(ERR, "Could not put socket in blocking mode.\n");
   }
   
+  mtx_lock(&sock->lock);
   if ((sock->socketProtocol == TCP) && (sock->tcpConnected == true)) {
     while (len > 0) {
         if (sock->socketMode == PLAIN) {
@@ -1734,6 +1860,7 @@ int socketSend(Socket *sock, const volatile void *buf, int len) {
         len -= bytesSent;
     }
   }
+  mtx_unlock(&sock->lock);
   
   if (bytesSent > 0) {
     // The expected case.
@@ -1878,13 +2005,13 @@ int socketReceive_(Socket *sock, volatile void *buf, int len,
     if (socketWasBlocking == false) {
       socketSetBlocking(sock);
     }
-#ifdef _MSC_VER
+#ifdef _WIN32
     DWORD timeout = 0;
 #else // POSIX
     ZEROINIT(struct timeval timeout);
     timeout.tv_sec = 0;
     timeout.tv_usec = 0;
-#endif // _MSC_VER
+#endif // _WIN32
     // Set our timeout to infinite
     if (setsockopt(sock->sockfd, SOL_SOCKET, SO_RCVTIMEO, (char*) &timeout,
       sizeof(timeout)) < 0
@@ -1971,13 +2098,13 @@ int socketReceive_(Socket *sock, volatile void *buf, int len,
       timeoutMilliseconds = 0;
     }
     
-#ifdef _MSC_VER
+#ifdef _WIN32
     DWORD timeout = timeoutMilliseconds;
 #else // POSIX
     ZEROINIT(struct timeval timeout);
     timeout.tv_sec = timeoutMilliseconds / 1000;
     timeout.tv_usec = (timeoutMilliseconds % 1000) * 1000;
-#endif // _MSC_VER
+#endif // _WIN32
     // This call seems to always report failure even though it succeeds.
     // Deliberately ignoring the return value here.
     setsockopt(sock->sockfd, SOL_SOCKET, SO_RCVTIMEO, (char*) &timeout,
@@ -1988,6 +2115,7 @@ int socketReceive_(Socket *sock, volatile void *buf, int len,
   }
   
   int bytesReceived = 0;
+  mtx_lock(&sock->lock);
   if ((sock->socketProtocol == TCP) && (sock->tcpConnected == true)) {
     if (sock->socketMode == PLAIN) {
       bytesReceived = (int) recv(sock->sockfd, (void*) buf, len, 0);
@@ -2010,7 +2138,7 @@ int socketReceive_(Socket *sock, volatile void *buf, int len,
   } else if (sock->socketProtocol == UDP) {
     // We're only receiving one packet in this case.
     struct sockaddr_in srcAddr = sock->sockaddr;
-#ifdef _MSC_VER
+#ifdef _WIN32
     int srcAddrLen = sizeof(srcAddr);
 #else // POSIX
     socklen_t srcAddrLen = sizeof(srcAddr);
@@ -2020,13 +2148,14 @@ int socketReceive_(Socket *sock, volatile void *buf, int len,
         (struct sockaddr*) &srcAddr, &srcAddrLen);
     }
   }
+  mtx_unlock(&sock->lock);
   
   if ((bytesReceived < 0) && (socketWasBlocking == false)) {
     // This may not actually be an error.  Correct if not.
-#ifndef _MSC_VER
+#ifndef _WIN32
     // On POSIX, errno is either EAGAIN or EWOULDBLOCK.
     if ((errno == EAGAIN) || (errno == EWOULDBLOCK))
-#else // _MSC_VER defined
+#else // _WIN32 defined
     // On Windows, the non-blocking socket should make WSAGetLastError
     // return WSAEWOULDBLOCK.
     if (WSAGetLastError() == WSAEWOULDBLOCK)
@@ -2083,20 +2212,49 @@ Socket* socketAccept_(Socket *serverSocket, void *buf, int len, ...) {
     return NULL;
   }
   
+  SocketType socketType = serverSocket->socketType;
+  SocketProtocol socketProtocol = serverSocket->socketProtocol;
+  SocketMode socketMode = serverSocket->socketMode;
+  int sockfd = serverSocket->sockfd;
+#ifdef TLS_SOCKETS_ENABLED
+  SSL *clientSsl = NULL;
+  if ((socketMode == TLS) && (tlsSocketsEnabled() == true)) {
+    // We want to avoid segfaults.  At this point in the function, we're pretty
+    // much guaranteed that the socket still exists, as does its sslContext.
+    // However, after the accept() call, that may no longer be true because the
+    // expected use model is that to end an acccept, the socket is destroyed.
+    // So, we can't create a client's SSL object after the accept, we have to
+    // go ahead and create it now.  If we don't need it, we'll delete it, but
+    // if we do, we can just attach it to the client socket when it's created
+    // after the accept().
+    clientSsl = SSL_new(serverSocket->sslContext);
+    if (clientSsl == NULL) {
+      // Out of memory.
+      printLog(TRACE,
+        "EXIT socketAccept(serverSocket=%s, buf=%p, len=%d) = {NULL}\n",
+        socketToString(serverSocket), (void*) buf, len);
+      return NULL;
+    }
+  } else if (socketMode == TLS) {
+    printLog(WARN, "Local system does not support TLS.  Using plaintext.\n");
+    socketMode = PLAIN;
+  }
+#endif // TLS_SOCKETS_ENABLED
+  
   ZEROINIT(struct sockaddr_in clientAddress);
-  unsigned int clientAddressLength = sizeof(clientAddress);
+  socklen_t clientAddressLength = sizeof(clientAddress);
   int clientSockfd = 0;
-  if (serverSocket->socketProtocol == TCP) {
+  if (socketProtocol == TCP) {
     while (clientSockfd == 0) {
       // Call listen to drop connections beyond the end of our connection queue.
-      listen(serverSocket->sockfd, SOMAXCONN);
-      clientSockfd = accept(serverSocket->sockfd,
+      listen(sockfd, SOMAXCONN);
+      clientSockfd = accept(sockfd,
         (struct sockaddr *) &clientAddress, &clientAddressLength);
       if (clientSockfd < 0) {
-#ifndef _MSC_VER
+#ifndef _WIN32
         // On POSIX, errno is either EAGAIN or EWOULDBLOCK.
         if ((errno == EAGAIN) || (errno == EWOULDBLOCK))
-#else // _MSC_VER defined
+#else // _WIN32 defined
         // On Windows, the non-blocking socket should make WSAGetLastError
         // return WSAEWOULDBLOCK.
         if (WSAGetLastError() == WSAEWOULDBLOCK)
@@ -2114,13 +2272,16 @@ Socket* socketAccept_(Socket *serverSocket, void *buf, int len, ...) {
       printLog(ERR, "Could not accept client connection.\n");
       // We may be in this state because the socket was destroyed.
       // Don't call socketToString.
+#ifdef TLS_SOCKETS_ENABLED
+      SSL_free(clientSsl); clientSsl = NULL;
+#endif
       printLog(TRACE,
         "EXIT socketAccept(serverSocket=%p, buf=%p, len=%d) = {NULL}\n",
         (void*) serverSocket, (void*) buf, len);
       return NULL;
     }
   } else { // serverSocket->socketProtocol == UDP
-    recvfrom(serverSocket->sockfd, buf, (size_t) len, 0,
+    recvfrom(sockfd, buf, (size_t) len, 0,
       (struct sockaddr*) &clientAddress, &clientAddressLength);
     clientSockfd = socket(AF_INET, SOCK_DGRAM, 0);
   }
@@ -2135,15 +2296,18 @@ Socket* socketAccept_(Socket *serverSocket, void *buf, int len, ...) {
   if (mtx_init(&clientSocket->lock, mtx_recursive) != thrd_success) {
     printLog(ERR, "Could initialize Socket lock.\n");
     free(clientSocket); clientSocket = NULL;
+#ifdef TLS_SOCKETS_ENABLED
+    SSL_free(clientSsl); clientSsl = NULL;
+#endif
     rawSocketClose(clientSockfd);
     printLog(TRACE,
       "EXIT socketAccept(serverSocket=%p, buf=%p, len=%d) = {NULL}\n",
       (void*) serverSocket, (void*) buf, len);
     return NULL;
   }
-  clientSocket->socketType = serverSocket->socketType;
-  clientSocket->socketProtocol = serverSocket->socketProtocol;
-  clientSocket->socketMode = serverSocket->socketMode;
+  clientSocket->socketType = socketType;
+  clientSocket->socketProtocol = socketProtocol;
+  clientSocket->socketMode = socketMode;
   clientSocket->sockfd = clientSockfd;
   clientSocket->blocking = true;
   clientSocket->sockaddr = clientAddress;
@@ -2166,24 +2330,10 @@ Socket* socketAccept_(Socket *serverSocket, void *buf, int len, ...) {
   // inet_ntop(AF_INET6, &ipAddress, ipAddressString, INET6_ADDRSTRLEN);
   
 #ifdef TLS_SOCKETS_ENABLED
-  if ((clientSocket->socketMode == TLS) && (tlsSocketsEnabled() == true)) {
-    clientSocket->ssl = SSL_new(serverSocket->sslContext);
-    if (clientSocket->ssl == NULL) {
-      // Out of memory.
-      rawSocketClose(clientSocket->sockfd);
-      mtx_destroy(&clientSocket->lock);
-      free(clientSocket->address); clientSocket->address = NULL;
-      free(clientSocket); clientSocket = NULL;
-      printLog(TRACE,
-        "EXIT socketAccept(serverSocket=%s, buf=%p, len=%d) = {NULL}\n",
-        socketToString(serverSocket), (void*) buf, len);
-      return NULL;
-    }
+  if ((socketMode == TLS) && (tlsSocketsEnabled() == true)) {
+    clientSocket->ssl = clientSsl;
     SSL_set_fd(clientSocket->ssl, clientSocket->sockfd);
-  } else if (clientSocket->socketMode == TLS) {
-    printLog(WARN, "Local system does not support TLS.  Using plaintext.\n");
-    clientSocket->socketMode = PLAIN;
-  }
+  } // else the clientSsl object was never created.
 #endif // TLS_SOCKETS_ENABLED
   
   // Update the string representation of the socket.

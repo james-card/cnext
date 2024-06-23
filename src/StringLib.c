@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                     Copyright (c) 2012-2023 James Card                     //
+//                     Copyright (c) 2012-2024 James Card                     //
 //                                                                            //
 // Permission is hereby granted, free of charge, to any person obtaining a    //
 // copy of this software and associated documentation files (the "Software"), //
@@ -30,7 +30,7 @@
 
 #include "StringLib.h"
 #include "OsApi.h"
-#ifdef LOGGING_ENABLED
+#ifdef DS_LOGGING_ENABLED
 #include "LoggingLib.h"
 #else
 #undef printLog
@@ -961,7 +961,7 @@ char *escapeString(const char *inputString) {
   return returnValue;
 }
 
-/// @fn char *escapeData(const Bytes input)
+/// @fn char *escapeData(const volatile void *data, u64 length) {
 ///
 /// @brief Converts a memory block with unwanted characters to its escaped,
 /// hexadecimal equivalent.
@@ -977,7 +977,7 @@ char *escapeData(const volatile void *data, u64 length) {
   printLog(FLOOD, "ENTER escapeData(data=%p, length=%llu)\n",
     data, llu(length));
   
-  if ((data != NULL) && (length > 0)) {
+  if (data != NULL) {
     const char *input = (const char*) data;
     char escapedValue[4];
     
@@ -1033,6 +1033,81 @@ char *escapeData(const volatile void *data, u64 length) {
   
   printLog(FLOOD, "EXIT escapeData(data=%p, length=%llu) = {\"%s\"}\n",
     data, llu(length), returnValue);
+  return returnValue;
+}
+
+/// @fn Bytes escapeDataToBytes(const volatile void *data, u64 length) {
+///
+/// @brief Converts a memory block with unwanted characters to its escaped,
+/// hexadecimal equivalent.
+///
+/// @param input The data to convert.
+/// @param length The number of bytes of memory to convert.
+///
+/// @return Returns a newly-allocated Bytes object that has been escaped on
+/// success, NULL on failure.
+Bytes escapeDataToBytes(const volatile void *data, u64 length) {
+  Bytes returnValue = NULL;
+  
+  printLog(FLOOD, "ENTER escapeDataToBytes(data=%p, length=%llu)\n",
+    data, llu(length));
+  
+  if (data != NULL) {
+    const char *input = (const char*) data;
+    char escapedValue[4];
+    
+    // Allocate the maximum amount of space we'll use.
+    bytesAllocate(&returnValue, length * 3);
+    if (returnValue == NULL) {
+      LOG_MALLOC_FAILURE();
+      printLog(FLOOD, "EXIT escapeDataToBytes(data=%p, length=%llu) = {NULL}\n",
+        data, llu(length));
+      return returnValue; // NULL
+    }
+    u64 returnValueIndex = 0;
+    
+    for (u64 i = 0; i < length ; i++) {
+      u64 escapedValueLength = 3; // default
+      
+      if (input[i] < 32 || input[i] > 126) {
+        sprintf(escapedValue, "%%%02X", (u8) input[i]);
+      } else if (input[i] == '%') {
+        strcpy(escapedValue, "%25");
+      } else if (input[i] == '`') {
+        strcpy(escapedValue, "%60");
+      } else if (input[i] == '(') {
+        strcpy(escapedValue, "%28");
+      } else if (input[i] == ')') {
+        strcpy(escapedValue, "%29");
+      } else if (input[i] == '\\') {
+        strcpy(escapedValue, "%5C");
+      } else if (input[i] == '&') {
+        strcpy(escapedValue, "%26");
+      } else if (input[i] == '"') {
+        strcpy(escapedValue, "%22");
+      } else if (input[i] == '<') {
+        strcpy(escapedValue, "%3C");
+      } else if (input[i] == '>') {
+        strcpy(escapedValue, "%3E");
+      } else if (input[i] == '+') {
+        strcpy(escapedValue, "%2B");
+      } else if (input[i] == ' ') {
+        strcpy(escapedValue, "%20");
+      } else {
+        escapedValue[0] = input[i];
+        escapedValue[1] = '\0';
+        escapedValueLength = 1;
+      }
+      
+      strcpy(str(&returnValue[returnValueIndex]), escapedValue);
+      returnValueIndex += escapedValueLength;
+    }
+    
+    returnValue[returnValueIndex] = '\0';
+  }
+  
+  printLog(FLOOD, "EXIT escapeDataToBytes(data=%p, length=%llu) = {\"%s\"}\n",
+    data, llu(length), str(returnValue));
   return returnValue;
 }
 
@@ -1602,7 +1677,7 @@ Bytes bytesAllocate(Bytes *buffer, u64 size) {
     (buffer) ? *buffer : NULL, llu(size));
   
   u64 bufferSize = 0;
-  size++; // Always allocate at lesat one byte.
+  size++; // Always allocate at least one byte.
   
   if (buffer != NULL) {
     bufferSize = bytesSize(*buffer);
@@ -1673,17 +1748,23 @@ Bytes bytesAddData(Bytes *buffer, const volatile void *input, u64 inputLength) {
   printLog(FLOOD, "ENTER bytesAddData(*buffer=%p, input=%p, inputLength=%llu)\n",
     (buffer) ? *buffer : NULL, input, llu(inputLength));
   
-  u64 bufferLength = bytesLength(*buffer);
   Bytes returnValue = NULL;
   
-  if ((input == NULL) || (inputLength == 0)) {
+  if (buffer == NULL) {
+    printLog(DEBUG, "NULL base buffer pointer detected in bytesAddData.\n");
+    printLog(FLOOD,
+      "EXIT bytesAddData(*buffer=%p, input=%p, inputLength=%llu) = {%p}\n",
+      (buffer) ? *buffer : NULL, input, llu(inputLength), returnValue);
+    return returnValue;
+  } else if (input == NULL) {
     // No-op.
     printLog(FLOOD,
-      "EXIT bytesAddData(*buffer=%p, input=%p, inputLength=%llu) = {%llu}\n",
-      (buffer) ? *buffer : NULL, input, llu(inputLength), llu(bufferLength));
+      "EXIT bytesAddData(*buffer=%p, input=%p, inputLength=%llu) = {%p}\n",
+      (buffer) ? *buffer : NULL, input, llu(inputLength), returnValue);
     return returnValue;
   }
   
+  u64 bufferLength = bytesLength(*buffer);
   if (bytesAllocate(buffer, bufferLength + inputLength) != NULL) {
     memcpy((void*)(&(((*buffer))[bufferLength])), (const void*) input,
       inputLength);
@@ -2239,38 +2320,16 @@ int bytesNCompare(const Bytes valueA, const Bytes valueB, u64 len) {
     return returnValue;
   }
   
-  u64 valueALength = bytesLength(valueA);
-  u64 valueBLength = bytesLength(valueB);
-  u64 comparisonLength = MIN(valueALength, valueBLength);
-  comparisonLength = MIN(comparisonLength, len);
-  u8 *bytesValueA = ((u8*) valueA);
-  u8 *bytesValueB = ((u8*) valueB);
-  u64 i = 0;
-  for (i = 0; (i + sizeof(REGISTER_INT)) <= comparisonLength; i += sizeof(REGISTER_INT)) {
-    REGISTER_INT registerValueA = *((REGISTER_INT*) &bytesValueA[i]);
-    REGISTER_INT registerValueB = *((REGISTER_INT*) &bytesValueB[i]);
-    if (registerValueA != registerValueB) {
-      break;
-    }
-  }
+  u64 comparisonLength = MIN(bytesLength(valueA), bytesLength(valueB));
+  returnValue = memcmp(valueA, valueB, (size_t) MIN(comparisonLength, len));
   
-  for (; i < comparisonLength; i++) {
-    if (bytesValueA[i] < bytesValueB[i]) {
-      returnValue = -1;
-      break;
-    } else if (bytesValueA[i] > bytesValueB[i]) {
-      returnValue = 1;
-      break;
-    }
-  }
-  
-  if ((returnValue == 0) && (i < len)) {
+  if ((returnValue == 0) && (comparisonLength < len)) {
     // We are either comparing the NULL byte on the end of one string to the
     // NULL byte on the end of the other or we're comparing the the NULL byte
     // on one string to a valid character on the other.
-    char c1 = (char) bytesValueA[i];
-    char c2 = (char) bytesValueB[i];
-    returnValue = c1 - c2;
+    char c1 = (char) valueA[comparisonLength];
+    char c2 = (char) valueB[comparisonLength];
+    returnValue = ((int) c1) - ((int) c2);
   }
   
   printLog(TRACE,
@@ -2644,23 +2703,6 @@ Bytes getDataBetween(const volatile void *vHaystack, u64 haystackLength,
     "start=%p, startLength=%llu, end=%p, endLength=%llu) = {%p}\n",
     haystack, llu(haystackLength), start, llu(startLength), end, llu(endLength), returnValue);
   return returnValue;
-}
-
-/// @fn char *stringDestroy(char *value)
-///
-/// @brief Release the memory associated with a string value.
-///
-/// @param value A pointer to the string to be released.
-///
-/// @return This function always succeeds and always returns NULL.
-char *stringDestroy(char *value) {
-  printLog(FLOOD, "ENTER stringDestroy(value=%s)\n",
-    (value == NULL) ? "NULL" : (char*) value);
-  
-  free(value); value = NULL;
-  
-  printLog(FLOOD, "EXIT stringDestroy(value=%p) = {%p}\n", value, value);
-  return value;
 }
 
 /// @fn int vabprintf(Bytes *buffer, const char *formatString, va_list args)
@@ -3171,4 +3213,106 @@ bool dataIsString(const volatile void *data, u64 dataLength) {
     data, llu(dataLength), boolNames[returnValue]);
   return returnValue;
 }
+
+#ifdef USE_OPENSSL
+
+#include <openssl/evp.h>
+
+/// @fn Bytes dataToBase64(const volatile void *data, u64 dataLength)
+///
+/// @brief Convert an arbitrary blob of data to its base64 representation.
+///
+/// @param data A pointer to the data to encode.
+/// @param dataLength The number of bytes to encode at the data pointer.
+///
+/// @return Returns a new Bytes object with the base64-encoded string on
+/// success, NULL on failure.
+Bytes dataToBase64(const volatile void *data, u64 dataLength) {
+  printLog(TRACE, "ENTER dataToBase64(data=%p, dataLength=%llu)\n",
+    data, llu(dataLength));
+  
+  // Maximum integer value divisible by 3.
+  const u64 maxBytesToEncode = 0x7ffffffe;
+  u64 outputLength = (dataLength << 2) / 3;
+  if (dataLength % 3) {
+    outputLength += 4;
+  }
+  Bytes output = NULL;
+  bytesAllocate(&output, outputLength);
+  
+  u64 finalLength = 0;
+  while (dataLength > 0) {
+    u64 numBytesToEncode
+      = (dataLength <= maxBytesToEncode) ? dataLength : maxBytesToEncode;
+    u64 numBytesEncoded = (u64) EVP_EncodeBlock(
+      ustr(&output[finalLength]), ustr(data), numBytesToEncode);
+    if (numBytesEncoded == 0) {
+      // dataLength has to be non-zero or we wouldn't be in this loop.  Encoding
+      // no bytes would be an error.  The rest of this loop doesn't make any
+      // sense.  Free the output and bail.
+      printLog(ERR, "Attempt to base64-encode %llu bytes failed.\n",
+        llu(numBytesToEncode));
+      output = bytesDestroy(output);
+      finalLength = 0;
+      break;
+    }
+    
+    dataLength -= numBytesToEncode;
+    finalLength += numBytesEncoded;
+    data = ustr(data) + numBytesToEncode;
+  }
+  bytesSetLength(output, finalLength);
+  
+  printLog(TRACE, "EXIT dataToBase64(data=%p, dataLength=%llu) = {%p}\n",
+    data, llu(dataLength), output);
+  return output;
+}
+
+/// @fn Bytes base64ToBytes(const char *hexString, u64 hexStringLength)
+///
+/// @brief Convert a base64-encoded string back to its binary representation.
+///
+/// @param hexString The base64-encoded string to decode.
+/// @param hexStringLength The number of bytes that make up the hexString.
+///
+/// @return Returns a Bytes object with the decoded content on success, NULL on
+/// failure.
+Bytes base64ToBytes(const char *hexString, u64 hexStringLength) {
+  printLog(TRACE, "ENTER base64ToBytes(hexString=%p, hexStringLength=%llu)\n",
+    hexString, llu(hexStringLength));
+  
+  // Maximum integer value divisible by 4.
+  const u64 maxBytesToDecode = 0x7ffffffc;
+  u64 outputLength = (hexStringLength * 3) >> 2;
+  Bytes output = NULL;
+  bytesAllocate(&output, outputLength);
+  
+  u64 finalLength = 0;
+  while (hexStringLength > 0) {
+    u64 numBytesToDecode
+      = (hexStringLength <= maxBytesToDecode)
+      ? hexStringLength
+      : maxBytesToDecode;
+    int numBytesDecoded = (u64) EVP_DecodeBlock(
+      ustr(&output[finalLength]), ustr(hexString), numBytesToDecode);
+    if (numBytesDecoded < 0) {
+      // The rest of this loop doesn't make any sense.  Free the output and
+      // bail.
+      printLog(ERR, "Attempt to base64-decode %llu bytes failed.\n",
+        llu(numBytesToDecode));
+      output = bytesDestroy(output);
+      finalLength = 0;
+      break;
+    }
+    
+    hexStringLength -= numBytesToDecode;
+    finalLength += (u64) numBytesDecoded;
+    hexString += numBytesToDecode;
+  }
+  bytesSetLength(output, finalLength);
+  
+  return output;
+}
+
+#endif // USE_OPENSSL
 

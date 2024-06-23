@@ -11,7 +11,7 @@
 /// @details
 ///
 /// @copyright
-///                   Copyright (c) 2012-2023 James Card
+///                   Copyright (c) 2012-2024 James Card
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a
 /// copy of this software and associated documentation files (the "Software"),
@@ -40,10 +40,11 @@
 #define WIN_C_THREADS_H
 
 #define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
+#include <windows.h>
 #include <process.h>
 #include <time.h>
 #define localtime_r(timep, result) localtime_s(result, timep)
+#define gmtime_r(timep, result) gmtime_s(result, timep)
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -125,6 +126,10 @@ void tss_delete(tss_t key);
 void* tss_get(tss_t key);
 int tss_set(tss_t key, void* val);
 
+#ifndef TIME_UTC
+#define TIME_UTC 0
+#endif
+int timespec_get(struct timespec* spec, int base);
 
 #ifdef __cplusplus
 } // extern "C"

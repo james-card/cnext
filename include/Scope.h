@@ -95,9 +95,9 @@ void* scopeUpdate_(Scope *scope, volatile void *oldPointer, volatile void *newPo
   printLog(TRACE, "EXIT %s(" argFormat ") = {" returnFormat "}", __func__, ##__VA_ARGS__); \
   scopeEnd_(&_scope_);
 
-void scopeEnd_(Scope *scope);
+int scopeEnd_(Scope *scope);
 #define scopeEnd() \
-  scopeEnd_(&_scope_)
+  ((_scope_.numVars > 0) ? scopeEnd_(&_scope_) : TRINARY_ZERO)
 
 bool scopeUnitTest();
 

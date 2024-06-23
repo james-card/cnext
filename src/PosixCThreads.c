@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                     Copyright (c) 2012-2023 James Card                     //
+//                     Copyright (c) 2012-2024 James Card                     //
 //                                                                            //
 // Permission is hereby granted, free of charge, to any person obtaining a    //
 // copy of this software and associated documentation files (the "Software"), //
@@ -30,6 +30,7 @@
 
 #ifndef _MSC_VER
 #include "PosixCThreads.h"
+#include <stdio.h>
 #include <stdlib.h>
 
 #ifdef __cplusplus
@@ -38,19 +39,49 @@
 #define ZEROINIT(x) x = {0}
 #endif // __cplusplus
 
+void call_once(once_flag* flag, void(*func)(void)) {
+  pthread_once(flag, func);
+}
+
 int mtx_init(mtx_t *mtx, int type) {
   int returnValue = thrd_success;
   
   if ((type & mtx_recursive) != 0) {
     pthread_mutexattr_t attribs;
     memset(&attribs, 0, sizeof(attribs));
-    pthread_mutexattr_settype(&attribs, PTHREAD_MUTEX_RECURSIVE);
+    int err = pthread_mutexattr_init(&attribs);
+    if (err != 0) {
+      fputs("pthread_mutexattr_init: ", stderr);
+      fputs(strerror(err), stderr);
+      fputs("\n", stderr);
+      returnValue = thrd_error;
+      return returnValue;
+    }
+    err = pthread_mutexattr_settype(&attribs, PTHREAD_MUTEX_RECURSIVE);
+    if (err != 0) {
+      fputs("pthread_mutexattr_settype: ", stderr);
+      fputs(strerror(err), stderr);
+      fputs("\n", stderr);
+      returnValue = thrd_error;
+      return returnValue;
+    }
+    
     returnValue = pthread_mutex_init(mtx, &attribs);
+    
+    err = pthread_mutexattr_destroy(&attribs);
+    if (err != 0) {
+      fputs("pthread_mutexattr_destroy: ", stderr);
+      fputs(strerror(err), stderr);
+      fputs("\n", stderr);
+    }
   } else {
      returnValue = pthread_mutex_init(mtx, NULL);
   }
   
   if (returnValue != 0) {
+    fputs("pthread_mutex_init: ", stderr);
+    fputs(strerror(returnValue), stderr);
+    fputs("\n", stderr);
     returnValue = thrd_error;
   }
   
@@ -60,6 +91,7 @@ int mtx_init(mtx_t *mtx, int type) {
 int mtx_timedlock(mtx_t* mtx, const struct timespec* ts) {
   int returnValue = thrd_success;
   
+#ifdef _GNU_SOURCE
   returnValue = pthread_mutex_timedlock(mtx, ts);
   
   if (returnValue == ETIMEDOUT) {
@@ -67,6 +99,26 @@ int mtx_timedlock(mtx_t* mtx, const struct timespec* ts) {
   } else if (returnValue != 0) {
     returnValue = thrd_error;
   }
+#else
+  // We're on some POSIX system but we're not compiling with gcc.  We can't rely
+  // on pthread_mutex_timedlock being implemented, so we're going to have to do
+  // a hack.
+  struct timespec nowTimespec;
+  timespec_get(&nowTimespec, TIME_UTC);
+  long long int now64
+    = (nowTimespec.tv_sec * 1000000000) + nowTimespec.tv_nsec;
+  long long int ts64 = (ts->tv_sec * 1000000000) + ts->tv_nsec;
+  returnValue = mtx_trylock(mtx);
+  while ((returnValue == thrd_busy) && (now64 < ts64)) {
+    timespec_get(&nowTimespec, TIME_UTC);
+    now64 = (nowTimespec.tv_sec * 1000000000) + nowTimespec.tv_nsec;
+    returnValue = mtx_trylock(mtx);
+  }
+  
+  if (returnValue == thrd_busy) {
+    returnValue = thrd_timedout;
+  }
+#endif
   
   return returnValue;
 }
@@ -109,12 +161,18 @@ int mtx_unlock(mtx_t *mtx) {
   return returnValue;
 }
 
+void mtx_destroy(mtx_t* mtx) {
+  pthread_mutex_destroy(mtx);
+}
+
 #ifndef _WIN32
 int timespec_get(struct timespec* spec, int base) {
   clock_gettime(CLOCK_REALTIME, spec);
   return base;
 }
 #else // We're in MinGW and need to supply a Windows method.
+#include <sysinfoapi.h>
+
 /// @fn int timespec_get(struct timespec* spec, int base)
 ///
 /// @brief Get the system time in seconds and nanoseconds.
@@ -149,7 +207,7 @@ typedef struct PthreadCreateWrapperArgs {
   void *arg;
 } PthreadCreateWrapperArgs;
 
-void *pthread_create_wrapper(void* wrapper_args) {
+void *posix_c_threads_create_wrapper(void* wrapper_args) {
   // We want to be able to kill this thread if we need to.
   pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
   
@@ -183,7 +241,7 @@ int thrd_create(thrd_t *thr, thrd_start_t func, void *arg) {
   wrapper_args->arg = arg;
   
   returnValue = pthread_create(thr, NULL,
-    pthread_create_wrapper, wrapper_args);
+    posix_c_threads_create_wrapper, wrapper_args);
   
   if (returnValue != 0) {
     returnValue = thrd_error;
@@ -191,6 +249,30 @@ int thrd_create(thrd_t *thr, thrd_start_t func, void *arg) {
   }
   
   return returnValue;
+}
+
+thrd_t thrd_current(void) {
+  return pthread_self();
+}
+
+int thrd_detach(thrd_t thr) {
+  int returnValue = thrd_success;
+  
+  returnValue = pthread_detach(thr);
+  
+  if (returnValue != 0) {
+    returnValue = thrd_error;
+  }
+  
+  return returnValue;
+}
+
+int thrd_equal(thrd_t thr0, thrd_t thr1) {
+  return pthread_equal(thr0, thr1);
+}
+
+void thrd_exit(int res) {
+  pthread_exit((void*) ((intptr_t) res));
 }
 
 int thrd_join(thrd_t thr, int *res) {
@@ -213,6 +295,26 @@ int thrd_join(thrd_t thr, int *res) {
   return returnValue;
 }
 
+int thrd_sleep(const struct timespec* duration, struct timespec* remaining) {
+  return nanosleep(duration, remaining);
+}
+
+void thrd_yield(void) {
+  sched_yield();
+}
+
+int thrd_terminate(thrd_t thr) {
+  int returnValue = thrd_success;
+  
+  returnValue = pthread_cancel(thr);
+  
+  if (returnValue != 0) {
+    returnValue = thrd_error;
+  }
+  
+  return returnValue;
+}
+
 int tss_create(tss_t *key, tss_dtor_t dtor) {
   int returnValue = thrd_success;
   
@@ -223,6 +325,14 @@ int tss_create(tss_t *key, tss_dtor_t dtor) {
   }
   
   return returnValue;
+}
+
+void tss_delete(tss_t key) {
+  pthread_key_delete(key);
+}
+
+void* tss_get(tss_t key) {
+  return pthread_getspecific(key);
 }
 
 int tss_set(tss_t key, void *val) {
@@ -247,6 +357,10 @@ int cnd_broadcast(cnd_t *cond) {
   }
   
   return returnValue;
+}
+
+void cnd_destroy(cnd_t* cond) {
+  pthread_cond_destroy(cond);
 }
 
 int cnd_init(cnd_t *cond) {

@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                     Copyright (c) 2012-2023 James Card                     //
+//                     Copyright (c) 2012-2024 James Card                     //
 //                                                                            //
 // Permission is hereby granted, free of charge, to any person obtaining a    //
 // copy of this software and associated documentation files (the "Software"), //
@@ -28,7 +28,7 @@
 // Doxygen marker
 /// @file
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #include "WinCThreads.h"
 #include <stdio.h>
 
@@ -45,7 +45,7 @@
             struct timespec now; \
             timespec_get(&now, TIME_UTC); \
             struct tm nowStruct; \
-            localtime_s(&nowStruct, &now.tv_sec); \
+            gmtime_s(&nowStruct, &now.tv_sec); \
             int year = nowStruct.tm_year + 1900; \
             int month = nowStruct.tm_mon + 1; \
             int day = nowStruct.tm_mday; \
@@ -83,7 +83,7 @@ typedef enum LogLevel {
     DETAIL,
     INFO,
     WARN,
-    ERR, // ERROR conflicts with something in Windows.h
+    ERR, // ERROR conflicts with something in windows.h
     CRITICAL,
     BOX,
     BANNER,
@@ -681,16 +681,17 @@ static RedBlackNode* rbTreePredecessor(RedBlackTree* tree, RedBlackNode* x) {
 /*    Note:    This function should only be called by rbTreeDestroy */
 /***********************************************************************/
 
-static void rbTreeDestroyHelper(RedBlackTree* tree, RedBlackNode* x) {
-    RedBlackNode* nil = tree->nil;
-    if (x != nil) {
-        rbTreeDestroyHelper(tree, x->left);
-        rbTreeDestroyHelper(tree, x->right);
-        tree->destroyKey(x->key);
-        tree->destroyValue(x->value);
-        free(x);
-    }
-}
+//// TODO:  Re-enable this when used!!!
+//// static void rbTreeDestroyHelper(RedBlackTree* tree, RedBlackNode* x) {
+////     RedBlackNode* nil = tree->nil;
+////     if (x != nil) {
+////         rbTreeDestroyHelper(tree, x->left);
+////         rbTreeDestroyHelper(tree, x->right);
+////         tree->destroyKey(x->key);
+////         tree->destroyValue(x->value);
+////         free(x);
+////     }
+//// }
 
 
 /***********************************************************************/
@@ -706,12 +707,13 @@ static void rbTreeDestroyHelper(RedBlackTree* tree, RedBlackNode* x) {
 /**/
 /***********************************************************************/
 
-static void rbTreeDestroy(RedBlackTree* tree) {
-    rbTreeDestroyHelper(tree, tree->root->left);
-    free(tree->root);
-    free(tree->nil);
-    free(tree);
-}
+//// TODO:  Re-enable this when used!!!
+//// static void rbTreeDestroy(RedBlackTree* tree) {
+////     rbTreeDestroyHelper(tree, tree->root->left);
+////     free(tree->root);
+////     free(tree->nil);
+////     free(tree);
+//// }
 
 
 /***********************************************************************/
@@ -1146,6 +1148,7 @@ int cnd_broadcast(cnd_t* cond) {
 }
 
 void cnd_destroy(cnd_t* cond) {
+    (void) cond;
     // No-op.
 }
 
@@ -1346,7 +1349,6 @@ void* tss_get(tss_t key) {
     thrd_t thisThread = thrd_current();
     RedBlackNode* threadData = rbTreeExactQuery(data, &thisThread);
     if (threadData == data->nil) {
-        printLog(TRACE, "No threadData for thisThread.\n");
         mtx_unlock(tssStorageByKeyMutex);
         printLog(FLOOD, "EXIT tss_get(key=%u) = {NULL}\n", key);
         return NULL;
@@ -1661,8 +1663,13 @@ int thrd_join(thrd_t thr, int* res) {
             returnValue = thrd_error;
         }
         else {
-            if ((res != NULL) && (GetExitCodeThread(threadHandle, res) == 0)) {
-                returnValue = thrd_error;
+            if (res != NULL) {
+                DWORD dwres = 0;
+                if (GetExitCodeThread(threadHandle, &dwres) == TRUE) {
+                    *res = (int) dwres;
+                } else {
+                    returnValue = thrd_error;
+                }
             }
         }
         mtx_lock(attachedThreadsMutex);
@@ -1722,7 +1729,6 @@ int thrd_terminate(thrd_t thr) {
     return returnValue;
 }
 
-/*
 /// @fn int timespec_get(struct timespec* spec, int base)
 ///
 /// @brief Get the system time in seconds and nanoseconds.
@@ -1750,6 +1756,6 @@ int timespec_get(struct timespec* spec, int base) {
 
   return base;
 }
-*/
 
-#endif // _MSC_VER
+#endif // _WIN32
+

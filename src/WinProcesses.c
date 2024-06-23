@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                     Copyright (c) 2012-2023 James Card                     //
+//                     Copyright (c) 2012-2024 James Card                     //
 //                                                                            //
 // Permission is hereby granted, free of charge, to any person obtaining a    //
 // copy of this software and associated documentation files (the "Software"), //
@@ -28,56 +28,213 @@
 // Doxygen marker
 /// @file
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #include "WinProcesses.h"
+#include "StringLib.h"
 
+#include "WinProcesses.h"
+#include <dwmapi.h>
 
-/// @fn char* winProcessesStringToTchar(char *input)
+#ifdef _MSC_VER
+#pragma comment(lib, "dwmapi.lib")
+#endif // _MSC_VER
+
+/// @fn int getWindows(Process *process)
 ///
-/// @brief Convert a char*-style string to a MS tchar-style character array.
-///
-/// @param input The char*-style string to convert.
-///
-/// @return On success, returns a C string that can be used as a
-/// tchar-style parameter to functions that expect that format.  Should be
-/// free'd later by the caller.  Returns NULL on failure.
-char* winProcessesStringToTchar(char *input) {
-  char* returnValue = NULL;
-  if (input == NULL) {
-    // Can't continue.
-    return NULL;
+/// @brief Find all windows associated with a process.
+/// 
+/// @param process A pointer to the Process to get windows of.
+/// 
+/// @return Returns zero on success, -1 on failure.
+int getWindows(Process *process) {
+  DWORD processId = (DWORD) getProcessId(process);
+  int returnValue = 0;
+  size_t numWindows = 0;
+  HWND* windows = (HWND*)malloc(sizeof(HWND));
+  if (windows == NULL) {
+    // Memory allocation failure.  Nothing we can do.
+    returnValue = -1;
+    return returnValue; // -1
   }
-  
-  int inputLength = strlen(input);
-  returnValue = (char*) calloc(1, (inputLength + 1) << 1);
-  for (int i = 0; i <= inputLength; i++) {
-    returnValue[i << 1] = input[i];
+  windows[numWindows] = NULL;
+
+  for (HWND currentWindow = FindWindowEx(NULL, NULL, NULL, NULL);
+    currentWindow != NULL;
+    currentWindow = FindWindowEx(NULL, currentWindow, NULL, NULL)
+  ) {
+    if (currentWindow != NULL) {
+      DWORD currentProcessId = 0;
+      GetWindowThreadProcessId(currentWindow, &currentProcessId);
+      if (currentProcessId == processId) {
+        numWindows++;
+        HWND* check = (HWND*)realloc(windows, (numWindows + 1) * sizeof(HWND));
+        if (check == NULL) {
+          // Memory allocation failure.  Nothing we can do.
+          free(windows); windows = NULL;
+          returnValue = -1;
+          return returnValue; // -1
+        }
+        windows = check;
+
+        windows[numWindows - 1] = currentWindow;
+        windows[numWindows] = NULL;
+      }
+    }
   }
-  
+
+  free(process->windows);
+  process->windows = windows;
+  process->numWindows = numWindows;
+
   return returnValue;
 }
 
-/// @fn char* winProcessesTcharToString(LPSTR tchar)
+/// @fn int captureWindowImage(HWND hWnd)
 ///
-/// @brief Convert a tchar-style character array to a standard char* string.
-///
-/// @param tchar A pointer to a tchar-formatted character array.
-///
-/// @return Returns a pointer to a char*-style character array on success,
-/// NULL on failure.
-char* winProcessesTcharToString(LPSTR tchar) {
-  char *returnValue = NULL;
-  if (tchar == NULL) {
-    // Can't continue.
-    return NULL;
-  }
-  
-  char *byteArray = (char*) tchar;
-  for (int i = 0; byteArray[i] != '\0'; i += 2) {
-    straddchr(&returnValue, byteArray[i]);
+/// @brief Capture the image of a window.
+/// 
+/// @note This function is a placeholder.  It currently writes the resulting
+/// image to a hard-coded path.  This is (obviously) not what we want to do.
+/// Update this in the future to produce something more useful.
+/// 
+/// @param hWnd An HWND pointer.
+/// 
+/// @return Returns 0 on success, -1 on failure.
+int captureWindowImage(HWND hWnd)
+{
+  HDC hdcWindow;
+  HDC hdcMemDC = NULL;
+  HBITMAP hbmWindow = NULL;
+  BITMAP bmpWindow;
+  DWORD dwBytesWritten = 0;
+  DWORD dwSizeofDIB = 0;
+  HANDLE hFile = NULL;
+  char* lpbitmap = NULL;
+  HANDLE hDIB = NULL;
+  DWORD dwBmpSize = 0;
+
+  hdcWindow = GetDC(hWnd);
+
+  // Create a compatible DC, which is used in a BitBlt from the window DC.
+  hdcMemDC = CreateCompatibleDC(hdcWindow);
+  if (hdcMemDC == NULL) {
+    MessageBoxA(hWnd, "CreateCompatibleDC has failed", "Failed", MB_OK);
+    goto hdcMemDCAllocFailed;
   }
 
-  return returnValue;
+  // Get the client area for size calculation.
+  RECT rcClient;
+  GetClientRect(hWnd, &rcClient);
+  
+  // Get the frame without the extended shadow
+  RECT rcFrame;
+  DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS,
+    &rcFrame, sizeof(rcFrame));
+  // The frame includes the one-pixel border on the left and right of the
+  // window.  So, we need to add one to the left and subtract one from the
+  // right.
+  rcFrame.left += 1;
+  rcFrame.right -= 1;
+
+  // Create a compatible bitmap from the Window DC.
+  hbmWindow = CreateCompatibleBitmap(hdcWindow, rcFrame.right - rcFrame.left, rcClient.bottom - rcClient.top);
+  if (hbmWindow == NULL) {
+    MessageBoxA(hWnd, "CreateCompatibleBitmap Failed", "Failed", MB_OK);
+    goto hbmWindowAllocFailed;
+  }
+
+  // Select the compatible bitmap into the compatible memory DC.
+  SelectObject(hdcMemDC, hbmWindow);
+
+  // Bit block transfer into our compatible memory DC.
+  if (!BitBlt(hdcMemDC,
+    0, 0,
+    rcFrame.right - rcFrame.left, rcClient.bottom - rcClient.top,
+    hdcWindow,
+    0, 0,
+    SRCCOPY))
+  {
+    MessageBoxA(hWnd, "BitBlt has failed", "Failed", MB_OK);
+    goto done;
+  }
+
+  // Get the BITMAP from the HBITMAP.
+  GetObject(hbmWindow, sizeof(BITMAP), &bmpWindow);
+
+  BITMAPFILEHEADER   bmfHeader;
+  BITMAPINFOHEADER   bi;
+
+  bi.biSize = sizeof(BITMAPINFOHEADER);
+  bi.biWidth = bmpWindow.bmWidth;
+  bi.biHeight = bmpWindow.bmHeight;
+  bi.biPlanes = 1;
+  bi.biBitCount = 32;
+  bi.biCompression = BI_RGB;
+  bi.biSizeImage = 0;
+  bi.biXPelsPerMeter = 0;
+  bi.biYPelsPerMeter = 0;
+  bi.biClrUsed = 0;
+  bi.biClrImportant = 0;
+
+  dwBmpSize = ((bmpWindow.bmWidth * bi.biBitCount + 31) / 32) * 4 * bmpWindow.bmHeight;
+
+  // Starting with 32-bit Windows, GlobalAlloc and LocalAlloc are implemented as wrapper functions that 
+  // call HeapAlloc using a handle to the process's default heap. Therefore, GlobalAlloc and LocalAlloc 
+  // have greater overhead than HeapAlloc.
+  hDIB = GlobalAlloc(GHND, dwBmpSize);
+  if (hDIB == NULL) {
+    MessageBoxA(hWnd, "GlobalAlloc(GHND, dwBmpSize) Failed", "Failed", MB_OK);
+    goto done;
+  }
+  lpbitmap = (char*) GlobalLock(hDIB);
+
+  // Gets the "bits" from the bitmap, and copies them into a buffer 
+  // that's pointed to by lpbitmap.
+  GetDIBits(hdcWindow, hbmWindow, 0,
+    (UINT)bmpWindow.bmHeight,
+    lpbitmap,
+    (BITMAPINFO*)&bi, DIB_RGB_COLORS);
+
+  // A file is created, this is where we will save the screen capture.
+  hFile = CreateFileA("/Users/jbcar/Pictures/WindowCapture.bmp",
+    GENERIC_WRITE,
+    0,
+    NULL,
+    CREATE_ALWAYS,
+    FILE_ATTRIBUTE_NORMAL, NULL);
+
+  // Add the size of the headers to the size of the bitmap to get the total file size.
+  dwSizeofDIB = dwBmpSize + sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
+
+  // Offset to where the actual bitmap bits start.
+  bmfHeader.bfOffBits = (DWORD)sizeof(BITMAPFILEHEADER) + (DWORD)sizeof(BITMAPINFOHEADER);
+
+  // Size of the file.
+  bmfHeader.bfSize = dwSizeofDIB;
+
+  // bfType must always be BM for Bitmaps.
+  bmfHeader.bfType = 0x4D42; // BM.
+
+  WriteFile(hFile, (LPSTR)&bmfHeader, sizeof(BITMAPFILEHEADER), &dwBytesWritten, NULL);
+  WriteFile(hFile, (LPSTR)&bi, sizeof(BITMAPINFOHEADER), &dwBytesWritten, NULL);
+  WriteFile(hFile, (LPSTR)lpbitmap, dwBmpSize, &dwBytesWritten, NULL);
+
+  // Unlock and Free the DIB from the heap.
+  GlobalUnlock(hDIB);
+  GlobalFree(hDIB);
+
+  // Close the handle for the file that was created.
+  CloseHandle(hFile);
+
+  // Clean up.
+done:
+  DeleteObject(hbmWindow);
+hbmWindowAllocFailed:
+  DeleteObject(hdcMemDC);
+hdcMemDCAllocFailed:
+  ReleaseDC(hWnd, hdcWindow);
+
+  return 0;
 }
 
 /// @fn char* winProcessesGetErrorMessage(DWORD errorCode)
@@ -88,19 +245,20 @@ char* winProcessesTcharToString(LPSTR tchar) {
 ///
 /// @return Returns a char*-style string on success.  NULL on failure.
 char* winProcessesGetErrorMessage(DWORD errorCode) {
-  LPVOID lpMsgBuf;
-  FormatMessage(
+  LPTSTR lpMsgBuf = NULL;
+  FormatMessageA(
     FORMAT_MESSAGE_ALLOCATE_BUFFER |
     FORMAT_MESSAGE_FROM_SYSTEM |
     FORMAT_MESSAGE_IGNORE_INSERTS,      // Flags
     NULL,                               // Source - not relevant in this call
     errorCode,                          // Message ID
     0,                                  // Language ID
-    &lpMsgBuf,                          // Pointer to output message buffer
+    (LPTSTR) &lpMsgBuf,                 // Pointer to output message buffer
     0,                                  // Size of message buffer
     NULL);                              // va_list* of arguments (none here)
 
-  char *returnValue = winProcessesTcharToString(lpMsgBuf);
+  char *returnValue = NULL;
+  straddstr(&returnValue, lpMsgBuf);
   LocalFree(lpMsgBuf);
 
   return returnValue;
@@ -207,24 +365,21 @@ Process* startProcess_(const char *commandLineArgs, const char *workingDirectory
   startupInfo.hStdInput = stdInRd;
   startupInfo.dwFlags |= STARTF_USESTDHANDLES;
   
-  char *commandLineTchar = winProcessesStringToTchar(commandLineArgs);
-  char *workingDirectoryTchar = winProcessesStringToTchar(workingDirectory);
-  
   // Create the process.
-  successful = CreateProcess(
-    NULL,                  // application name (not used by this library)
-    commandLineTchar,      // command line
-    NULL,                  // process security attributes; NULL means the started process cannot inherit the handle created for it
-    NULL,                  // primary thread security attributes; NULL means the started thread cannot inherit the handle created for it
-    TRUE,                  // handles ARE inherited; it's critical that this be TRUE for this to work correctly
-    0,                     // creation flags; child inherits error mode and console of the parent, enviroment block is ANSI, DOS apps run in a shared VDM
-    environmentVariables,  // environment variables for the process
-    workingDirectoryTchar, // working directory for the process
-    &startupInfo,          // STARTUPINFO pointer
-    &processInformation);  // receives PROCESS_INFORMATION
+  successful = CreateProcessA(
+    NULL,                    // application name (not used by this library)
+    (char*) commandLineArgs, // command line
+    NULL,                    // process security attributes; NULL means the started process cannot inherit the handle created for it
+    NULL,                    // primary thread security attributes; NULL means the started thread cannot inherit the handle created for it
+    TRUE,                    // handles ARE inherited; it's critical that this be TRUE for this to work correctly
+    0,                       // creation flags; child inherits error mode and console of the parent, enviroment block is ANSI, DOS apps run in a shared VDM
+    environmentVariables,    // environment variables for the process
+    workingDirectory,        // working directory for the process
+    &startupInfo,            // STARTUPINFO pointer
+    &processInformation);    // receives PROCESS_INFORMATION
   
-  free(commandLineTchar); commandLineTchar = NULL;
-  free(workingDirectoryTchar); workingDirectoryTchar = NULL;
+  ZeroMemory(&process->criticalSection, sizeof(CRITICAL_SECTION));
+  InitializeCriticalSection(&process->criticalSection);
 
   if (successful == FALSE) {
     fprintf(stderr, "Could not create process.\n");
@@ -247,10 +402,8 @@ Process* startProcess_(const char *commandLineArgs, const char *workingDirectory
   
   CloseHandle(stdOutWr);
   CloseHandle(stdInRd);
+  getWindows(process);
   
-  ZeroMemory(&process->criticalSection, sizeof(CRITICAL_SECTION));
-  InitializeCriticalSection(&process->criticalSection);
-
   return process;
 }
 
@@ -336,9 +489,11 @@ char* readProcessStdout_(Process *process, uint64_t *outputLength, ...) {
   }
 
   if ((process != NULL) && (process->errorMessage != NULL)) {
-    bytesAddData(&returnValue,
-      process->errorMessage, strlen(process->errorMessage));
+    straddstr(&returnValue, process->errorMessage);
     free(process->errorMessage); process->errorMessage = NULL;
+    *outputLength = strlen(returnValue);
+    LeaveCriticalSection(&process->criticalSection);
+    return returnValue;
   } else if ((process == NULL) || (process->killed == true)) {
     if (process != NULL) {
       LeaveCriticalSection(&process->criticalSection);
@@ -379,6 +534,7 @@ char* readProcessStdout_(Process *process, uint64_t *outputLength, ...) {
     *outputLength = (uint64_t) returnValueLength;
   }
   LeaveCriticalSection(&process->criticalSection);
+
   return returnValue;
 }
 
@@ -419,7 +575,7 @@ bool writeProcessStdin_(Process *process, const char *data, uint64_t dataLength,
   do {
     writeSuccessful = WriteFile(process->stdInWr, &data[totalBytesWritten],
       dataLength - totalBytesWritten, &numBytesWritten, NULL);
-    if (numBytesWritten >= 0) {
+    if (writeSuccessful == TRUE) {
       totalBytesWritten += numBytesWritten;
     }
   } while ((writeSuccessful) && (totalBytesWritten < dataLength));
@@ -449,6 +605,7 @@ Process* closeProcess(Process *process) {
   }
 
   free(process->errorMessage); process->errorMessage = NULL;
+  free(process->windows); process->windows = NULL;
   free(process); process = NULL;
   return NULL;
 }
@@ -485,7 +642,7 @@ uint32_t getProcessId(Process *process) {
   return processId;
 }
 
-#include <TlHelp32.h>
+#include <tlhelp32.h>
 /// @fn void winProcessesKillProcessTree(DWORD myprocID)
 ///
 /// @brief Kill a process and all its subprocesses.
@@ -561,7 +718,6 @@ int stopProcess(Process *process) {
   LeaveCriticalSection(&process->criticalSection);
   return 0;
 }
-
 
 #endif // _MSC_VER
 

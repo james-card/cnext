@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                     Copyright (c) 2012-2023 James Card                     //
+//                     Copyright (c) 2012-2024 James Card                     //
 //                                                                            //
 // Permission is hereby granted, free of charge, to any person obtaining a    //
 // copy of this software and associated documentation files (the "Software"), //
@@ -34,22 +34,30 @@
 #undef printLog
 #define printLog(...) {}
 #define logFile stderr
+#define LOG_MALLOC_FAILURE(...) {}
 #endif
 
 #include "StringLib.h"
 #include "HashTable.h"
 #include "Vector.h"
+#include "Scope.h"
 
-/// @fn HashTable *htCreate_(TypeDescriptor *keyType, u64 size, ...)
+/// @fn HashTable *htCreate_(TypeDescriptor *keyType, bool disableThreadSafety, u64 size, ...)
 ///
 /// @brief Create a hash table with the specified type as the key.
 ///
 /// @param keyType The TypeDescriptor representing the kind of key to use.
+/// @param disableThreadSafety Whether or not to disable thread safety for the
+///   HashTable.
 /// @param size The minimum size for the hash table.
 /// @param ... Ignored parameters.
 ///
+/// @note This function is wrapped by a macro of the same name (minus the
+/// trailing underscore) that automatically provides false for
+/// disableThreadSafety and 0 for the size.
+///
 /// @return Returns a pointer to a new hash table on success, NULL on failure.
-HashTable *htCreate_(TypeDescriptor *keyType, u64 size, ...) {
+HashTable *htCreate_(TypeDescriptor *keyType, bool disableThreadSafety, u64 size, ...) {
   printLog(TRACE, "ENTER htCreate(keyType=%s)\n", (keyType != NULL) ? keyType->name : "NULL");
   
   // Make sure we have sensible parameters.
@@ -73,9 +81,11 @@ HashTable *htCreate_(TypeDescriptor *keyType, u64 size, ...) {
   
   // Initialize everything that shouldn't be NULL.
   table->keyType = keyType;
-  table->lock = (mtx_t*) calloc(1, sizeof(mtx_t));
-  if (mtx_init(table->lock, mtx_plain | mtx_recursive) != thrd_success) {
-    printLog(ERR, "Could not initialize table mutex lock.\n");
+  if (disableThreadSafety == false) {
+    table->lock = (mtx_t*) calloc(1, sizeof(mtx_t));
+    if (mtx_init(table->lock, mtx_plain | mtx_recursive) != thrd_success) {
+      printLog(ERR, "Could not initialize table mutex lock.\n");
+    }
   }
   
   printLog(TRACE, "EXIT htCreate(keyType=%s) = {%p}\n", keyType->name, table);
@@ -101,7 +111,9 @@ HashTable* htDestroy(HashTable *table) {
   }
   
   // Make sure we're not deleting while someone else is accessing.
-  mtx_lock(table->lock);
+  if ((table->lock != NULL) && (mtx_lock(table->lock) != thrd_success)) {
+    printLog(WARN, "Could not lock table mutex.\n");
+  }
   
   // Destroy the allocated red-black trees.
   for (u64 i = 0; i < table->tableSize; i++) {
@@ -116,8 +128,12 @@ HashTable* htDestroy(HashTable *table) {
     fclose(table->filePointer); table->filePointer = NULL;
   }
   
-  mtx_unlock(table->lock);
-  mtx_destroy(table->lock);
+  if (table->lock != NULL) {
+    mtx_unlock(table->lock);
+  }
+  if (table->lock != NULL) {
+    mtx_destroy(table->lock);
+  }
   table->lock = (mtx_t*) pointerDestroy(table->lock);
   
   table = (HashTable*) pointerDestroy(table);
@@ -141,7 +157,7 @@ u64 htGetHash(const HashTable *table, const volatile void *rawKey) {
   printLog(TRACE, "ENTER htGetHash(table=%p, rawKey=%p)\n", table, rawKey);
   
   u64 length = 0;
-  unsigned char *key = NULL;
+  Bytes key = NULL;
   bool keyCopied = false;
   u64 hash = 0;
   
@@ -163,10 +179,11 @@ u64 htGetHash(const HashTable *table, const volatile void *rawKey) {
   i64 keyTypeIndex = getIndexFromTypeDescriptor(table->keyType);
   if ((keyTypeIndex < getIndexFromTypeDescriptor(typeList)) && (keyTypeIndex > 0)
   ) { // key type is primitive
-    key = (unsigned char*) rawKey;
+    key = (Bytes) rawKey;
     length = table->keyType->size(rawKey);
   } else { // key type is non-primitive
-    key = (unsigned char*) table->keyType->toByteArray(rawKey, &length);
+    key = table->keyType->toBlob(rawKey);
+    length = bytesLength(key);
     keyCopied = true;
   }
   
@@ -183,7 +200,7 @@ u64 htGetHash(const HashTable *table, const volatile void *rawKey) {
   u64 returnValue = hash % table->tableSize;
   
   if (keyCopied == true) {
-    key = (unsigned char*) pointerDestroy(key);
+    key = bytesDestroy(key);
   }
   
   printLog(TRACE, "EXIT htGetHash(table=%p, rawKey=%p) = {%llu}\n",
@@ -321,7 +338,7 @@ HashNode *htAddEntry_(HashTable *table, const volatile void *key,
     }
   }
   
-  if (mtx_lock(table->lock) != thrd_success) {
+  if ((table->lock != NULL) && (mtx_lock(table->lock) != thrd_success)) {
     printLog(WARN, "Could not lock table mutex.\n");
   }
   
@@ -345,7 +362,9 @@ HashNode *htAddEntry_(HashTable *table, const volatile void *key,
   RedBlackNode *node = rbInsert(table->table[index], key, value, type);
   if (node == NULL) {
     printLog(ERR, "NULL node returned from rbInsert.\n");
-    mtx_unlock(table->lock);
+    if (table->lock != NULL) {
+      mtx_unlock(table->lock);
+    }
     
     printLog(TRACE,
       "EXIT htAddEntry(table=%p, key=%p, value=%p, type=%s) = {%p}\n",
@@ -381,7 +400,9 @@ HashNode *htAddEntry_(HashTable *table, const volatile void *key,
     table->tail = table->table[index]->tail;
   }
   
-  mtx_unlock(table->lock);
+  if (table->lock != NULL) {
+    mtx_unlock(table->lock);
+  }
   
   printLog(TRACE,
     "EXIT htAddEntry(table=%p, key=%p, value=%p, type=%s) = {%p}\n",
@@ -405,15 +426,17 @@ HashNode *htGetEntry(const HashTable *table, const volatile void *key) {
     return NULL;
   }
   
-  if (mtx_lock(table->lock) != thrd_success) {
+  if ((table->lock != NULL) && (mtx_lock(table->lock) != thrd_success)) {
     printLog(WARN, "Could not lock table mutex.\n");
   }
   
   u64 index = htGetHash(table, key);
-  printLog(DEBUG, "Getting value from table %llu.\n", llu(index));
+  printLog(DEBUG, "Getting value from tree %llu.\n", llu(index));
   HashNode *returnValue = rbQuery(table->table[index], key);
   
-  mtx_unlock(table->lock);
+  if (table->lock != NULL) {
+    mtx_unlock(table->lock);
+  }
   
   printLog(TRACE, "EXIT htGetEntry(table=%p, key=%p) = {%p}\n", table, key, returnValue);
   return returnValue;
@@ -464,7 +487,7 @@ i32 htRemoveEntry(HashTable *table, const volatile void *key) {
     return -1;
   }
 
-  if (mtx_lock(table->lock) != thrd_success) {
+  if ((table->lock != NULL) && (mtx_lock(table->lock) != thrd_success)) {
     printLog(WARN, "Could not lock table mutex.\n");
   }
   
@@ -490,7 +513,9 @@ i32 htRemoveEntry(HashTable *table, const volatile void *key) {
     }
   }
   
-  mtx_unlock(table->lock);
+  if (table->lock != NULL) {
+    mtx_unlock(table->lock);
+  }
   
   printLog(TRACE, "EXIT htRemoveEntry(table=%p, key=%p) = {0}\n", table, key);
   return 0;
@@ -515,7 +540,7 @@ char *htToString(const HashTable *table) {
     return returnValue;
   }
   
-  if (mtx_lock(table->lock) != thrd_success) {
+  if ((table->lock != NULL) && (mtx_lock(table->lock) != thrd_success)) {
     printLog(WARN, "Could not lock table mutex.\n");
   }
   
@@ -550,7 +575,14 @@ char *htToString(const HashTable *table) {
     }
   }
   
-  mtx_unlock(table->lock);
+  if (table->lock != NULL) {
+    mtx_unlock(table->lock);
+  }
+  
+  char *indentedText = indentText(returnValue, 2);
+  returnValue = stringDestroy(returnValue);
+  asprintf(&returnValue, "{\n%s\n}", indentedText);
+  indentedText = stringDestroy(indentedText);
   
   printLog(TRACE, "EXIT htToString(table=%p) = {%s}\n", table, returnValue);
   return returnValue;
@@ -580,7 +612,7 @@ Bytes htToBytes(const HashTable *table) {
     return NULL;
   }
   
-  if (mtx_lock(table->lock) != thrd_success) {
+  if ((table->lock != NULL) && (mtx_lock(table->lock) != thrd_success)) {
     printLog(WARN, "Could not lock table mutex.\n");
   }
   
@@ -606,7 +638,9 @@ Bytes htToBytes(const HashTable *table) {
     }
   }
   
-  mtx_unlock(table->lock);
+  if (table->lock != NULL) {
+    mtx_unlock(table->lock);
+  }
   
   printLog(TRACE, "EXIT htToBytes(table=%p) = {%s}\n", table, returnValue);
   return returnValue;
@@ -631,9 +665,13 @@ HashTable *htCopy(const HashTable *table) {
     return copy;
   }
   
-  copy = htCreate(table->keyType, table->tableSize);
+  bool disableThreadSafety = false;
+  if (table->lock == NULL) {
+    disableThreadSafety = true;
+  }
+  copy = htCreate(table->keyType, disableThreadSafety, table->tableSize);
   
-  if (mtx_lock(table->lock) != thrd_success) {
+  if ((table->lock != NULL) && (mtx_lock(table->lock) != thrd_success)) {
     printLog(WARN, "Could not lock table mutex.\n");
   }
   
@@ -641,7 +679,9 @@ HashTable *htCopy(const HashTable *table) {
     htAddEntry(copy, cur->key, cur->value, cur->type);
   }
   
-  mtx_unlock(table->lock);
+  if (table->lock != NULL) {
+    mtx_unlock(table->lock);
+  }
   
   printLog(TRACE, "EXIT htCopy(table=%p) = {%p}\n", table, copy);
   return copy;
@@ -839,13 +879,13 @@ HashTable *xmlToHashTable(const char *inputData) {
   return hashTable;
 }
 
-/// @fn int htSize(const volatile void *value)
+/// @fn size_t htSize(const volatile void *value)
 ///
 /// @brief Compute the size of a hash table structure in memory.
 ///
 /// @return Returns the size of the table in bytes.
-int htSize(const volatile void *value) {
-  int size = 0;
+size_t htSize(const volatile void *value) {
+  size_t size = 0;
   HashTable *table = (HashTable*) value;
   printLog(TRACE, "ENTER htSize(value=\"%p\")\n", value);
   
@@ -853,33 +893,39 @@ int htSize(const volatile void *value) {
     size = sizeof(HashTable);
   }
   
-  printLog(TRACE, "EXIT htSize(value=\"%p\") = {%d}\n", value, size);
+  printLog(TRACE, "EXIT htSize(value=\"%p\") = {%llu}\n", value, llu(size));
   return size;
 }
 
-/// @fn HashTable *htFromByteArray(const volatile void *array, u64 *length)
+/// @fn HashTable *htFromBlob_(const volatile void *array, u64 *length, bool inPlaceData, bool disableThreadSafety, ...)
 ///
 /// @brief Convert a properly-formatted byte array into a hash table.
 ///
 /// @param array The array of bytes to convert.
 /// @param length As an input, this is the number of bytes in array.  As an
 ///   output, this is the number of bytes consumed by this call.
+/// @param inPlaceData Whether the data should be used in place (true) or a
+///   copy should be made and returned (false).
+/// @param disableThreadSafety Whether or not thread safety should be disabled
+///   in the returned list.
 ///
 /// @return Returns a pointer to a HashTable on success, NULL on failure.
-HashTable *htFromByteArray(const volatile void *array, u64 *length) {
+HashTable *htFromBlob_(const volatile void *array, u64 *length, bool inPlaceData, bool disableThreadSafety, ...) {
   char *byteArray = (char*) array;
   HashTable *table = NULL;
   u64 index = 0;
-  i16 typeIndex = 0;
-  printLog(TRACE, "ENTER htFromByteArray(array=%p, length=%p)\n",
-    array, length);
+  i16 typeIndex = 0, keyTypeIndex = 0;
+  printLog(TRACE,
+    "ENTER htFromBlob(array=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s)\n",
+    array, length, boolNames[inPlaceData], boolNames[disableThreadSafety]);
   u64 size = 0;
-  TypeDescriptor *keyType = NULL;
+  TypeDescriptor *keyType = NULL, *keyTypeNoCopy = NULL;
   
   if ((array == NULL) || (length == NULL)) {
     printLog(ERR, "One or more NULL parameters.\n");
-    printLog(TRACE, "EXIT htFromByteArray(array=%p, length=%p) = {%p}\n",
-      table, length, table);
+    printLog(TRACE,
+      "EXIT htFromBlob(array=%p, length=%p, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      table, length, boolNames[inPlaceData], boolNames[disableThreadSafety], table);
     return NULL;
   }
   
@@ -917,29 +963,53 @@ HashTable *htFromByteArray(const volatile void *array, u64 *length) {
   }
   index += sizeof(u32);
   
-  typeIndex = *((i16*) &byteArray[index]);
-  littleEndianToHost(&typeIndex, sizeof(i16));
+  keyTypeIndex = *((i16*) &byteArray[index]);
+  littleEndianToHost(&keyTypeIndex, sizeof(i16));
   index += sizeof(i16);
-  if (typeIndex < 1) {
+  if (keyTypeIndex < 1) {
     // Index is not valid.
     *length = index;
     printLog(ERR, "Improperly formatted byte array.  Cannot create table.\n");
-    printLog(TRACE, "EXIT htFromByteArray(array=%p, length=%llu) = {%p}\n",
-      array, llu(*length), table);
+    printLog(TRACE,
+      "EXIT htFromBlob(array=%p, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      array, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety], table);
     return NULL;
   }
-  keyType = getTypeDescriptorFromIndex(typeIndex);
+  keyType = getTypeDescriptorFromIndex(keyTypeIndex);
+  if (keyType == NULL) {
+    printLog(ERR, "No value type for typeIndex %d.\n", keyTypeIndex);
+    *length = index;
+    printLog(ERR, "Improperly formatted byte array.  Cannot create table.\n");
+    printLog(TRACE,
+      "EXIT htFromBlob(array=%p, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      array, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety], table);
+    return NULL;
+  }
+  keyTypeNoCopy = getTypeDescriptorFromIndex(keyTypeIndex + 1);
   
   size = *((u64*) &byteArray[index]);
   littleEndianToHost(&size, sizeof(size));
   index += sizeof(size);
-  table = htCreate(keyType, size);
+  table = htCreate(keyTypeNoCopy, disableThreadSafety, size);
+  if (table == NULL) {
+    LOG_MALLOC_FAILURE();
+    printLog(NEVER,
+      "EXIT htFromBlob(array=%p, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+      array, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety], table);
+    return NULL;
+  }
+  
+  // Complex data types (which will have type indexes greater than or equal
+  // to that of typeList) will need to be handled slightly differently than
+  // primitives in the case that inPlaceData is true, so grab the index for
+  // typeList now so that we can compare it later.
+  i64 listIndex = getIndexFromTypeDescriptor(typeList);
   
   HashNode *node = NULL;
   while ((index < arrayLength) && (table->size < size)) {
     void *key = NULL, *value = NULL;
     u64 keySize = 0, valueSize = 0;
-    TypeDescriptor *valueType = NULL;
+    TypeDescriptor *valueType = NULL, *valueTypeNoCopy = NULL;
     
     typeIndex = *((i16*) &byteArray[index]);
     littleEndianToHost(&typeIndex, sizeof(i16));
@@ -948,39 +1018,103 @@ HashTable *htFromByteArray(const volatile void *array, u64 *length) {
       *length = index;
       printLog(ERR,
         "Improperly formatted byte array.  Cannot continue processing\n");
-      printLog(TRACE, "EXIT htFromByteArray(array=%p, length=%llu) = {%p}\n",
-        array, llu(*length), table);
+      printLog(TRACE,
+        "EXIT htFromBlob(array=%p, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+        array, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety], table);
+      if (inPlaceData) {
+        // Optimize for this case.
+        if (keyTypeIndex >= listIndex) {
+          // See notes at the bottom of this function about this logic.
+          htSetKeyType(table, keyType);
+        }
+      } else {
+        htSetKeyType(table, keyType);
+      }
       return table;
     }
     valueType = getTypeDescriptorFromIndex(typeIndex);
+    if (valueType != NULL) {
+      printLog(DEBUG, "Adding value of type %s.\n", valueType->name);
+    } else {
+      printLog(ERR, "No value type for typeIndex %d.\n", typeIndex);
+      *length = index;
+      printLog(ERR,
+        "Improperly formatted byte array.  Cannot continue processing\n");
+      printLog(TRACE,
+        "EXIT htFromBlob(array=%p, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+        array, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety], table);
+      if (inPlaceData) {
+        // Optimize for this case.
+        if (keyTypeIndex >= listIndex) {
+          // See notes at the bottom of this function about this logic.
+          htSetKeyType(table, keyType);
+        }
+      } else {
+        htSetKeyType(table, keyType);
+      }
+      return table;
+    }
+    valueTypeNoCopy = getTypeDescriptorFromIndex(typeIndex + 1);
     index += sizeof(i16);
     valueSize = arrayLength - index;
     
-    value = valueType->fromByteArray(&byteArray[index], &valueSize);
+    value = valueType->fromBlob(&byteArray[index], &valueSize, inPlaceData, disableThreadSafety);
     index += valueSize;
     if (value == NULL) {
       *length = index;
       printLog(ERR, "NULL value detected.  Cannot process.\n");
-      printLog(TRACE, "EXIT htFromByteArray(array=%p, length=%llu) = {%p}\n",
-        array, llu(*length), table);
+      printLog(TRACE,
+        "EXIT htFromBlob(array=%p, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+        array, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety], table);
+      if (inPlaceData) {
+        // Optimize for this case.
+        if (keyTypeIndex >= listIndex) {
+          // See notes at the bottom of this function about this logic.
+          htSetKeyType(table, keyType);
+        }
+      } else {
+        htSetKeyType(table, keyType);
+      }
       return table;
     }
     
     keySize = arrayLength - index;
-    key = keyType->fromByteArray(&byteArray[index], &keySize);
+    key = keyType->fromBlob(&byteArray[index], &keySize, inPlaceData, disableThreadSafety);
     index += keySize;
     if (key == NULL) {
       *length = index;
       printLog(ERR, "NULL key detected.  Cannot process.\n");
-      printLog(TRACE, "EXIT htFromByteArray(array=%p, length=%llu) = {%p}\n",
-        array, llu(*length), table);
+      printLog(TRACE,
+        "EXIT htFromBlob(array=%p, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+        array, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety], table);
+      if (inPlaceData) {
+        // Optimize for this case.
+        if (keyTypeIndex >= listIndex) {
+          // See notes at the bottom of this function about this logic.
+          htSetKeyType(table, keyType);
+        }
+      } else {
+        htSetKeyType(table, keyType);
+      }
       return table;
     }
     
-    node = htAddEntry(table, key, value, valueType);
-    valueType->destroy(value); value = NULL;
-    keyType->destroy(key); key = NULL;
-    if (node == NULL) {
+    node = htAddEntry(table, key, value, valueTypeNoCopy);
+    if (node != NULL) {
+      if (inPlaceData) {
+        // Optimize for this case.
+        if (typeIndex >= listIndex) {
+          // Memory has to be allocated to hold the top-level structures of
+          // complex data.  Only the primitives in the byte arrays involve no
+          // memory allocations at all.  So, for complex data, we need to set
+          // the node's type back to the base value type so that the destructor
+          // is called.  The destructors for all the primitives will be omitted.
+          node->type = valueType;
+        }
+      } else {
+        node->type = valueType;
+      }
+    } else {
       printLog(ERR, "Failed to add node to table.\n");
     }
   }
@@ -995,9 +1129,20 @@ HashTable *htFromByteArray(const volatile void *array, u64 *length) {
   }
   
   *length = index;
+  if (inPlaceData) {
+    // Optimize for this case.
+    if (keyTypeIndex >= listIndex) {
+      // See note above for value types.  Not sure why anyone would want to have
+      // a comlex data type as a key, but it is possible, so cover the case.
+      htSetKeyType(table, keyType);
+    }
+  } else {
+    htSetKeyType(table, keyType);
+  }
   
-  printLog(TRACE, "EXIT htFromByteArray(array=%p, length=%llu) = {%p}\n",
-    array, llu(*length), table);
+  printLog(TRACE,
+    "EXIT htFromBlob(array=%p, length=%llu, inPlaceData=%s, disableThreadSafety=%s) = {%p}\n",
+    array, llu(*length), boolNames[inPlaceData], boolNames[disableThreadSafety], table);
   return table;
 }
 
@@ -1018,11 +1163,15 @@ HashTable* listToHashTable(List *list) {
     return NULL;
   }
   
-  if (mtx_lock(list->lock) != thrd_success) {
+  if ((list->lock != NULL) && (mtx_lock(list->lock) != thrd_success)) {
     printLog(WARN, "Could not lock list mutex.\n");
   }
   
-  HashTable *table = htCreate(list->keyType, list->size);
+  bool disableThreadSafety = false;
+  if (list->lock == NULL) {
+    disableThreadSafety = true;
+  }
+  HashTable *table = htCreate(list->keyType, disableThreadSafety, list->size);
   
   for (ListNode *node = list->head; node != NULL; node = node->next) {
     if (node->type != typeList) {
@@ -1034,7 +1183,9 @@ HashTable* listToHashTable(List *list) {
     }
   }
   
-  mtx_unlock(list->lock);
+  if (list->lock != NULL) {
+    mtx_unlock(list->lock);
+  }
   
   printLog(TRACE, "EXIT listToHashTable(list=%p) = {%p}\n", list, table);
   return table;
@@ -1063,7 +1214,9 @@ i32 htClear(HashTable *table) {
   }
   
   // Make sure we're not deleting while someone else is accessing.
-  mtx_lock(table->lock);
+  if ((table->lock != NULL) && (mtx_lock(table->lock) != thrd_success)) {
+    printLog(WARN, "Could not lock table mutex.\n");
+  }
   
   // Destroy the allocated red-black trees.
   for (u64 i = 0; i < table->tableSize; i++) {
@@ -1078,9 +1231,30 @@ i32 htClear(HashTable *table) {
     fclose(table->filePointer); table->filePointer = NULL;
   }
   
-  mtx_unlock(table->lock);
+  if (table->lock != NULL) {
+    mtx_unlock(table->lock);
+  }
   
   printLog(TRACE, "EXIT htClear(table=%p) = {%d}\n", table, returnValue);
+  return returnValue;
+}
+
+int htDestroyNode(HashTable *table, HashNode *node) {
+  SCOPE_ENTER("table=%p, node=%p", table, node);
+  
+  int returnValue = 0;
+  if ((table == NULL) || (node == NULL)) {
+    printLog(ERR, "One or more NULL parameters.\n");
+    returnValue = -1;
+    SCOPE_EXIT("table=%p, node=%p", "%d", table, node, returnValue);
+    return returnValue;
+  }
+  
+  u64 index = htGetHash(table, node->key);
+  printLog(DEBUG, "Destroying node in tree %llu.\n", llu(index));
+  returnValue = rbTreeDestroyNode(table->table[index], node);
+  
+  SCOPE_EXIT("table=%p, node=%p", "%d", table, node, returnValue);
   return returnValue;
 }
 
@@ -1091,6 +1265,7 @@ i32 htClear(HashTable *table) {
 TypeDescriptor _typeHashTable = {
   .name          = "HashTable",
   .xmlName       = NULL,
+  .dataIsPointer = true,
   .toString      = (char* (*)(const volatile void*)) htToString,
   .toBytes       = (Bytes (*)(const volatile void*)) htToBytes,
   .compare       = (int (*)(const volatile void*, const volatile void*)) htCompare,
@@ -1098,10 +1273,12 @@ TypeDescriptor _typeHashTable = {
   .copy          = (void* (*)(const volatile void*)) htCopy,
   .destroy       = (void* (*)(volatile void*)) htDestroy,
   .size          = htSize,
-  .toByteArray   = (void* (*)(const volatile void*, u64*)) listToByteArray,
-  .fromByteArray = (void* (*)(const volatile void*, u64*)) htFromByteArray,
+  .toBlob        = (Bytes (*)(const volatile void*)) listToBlob,
+  .fromBlob      = (void* (*)(const volatile void*, u64*, bool, bool)) htFromBlob_,
   .hashFunction  = NULL,
   .clear         = (i32 (*)(volatile void *)) listClear,
+  .toXml         = (Bytes (*)(const volatile void*, const char *elementName, bool indent, ...)) listToXml_,
+  .toJson        = (Bytes (*)(const volatile void*)) listToJson,
 };
 TypeDescriptor *typeHashTable = &_typeHashTable;
 
@@ -1117,8 +1294,9 @@ TypeDescriptor *typeHashTable = &_typeHashTable;
 ///   type may be specified to avoid the unnecessary copy.  The real
 ///   typeHashTable type can then be set after the data is added.
 TypeDescriptor _typeHashTableNoCopy = {
-  .name          = "HashTableNoCopy",
+  .name          = "HashTable",
   .xmlName       = NULL,
+  .dataIsPointer = true,
   .toString      = (char* (*)(const volatile void*)) htToString,
   .toBytes       = (Bytes (*)(const volatile void*)) htToBytes,
   .compare       = (int (*)(const volatile void*, const volatile void*)) htCompare,
@@ -1126,10 +1304,12 @@ TypeDescriptor _typeHashTableNoCopy = {
   .copy          = (void* (*)(const volatile void*)) shallowCopy,
   .destroy       = (void* (*)(volatile void*)) nullFunction,
   .size          = htSize,
-  .toByteArray   = (void* (*)(const volatile void*, u64*)) listToByteArray,
-  .fromByteArray = (void* (*)(const volatile void*, u64*)) htFromByteArray,
+  .toBlob        = (Bytes (*)(const volatile void*)) listToBlob,
+  .fromBlob      = (void* (*)(const volatile void*, u64*, bool, bool)) htFromBlob_,
   .hashFunction  = NULL,
   .clear         = (i32 (*)(volatile void *)) listClear,
+  .toXml         = (Bytes (*)(const volatile void*, const char *elementName, bool indent, ...)) listToXml_,
+  .toJson        = (Bytes (*)(const volatile void*)) listToJson,
 };
 TypeDescriptor *typeHashTableNoCopy = &_typeHashTableNoCopy;
 
@@ -1146,7 +1326,7 @@ bool hashTableUnitTest() { \
   u64 hashValue = 0; \
   HashNode *node = NULL; \
   char *stringValue = NULL; \
-  void *byteArray = NULL; \
+  Bytes byteArray = NULL; \
   u64 length = 0; \
  \
   printLog(INFO, "Testing HashTable data structure.\n"); \
@@ -1157,9 +1337,9 @@ bool hashTableUnitTest() { \
     return false; \
   } \
  \
-  hashTable = htCreate(typeString, 1); \
+  hashTable = htCreate(typeString, false, 1); \
   if (hashTable == NULL) { \
-    printLog(ERR, "Expected valid pointer from htCreate(typeString, 1), got " \
+    printLog(ERR, "Expected valid pointer from htCreate(typeString, false, 1), got " \
       "NULL\n"); \
     return false; \
   } \
@@ -1336,50 +1516,41 @@ bool hashTableUnitTest() { \
   } \
   htDestroy(hashTable2); \
  \
-  byteArray = htToByteArray(NULL, NULL); \
+  byteArray = htToBlob(NULL); \
   if (byteArray != NULL) { \
-    printLog(ERR, "byteArray not NULL after htToByteArray(NULL, NULL)\n"); \
+    printLog(ERR, "byteArray not NULL after htToBlob(NULL)\n"); \
     return false; \
   } \
-  byteArray = htToByteArray(hashTable, NULL); \
-  if (byteArray != NULL) { \
-    printLog(ERR, "byteArray not NULL after htToByteArray(hashTable, NULL)\n"); \
-    return false; \
-  } \
-  byteArray = htToByteArray(NULL, &length); \
-  if (byteArray != NULL) { \
-    printLog(ERR, "byteArray not NULL after htToByteArray(NULL, &length)\n"); \
-    return false; \
-  } \
-  byteArray = htToByteArray(hashTable, &length); \
+  byteArray = htToBlob(hashTable); \
+  length = bytesLength(byteArray); \
   if (byteArray == NULL) { \
-    printLog(ERR, "byteArray NULL after htToByteArray(hashTable, &length)\n"); \
+    printLog(ERR, "byteArray NULL after htToBlob(hashTable)\n"); \
     return false; \
   } \
-  hashTable2 = htFromByteArray(NULL, NULL); \
+  hashTable2 = htFromBlob(NULL, NULL); \
   if (hashTable2 != NULL) { \
-    printLog(ERR, "hashTable2 not NULL after htFromByteArray(NULL, NULL)\n"); \
+    printLog(ERR, "hashTable2 not NULL after htFromBlob(NULL, NULL)\n"); \
     return false; \
   } \
-  hashTable2 = htFromByteArray(byteArray, NULL); \
+  hashTable2 = htFromBlob(byteArray, NULL); \
   if (hashTable2 != NULL) { \
-    printLog(ERR, "hashTable2 not NULL after htFromByteArray(byteArray, NULL)\n"); \
+    printLog(ERR, "hashTable2 not NULL after htFromBlob(byteArray, NULL)\n"); \
     return false; \
   } \
-  hashTable2 = htFromByteArray(NULL, &length); \
+  hashTable2 = htFromBlob(NULL, &length); \
   if (hashTable2 != NULL) { \
-    printLog(ERR, "hashTable2 not NULL after htFromByteArray(NULL, &length)\n"); \
+    printLog(ERR, "hashTable2 not NULL after htFromBlob(NULL, &length)\n"); \
     return false; \
   } \
-  hashTable2 = htFromByteArray(byteArray, &length); \
+  hashTable2 = htFromBlob(byteArray, &length); \
   if (hashTable2 == NULL) { \
-    printLog(ERR, "hashTable2 NULL after htFromByteArray(byteArray, &length)\n"); \
+    printLog(ERR, "hashTable2 NULL after htFromBlob(byteArray, &length)\n"); \
     return false; \
   } \
-  byteArray = pointerDestroy(byteArray); \
+  byteArray = bytesDestroy(byteArray); \
   if (htCompare(hashTable, hashTable2) != 0) { \
     char *hashTableString = NULL; \
-    printLog(ERR, "hashTable and hashTable2 are not equal after htFromByteArray.\n"); \
+    printLog(ERR, "hashTable and hashTable2 are not equal after htFromBlob.\n"); \
     hashTableString = htToString(hashTable); \
     printLog(ERR, "hashTable = %s\n", hashTableString); \
     hashTableString = stringDestroy(hashTableString); \
@@ -1398,7 +1569,7 @@ bool hashTableUnitTest() { \
    \
   htDestroy(hashTable); \
  \
-  hashTable = htCreate(typeI32, 2048); \
+  hashTable = htCreate(typeI32, false, 2048); \
   for (int i = 1; i < 100; i++) { \
     htAddEntry(hashTable, &i, &i); \
   } \
@@ -1577,6 +1748,150 @@ bool hashTableUnitTest() { \
   stringValue = htToString(hashTable); \
   printLog(INFO, "Table: %s\n", stringValue); \
   stringValue = stringDestroy(stringValue); \
+  hashTable = htDestroy(hashTable); \
+ \
+  const char *jsonString = "{\n" \
+    "  \"myHashTable1\": {\n" \
+    "    \"key1\": \"value1\",\n" \
+    "    \"key2\": \"value2\"\n" \
+    "  },\n" \
+    "  \"key3\": \"value3\",\n" \
+    "  \"myHashTable2\": {\n" \
+    "    \"key4\": \"value4\",\n" \
+    "    \"key5\": \"value5\",\n" \
+    "    \"key6\": \"value6\"\n" \
+    "  },\n" \
+    "  \"myHashTable3\": {\n" \
+    "    \"myHashTable4\": {\n" \
+    "      \"key7\": \"value7\",\n" \
+    "      \"key8\": \"value8\"\n" \
+    "    },\n" \
+    "    \"key9\": \"value9\"\n" \
+    "  }\n" \
+    "}"; \
+  long long int startPosition = 0; \
+  hashTable = jsonToHashTable(jsonString, &startPosition); \
+  if (hashTable == NULL) { \
+    printLog(ERR, "jsonToHashTable returned NULL.\n"); \
+    return false; \
+  } \
+  byteArray = htToBlob(hashTable); \
+  length = bytesLength(byteArray); \
+  hashTable = htDestroy(hashTable); \
+  hashTable = htFromBlob(byteArray, &length, true); \
+  stringValue = htToString(hashTable); \
+  printLog(INFO, "Table: %s\n", stringValue); \
+  stringValue = stringDestroy(stringValue); \
+  stringValue = (char*) htGetValue(hashTable, "key3"); \
+  if (stringValue == NULL) { \
+    printLog(ERR, "Value for key3 was NULL.\n"); \
+    return false; \
+  } else if (strcmp(stringValue, "value3") != 0) { \
+    printLog(ERR, "Expected \"value3\", got \"%s\".\n", stringValue); \
+    return false; \
+  } \
+  hashTable2 = (HashTable*) htGetValue(hashTable, "myHashTable1"); \
+  if (hashTable2 == NULL) { \
+    printLog(ERR, "Value for myHashTable1 was NULL.\n"); \
+    return false; \
+  } else if (htGetEntry(hashTable, "myHashTable1")->type != typeHashTable) { \
+    printLog(ERR, "Expected myHashTable1 to be \"%s\", found \"%s\".\n", \
+      typeHashTable->name, htGetEntry(hashTable, "myHashTable1")->type->name); \
+    return false; \
+  } \
+  stringValue = (char*) htGetValue(hashTable2, "key1"); \
+  if (stringValue == NULL) { \
+    printLog(ERR, "Value for key1 was NULL.\n"); \
+    return false; \
+  } else if (strcmp(stringValue, "value1") != 0) { \
+    printLog(ERR, "Expected \"value1\", got \"%s\".\n", stringValue); \
+    return false; \
+  } \
+  stringValue = (char*) htGetValue(hashTable2, "key2"); \
+  if (stringValue == NULL) { \
+    printLog(ERR, "Value for key2 was NULL.\n"); \
+    return false; \
+  } else if (strcmp(stringValue, "value2") != 0) { \
+    printLog(ERR, "Expected \"value2\", got \"%s\".\n", stringValue); \
+    return false; \
+  } \
+  stringValue = (char*) htGetValue(hashTable2, "key6"); \
+  hashTable2 = (HashTable*) htGetValue(hashTable, "myHashTable2"); \
+  if (hashTable2 == NULL) { \
+    printLog(ERR, "Value for myHashTable2 was NULL.\n"); \
+    return false; \
+  } else if (htGetEntry(hashTable, "myHashTable2")->type != typeHashTable) { \
+    printLog(ERR, "Expected myHashTable2 to be \"%s\", found \"%s\".\n", \
+      typeHashTable->name, htGetEntry(hashTable, "myHashTable2")->type->name); \
+    return false; \
+  } \
+  stringValue = (char*) htGetValue(hashTable2, "key4"); \
+  if (stringValue == NULL) { \
+    printLog(ERR, "Value for key4 was NULL.\n"); \
+    return false; \
+  } else if (strcmp(stringValue, "value4") != 0) { \
+    printLog(ERR, "Expected \"value4\", got \"%s\".\n", stringValue); \
+    return false; \
+  } \
+  stringValue = (char*) htGetValue(hashTable2, "key5"); \
+  if (stringValue == NULL) { \
+    printLog(ERR, "Value for key5 was NULL.\n"); \
+    return false; \
+  } else if (strcmp(stringValue, "value5") != 0) { \
+    printLog(ERR, "Expected \"value5\", got \"%s\".\n", stringValue); \
+    return false; \
+  } \
+  stringValue = (char*) htGetValue(hashTable2, "key6"); \
+  if (stringValue == NULL) { \
+    printLog(ERR, "Value for key6 was NULL.\n"); \
+    return false; \
+  } else if (strcmp(stringValue, "value6") != 0) { \
+    printLog(ERR, "Expected \"value6\", got \"%s\".\n", stringValue); \
+    return false; \
+  } \
+  hashTable2 = (HashTable*) htGetValue(hashTable, "myHashTable3"); \
+  if (hashTable2 == NULL) { \
+    printLog(ERR, "Value for myHashTable3 was NULL.\n"); \
+    return false; \
+  } else if (htGetEntry(hashTable, "myHashTable3")->type != typeHashTable) { \
+    printLog(ERR, "Expected myHashTable3 to be \"%s\", found \"%s\".\n", \
+      typeHashTable->name, htGetEntry(hashTable, "myHashTable3")->type->name); \
+    return false; \
+  } \
+  stringValue = (char*) htGetValue(hashTable2, "key9"); \
+  if (stringValue == NULL) { \
+    printLog(ERR, "Value for key9 was NULL.\n"); \
+    return false; \
+  } else if (strcmp(stringValue, "value9") != 0) { \
+    printLog(ERR, "Expected \"value9\", got \"%s\".\n", stringValue); \
+    return false; \
+  } \
+  if (htGetValue(hashTable2, "myHashTable4") == NULL) { \
+    printLog(ERR, "Value for myHashTable4 was NULL.\n"); \
+    return false; \
+  } else if (htGetEntry(hashTable2, "myHashTable4")->type != typeHashTable) { \
+    printLog(ERR, "Expected myHashTable4 to be \"%s\", found \"%s\".\n", \
+      typeHashTable->name, htGetEntry(hashTable, "myHashTable4")->type->name); \
+    return false; \
+  } \
+  hashTable2 = (HashTable*) htGetValue(hashTable2, "myHashTable4"); \
+  stringValue = (char*) htGetValue(hashTable2, "key7"); \
+  if (stringValue == NULL) { \
+    printLog(ERR, "Value for key7 was NULL.\n"); \
+    return false; \
+  } else if (strcmp(stringValue, "value7") != 0) { \
+    printLog(ERR, "Expected \"value7\", got \"%s\".\n", stringValue); \
+    return false; \
+  } \
+  stringValue = (char*) htGetValue(hashTable2, "key8"); \
+  if (stringValue == NULL) { \
+    printLog(ERR, "Value for key8 was NULL.\n"); \
+    return false; \
+  } else if (strcmp(stringValue, "value8") != 0) { \
+    printLog(ERR, "Expected \"value8\", got \"%s\".\n", stringValue); \
+    return false; \
+  } \
+  byteArray = bytesDestroy(byteArray); \
   hashTable = htDestroy(hashTable); \
  \
   return true; \

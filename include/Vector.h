@@ -9,7 +9,7 @@
 ///                    definitions make up the vector data structure.
 ///
 /// @copyright
-///                   Copyright (c) 2012-2023 James Card
+///                   Copyright (c) 2012-2024 James Card
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a
 /// copy of this software and associated documentation files (the "Software"),
@@ -48,25 +48,54 @@ extern "C"
 {
 #endif
 
-Vector *vectorCreate(TypeDescriptor *keyType);
-VectorNode *vectorSetEntry_(Vector *vector, u64 index, const volatile void *value, TypeDescriptor *type, ...);
+Vector *vectorCreate_(TypeDescriptor *keyType, TypeDescriptor *valueType,
+  bool disableThreadSafety, u64 size, ...);
+#define vectorCreate(valueType, ...) \
+  vectorCreate_(NULL, valueType, ##__VA_ARGS__, 0, 0)
+#define kvVectorCreate(keyType, ...) \
+  vectorCreate_(keyType, ##__VA_ARGS__, 0, 0, 0)
+VectorNode *kvVectorSetEntry_(Vector *vector, u64 index,
+  const volatile void *key, const volatile void *value, TypeDescriptor *type,
+  ...);
 #define vectorSetEntry(vector, index, value, ...) \
-  vectorSetEntry_(vector, index, value, ##__VA_ARGS__, NULL)
+  kvVectorSetEntry_(vector, index, NULL, value, ##__VA_ARGS__, NULL)
+#define kvVectorSetEntry(vector, index, key, value, ...) \
+  kvVectorSetEntry_(vector, index, key, value, ##__VA_ARGS__, NULL)
+#define kvVectorAddEntry(vector, key, value, ...) \
+  kvVectorSetEntry(vector, vector->size, key, value, ##__VA_ARGS__, NULL)
 VectorNode *vectorGetEntry(Vector *vector, u64 index);
+VectorNode* vectorFindPreviousAllocated(Vector *vector, u64 index);
+VectorNode* vectorFindNextAllocated(Vector *vector, u64 index);
 i32 vectorRemove(Vector *vector, u64 index);
 void* vectorGetValue(Vector *vector, u64 index);
+VectorNode* kvVectorGetEntry(Vector *vector, const volatile void *key);
+void* kvVectorGetValue(Vector *vector, const volatile void *key);
 Vector* vectorDestroy(Vector *vector);
+#define kvVectorDestroy vectorDestroy
 #define vectorToString(vector) listToString((List*) vector)
 #define vectorToList(vector) listCopy((List*) vector)
-char *vectorToXml(Vector *vector, const char *elementName);
+Bytes vectorToXml_(const Vector *vector, const char *elementName, bool indent, ...);
+#define vectorToXml(vector, elementName, ...) \
+  vectorToXml_(vector, elementName, ##__VA_ARGS__, false)
 int vectorCompare(Vector *vectorA, Vector *vectorB);
 Vector *vectorCopy(Vector *vector);
+// ASCENDING and DESCENDING are defined in both Vector.h and Array.h, so take
+// care not to define them twice and make the compiler complain.
+#ifndef ASCENDING
 #define ASCENDING (1)
+#endif // ASCENDING
+#ifndef DESCENDING
 #define DESCENDING (-1)
-VectorNode **vectorSort(Vector *vector, i32 order);
+#endif // DESCENDING
+void* vectorSort(Vector *vector, i32 order, bool sortValues);
+#define vectorToBlob(vector) listToBlob((List*) vector)
 Bytes vectorToJson(const Vector *vector);
 Vector* jsonToVector(const char *jsonText, long long int *position);
+Vector* jsonToKvVector(const char *jsonText, long long int *position);
 VectorNode* vectorGetIndex(Vector *vector, char *index);
+Vector* vectorFromBlob_(const volatile void *array, u64 *length, bool inPlaceData, bool disableThreadSafety, ...);
+#define vectorFromBlob(array, length, ...) \
+  vectorFromBlob_(array, length, ##__VA_ARGS__, 0, 0)
 bool vectorUnitTest();
 
 #ifdef __cplusplus
