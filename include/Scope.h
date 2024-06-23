@@ -73,9 +73,9 @@ void scopePop_(Scope *scope, u64 numEntries);
   scopePop_(&_scope_, (numEntries))
 #define scopePopAll() \
   scopePop_(&_scope_, _scope_.numVars)
-void* scopeRelease_(Scope *scope, volatile void *pointer);
-#define scopeRelease(pointer) \
-  scopeRelease_(&_scope_, pointer)
+void* scopeDestroy_(Scope *scope, volatile void *pointer);
+#define scopeDestroy(pointer) \
+  scopeDestroy_(&_scope_, pointer)
 void* scopeUpdate_(Scope *scope, volatile void *oldPointer, volatile void *newPointer);
 #define scopeUpdate(oldPointer, newPointer) \
   { \

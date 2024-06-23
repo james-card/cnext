@@ -167,7 +167,7 @@ void scopePop_(Scope *scope, u64 numEntries) {
   return;
 }
 
-/// @fn void scopeRelease_(Scope *scope, volatile void *pointer)
+/// @fn void scopeDestroy_(Scope *scope, volatile void *pointer)
 ///
 /// @brief Remove and destroy an arbitrary entry from a Scope object.
 ///
@@ -176,12 +176,12 @@ void scopePop_(Scope *scope, u64 numEntries) {
 ///   Scope object.
 ///
 /// @return Returns NULL on success, the original pointer value on failure.
-void* scopeRelease_(Scope *scope, volatile void *pointer) {
-  printLog(TRACE, "ENTER scopeRelease(scope=%p, pointer=%p)\n", scope, pointer);
+void* scopeDestroy_(Scope *scope, volatile void *pointer) {
+  printLog(TRACE, "ENTER scopeDestroy(scope=%p, pointer=%p)\n", scope, pointer);
   
   if ((scope == NULL) || (pointer == NULL)) {
     printLog(ERR, "One or more NULL parameters.\n");
-    printLog(TRACE, "EXIT scopeRelease(scope=%p, pointer=%p) = {%p}\n",
+    printLog(TRACE, "EXIT scopeDestroy(scope=%p, pointer=%p) = {%p}\n",
       scope, pointer, pointer);
     return (void*) pointer;
   }
@@ -198,7 +198,7 @@ void* scopeRelease_(Scope *scope, volatile void *pointer) {
   if (index == numVars) {
     // Someone is trying to remove an entry that's not tracked by this object.
     printLog(ERR, "Removal of untracked pointer attempted.\n");
-    printLog(TRACE, "EXIT scopeRelease(scope=%p, pointer=%p) = {%p}\n",
+    printLog(TRACE, "EXIT scopeDestroy(scope=%p, pointer=%p) = {%p}\n",
       scope, pointer, pointer);
     return (void*) pointer;
   }
@@ -216,7 +216,7 @@ void* scopeRelease_(Scope *scope, volatile void *pointer) {
   }
   scope->numVars = numVars;
   
-  printLog(TRACE, "EXIT scopeRelease(scope=%p, pointer=%p) = {NULL}\n",
+  printLog(TRACE, "EXIT scopeDestroy(scope=%p, pointer=%p) = {NULL}\n",
     scope, pointer);
   return (void*) pointer;
 }
@@ -340,8 +340,8 @@ bool scopeUnitTest() {
     return returnValue;
   }
   
-  if (scopeRelease(myString) != NULL) {
-    printLog(ERR, "scopeRelease(myString) returned non-NULL.\n");
+  if (scopeDestroy(myString) != NULL) {
+    printLog(ERR, "scopeDestroy(myString) returned non-NULL.\n");
     returnValue = false;
     SCOPE_EXIT("", "%s", (returnValue == true) ? "true" : "false");
     return returnValue;
