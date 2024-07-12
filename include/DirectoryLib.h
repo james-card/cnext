@@ -413,8 +413,20 @@ void dirent_set_errno(int error);
 
 #endif // _WIN32
 
+typedef enum DirectoryEntryType {
+  ENTRY_TYPE_FILE,
+  ENTRY_TYPE_DIRECTORY,
+  NUM_ENTRY_TYPES
+} DirectoryEntryType;
+
 int mkpath(const char *path, int mode);
 int rmdirRecursive(const char *directory);
+char** destroyDirectoryEntries(char **directoryArray);
+char** getDirectoryEntries(const char *path);
+char **selectDirectoryEntries(const char *path, const char **directoryEntries,
+  DirectoryEntryType entryType);
+char** getDirectoryFiles(const char *path);
+char** getDirectoryDirectories(const char *path);
 
 #ifdef __cplusplus
 }

@@ -31,6 +31,8 @@
 #ifndef _MSC_VER
 
 #include "PosixProcesses.h"
+#include "DirectoryLib.h"
+#include "StringLib.h"
 #include <string.h>
 #include <errno.h>
 #include <sys/types.h>
@@ -597,6 +599,65 @@ Process* closeProcess(Process *process) {
   return NULL;
 }
 
+/// @fn int killProcessTree(uint32_t processId)
+///
+/// @brief Recursively kill a process and all it's child processes.
+///
+/// @note This is a *LINUX* implementation, not a *POSIX* implementation.
+/// Interacting with the process tree is OS-specific.  There is no POSIX
+/// standard way to do this.  I'll need to add in support for other systems
+/// in the future.
+/// JBC 2024-07-07
+///
+/// @param processId The 32-bit ID of the process to foribly kill.
+///
+/// @return Returns the exit status of the process.
+int killProcessTree(uint32_t processId) {
+  char path[256];
+  sprintf(path, "/proc/%u/task", processId);
+  
+  // Collect infomration about all the children.
+  Bytes childrenBytes = NULL;
+  char **directories = getDirectoryDirectories(path);
+  if (directories != NULL) {
+    for (uint32_t ii = 0; directories[ii] != NULL; ii++) {
+      sprintf(path, "/proc/%u/task/%s/children", processId, directories[ii]);
+      Bytes fileContent = NULL;
+      for (
+        i64 length = 4096;
+        (bytesLength(fileContent) == 0) && (length > 0);
+        length >>= 1
+      ) {
+        fileContent = bytesDestroy(fileContent);
+        fileContent = getFileContent(path, 0, length);
+      }
+      bytesAddBytes(&childrenBytes, fileContent);
+      bytesAddStr(&childrenBytes, " ");
+      fileContent = bytesDestroy(fileContent);
+    }
+    directories = destroyDirectoryEntries(directories);
+  }
+  
+  // Recursively kill all the children.
+  char *nextPid = (childrenBytes == NULL)
+    ? (char*) ""
+    : (char*) &childrenBytes[strcspn(str(childrenBytes), "0123456789")];
+  while (*nextPid != '\0') {
+    uint32_t childPid = (uint32_t) strtol(nextPid, &nextPid, 10);
+    killProcessTree(childPid);
+    nextPid = &nextPid[strcspn(nextPid, "0123456789")];
+  }
+  childrenBytes = bytesDestroy(childrenBytes);
+  
+  // Finally, kill the root process.  Forcibly kill it.
+  int processStatus;
+  kill(processId, SIGKILL);
+  // Collect the zombie.
+  waitpid(processId, &processStatus, 0);
+  
+  return processStatus;
+}
+
 /// @fn int stopProcess(Process *process)
 ///
 /// @brief Halt a process's execution.
@@ -605,30 +666,8 @@ Process* closeProcess(Process *process) {
 ///
 /// @return This function always succeeds and always returns 0.
 int stopProcess(Process *process) {
-  // Attempt to gracefully halt the process.
-  kill(process->processId, SIGTERM);
-  
-  // Do a tight loop until the process exits or two seconds goes by, whichever
-  // comes first.
-  struct timespec now;
-  timespec_get(&now, TIME_UTC);
-  uint64_t startTime
-    = (((uint64_t) now.tv_sec) * 1000000000) + ((uint64_t) now.tv_nsec);
-  uint64_t timeDelta = 0;
-  while ((timeDelta < 2000000000) && (!processHasExited(process))) {
-    timespec_get(&now, TIME_UTC);
-    timeDelta
-      = ((((uint64_t) now.tv_sec) * 1000000000) + ((uint64_t) now.tv_nsec))
-      - startTime;
-  }
-  
-  if (!processHasExited(process)) {
-    // Forcibly kill the process.
-    kill(process->processId, SIGKILL);
-    // Collect the zombie.
-    waitpid(process->processId, &process->processStatus, 0);
-    process->killed = true;
-  }
+  process->processStatus = killProcessTree(process->processId);
+  process->killed = true;
   
   return 0;
 }

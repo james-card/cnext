@@ -1279,7 +1279,7 @@ int coconditionInit(Cocondition* cond) {
 int coconditionSignal(Cocondition *cond) {
   int returnValue = coroutineSuccess;
 
-  if (cond != NULL) {
+  if ((cond != NULL) && (cond->numWaiters > 0)) {
     cond->numSignals++;
   } else {
     returnValue = coroutineError;

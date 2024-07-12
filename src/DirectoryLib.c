@@ -825,3 +825,197 @@ int rmdirRecursive(const char *directory) {
   return returnValue;
 }
 
+/// @fn char** destroyDirectoryEntries(char **directoryEntries)
+///
+/// @brief Destroy a previously-allocated array of directory entries.
+///
+/// @param directoryEntries The array previously allocated.
+///
+/// @return This function always returns NULL.
+char** destroyDirectoryEntries(char **directoryEntries) {
+  if (directoryEntries == NULL) {
+    // Nothing to do.
+    return NULL;
+  }
+  
+  for (uint64_t ii = 0; directoryEntries[ii] != NULL; ii++) {
+    directoryEntries[ii] = stringDestroy(directoryEntries[ii]);
+  }
+  
+  directoryEntries = (char**) pointerDestroy(directoryEntries);
+  return directoryEntries;
+}
+
+/// @fn char** getDirectoryEntries(const char *path)
+///
+/// @brief Get the entries (file names and directory names) in a specified
+/// directrory, excluding "." and ".." which are part of every directory.
+///
+/// @param path The full path to the directory.  Trailing '/' is optional.
+///
+/// @return Returns a NULL-terminated array of entries on success, NULL on
+/// failure.
+char** getDirectoryEntries(const char *path) {
+  if ((path == NULL) || (*path == '\0')) {
+    printLog(ERR, "NULL or empty path provided.\n");
+    return NULL;
+  }
+  
+  DIR *dir = NULL;
+  struct dirent *entry = NULL;
+  
+  char *pathName = NULL;
+  straddstr(&pathName, path);
+  if (pathName[strlen(pathName) - 1] != '/') {
+    straddstr(&pathName, "/");
+  }
+  
+  dir = opendir(pathName);
+  if (dir == NULL) {
+    // Cannot open the path.  Error.
+    printLog(ERR, "Cannot open path \"%s\".\n", pathName);
+    printLog(ERR, "%s\n", strerror(errno));
+    pathName = stringDestroy(pathName);
+    return NULL;
+  }
+  
+  uint64_t numEntries = 0;
+  char **returnValue = (char**) calloc(1, sizeof(char*));
+  entry = readdir(dir);
+  while (entry != NULL) {
+    char *entryName = entry->d_name;
+    if ((strcmp(entryName, "..") == 0) || (strcmp(entryName, ".") == 0)) {
+      // AVOID THESE AT ALL COSTS!  RECURSING INTO THEM WILL DESTROY US!!!
+      entry = readdir(dir);
+      continue;
+    }
+    numEntries++;
+    
+    void *check = realloc(returnValue, (numEntries + 1) * sizeof(char*));
+    if (check == NULL) {
+      LOG_MALLOC_FAILURE();
+      returnValue = destroyDirectoryEntries(returnValue);
+      return NULL;
+    }
+    returnValue = (char**) check;
+    
+    returnValue[numEntries] = NULL;
+    // returnValue[numEntries - 1] is already NULL.
+    straddstr(&returnValue[numEntries - 1], entryName);
+    
+    entry = readdir(dir);
+  }
+  closedir(dir); dir = NULL;
+  
+  pathName = stringDestroy(pathName);
+  return returnValue;
+}
+
+/// @fn char **selectDirectoryEntries(const char *path, const char **directoryEntries, DirectoryEntryType entryType)
+///
+/// @brief Select only the directory entries that are interesting.
+///
+/// @param path The full path to the directory.
+/// @param directoryEntries The previously-collected list of entries in the
+///   directory.
+/// @param entryType A DirectoryEntryType value indicating the kind of entry
+///   of interest.  Only entries of this type will be returned.
+char **selectDirectoryEntries(const char *path, const char **directoryEntries,
+  DirectoryEntryType entryType
+) {
+  if ((path == NULL) || (*path == '\0')) {
+    printLog(ERR, "NULL or empty path provided.\n");
+    return NULL;
+  } else if (directoryEntries == NULL) {
+    printLog(ERR, "NULL directoryEntries provided.\n");
+    return NULL;
+  }
+  
+  char *pathName = NULL;
+  straddstr(&pathName, path);
+  if (pathName[strlen(pathName) - 1] != '/') {
+    straddstr(&pathName, "/");
+  }
+  
+  uint64_t numEntries = 0;
+  char **returnValue = (char**) calloc(1, sizeof(char*));
+  
+  for (uint64_t ii = 0; directoryEntries[ii] != NULL; ii++) {
+    const char *entryName = directoryEntries[ii];
+    char *fullPath = NULL;
+    straddstr(&fullPath, pathName);
+    straddstr(&fullPath, entryName);
+    DIR *tryDir = opendir(fullPath);
+    if (tryDir != NULL) {
+      // Entry is a directory.  See if the user wants it.
+      closedir(tryDir);
+      if (entryType == ENTRY_TYPE_DIRECTORY) {
+        numEntries++;
+        void *check = realloc(returnValue, (numEntries + 1) * sizeof(char*));
+        if (check == NULL) {
+          LOG_MALLOC_FAILURE();
+          returnValue = destroyDirectoryEntries(returnValue);
+          return NULL;
+        }
+        returnValue = (char**) check;
+        
+        returnValue[numEntries] = NULL;
+        // returnValue[numEntries - 1] is already NULL.
+        straddstr(&returnValue[numEntries - 1], entryName);
+      } // else the user is not interested in this entry
+    } else if (entryType == ENTRY_TYPE_FILE) {
+      // Entry is a file and the user wants it.
+      numEntries++;
+      void *check = realloc(returnValue, (numEntries + 1) * sizeof(char*));
+      if (check == NULL) {
+        LOG_MALLOC_FAILURE();
+        returnValue = destroyDirectoryEntries(returnValue);
+        return NULL;
+      }
+      returnValue = (char**) check;
+      
+      returnValue[numEntries] = NULL;
+      // returnValue[numEntries - 1] is already NULL.
+      straddstr(&returnValue[numEntries - 1], entryName);
+    } // else the user is not interested in this entry.
+    
+    fullPath = stringDestroy(fullPath);
+  }
+  
+  pathName = stringDestroy(pathName);
+  return returnValue;
+}
+
+/// @fn char** getDirectoryFiles(const char *path)
+///
+/// @brief Get the only the files in a directory.
+///
+/// @param path The full path to the directory.  Trailing '/' is optional.
+///
+/// @return Returns a NULL-terminated array of entries on success, NULL on
+/// failure.
+char** getDirectoryFiles(const char *path) {
+  char **entries = getDirectoryEntries(path);
+  char **returnValue = selectDirectoryEntries(path, (const char**) entries, ENTRY_TYPE_FILE);
+  entries = destroyDirectoryEntries(entries);
+  
+  return returnValue;
+}
+
+/// @fn char** getDirectoryDirectories(const char *path)
+///
+/// @brief Get the only the directories in a directory.
+///
+/// @param path The full path to the directory.  Trailing '/' is optional.
+///
+/// @return Returns a NULL-terminated array of entries on success, NULL on
+/// failure.
+char** getDirectoryDirectories(const char *path) {
+  char **entries = getDirectoryEntries(path);
+  char **returnValue
+    = selectDirectoryEntries(path, (const char**) entries, ENTRY_TYPE_DIRECTORY);
+  entries = destroyDirectoryEntries(entries);
+  
+  return returnValue;
+}
+

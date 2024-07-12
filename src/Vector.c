@@ -546,7 +546,7 @@ void* vectorGetValue(Vector *vector, u64 index) {
 VectorNode* kvVectorGetEntry(Vector *vector, const volatile void *key) {
   SCOPE_ENTER("vector=%p, key=%p", vector, key);
   
-  VectorNode *returnValue = (VectorNode*) listGet((List*) vector, key);
+  VectorNode *returnValue = (VectorNode*) listGetForward((List*) vector, key);
   
   SCOPE_EXIT("vector=%p, key=%p", "%p", vector, key, returnValue);
   return returnValue;
@@ -566,7 +566,7 @@ void* kvVectorGetValue(Vector *vector, const volatile void *key) {
   SCOPE_ENTER("vector=%p, key=%p", vector, key);
   
   void *returnValue = NULL;
-  VectorNode *node = (VectorNode*) listGet((List*) vector, key);
+  VectorNode *node = (VectorNode*) listGetForward((List*) vector, key);
   if (node != NULL) {
     returnValue = (void*) node->value;
   }

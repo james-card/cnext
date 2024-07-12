@@ -413,22 +413,22 @@ ListNode *listGetBack(const List *list) {
   return returnValue;
 }
 
-/// @fn ListNode *listGet(const List *list, const volatile void *key)
+/// @fn ListNode *listGetForward(const List *list, const volatile void *key)
 ///
-/// @brief Get the ListNode at the specified key.
-///   The list is not modified.
+/// @brief Get the ListNode at the specified key starting from the head node.
+/// The list is not modified.
 ///
 /// @param list is the list to get the back ListNode from.
 /// @param key is the key of the node of interest to get.
 ///
 /// @return Returns a pointer to the found list node on success,
 ///   NULL on failure.
-ListNode *listGet(const List *list, const volatile void *key) {
-  printLog(TRACE, "ENTER listGet(list=%p, key=%p)\n", list, key);
+ListNode *listGetForward(const List *list, const volatile void *key) {
+  printLog(TRACE, "ENTER listGetForward(list=%p, key=%p)\n", list, key);
   
   if (list == NULL) {
     // Can't use NULL list.
-    printLog(TRACE, "EXIT listGet(list=%p, key=%p) = {%p}\n",
+    printLog(TRACE, "EXIT listGetForward(list=%p, key=%p) = {%p}\n",
       list, key, (void*) NULL);
     return NULL;
   }
@@ -448,7 +448,46 @@ ListNode *listGet(const List *list, const volatile void *key) {
     mtx_unlock(list->lock);
   }
   
-  printLog(TRACE, "EXIT listGet(list=%p, key=%p) = {%p}\n", list, key, node);
+  printLog(TRACE, "EXIT listGetForward(list=%p, key=%p) = {%p}\n", list, key, node);
+  return node;
+}
+
+/// @fn ListNode *listGetReverse(const List *list, const volatile void *key)
+///
+/// @brief Get the ListNode at the specified key starting from the head node.
+/// The list is not modified.
+///
+/// @param list is the list to get the back ListNode from.
+/// @param key is the key of the node of interest to get.
+///
+/// @return Returns a pointer to the found list node on success,
+///   NULL on failure.
+ListNode *listGetReverse(const List *list, const volatile void *key) {
+  printLog(TRACE, "ENTER listGetReverse(list=%p, key=%p)\n", list, key);
+  
+  if (list == NULL) {
+    // Can't use NULL list.
+    printLog(TRACE, "EXIT listGetReverse(list=%p, key=%p) = {%p}\n",
+      list, key, (void*) NULL);
+    return NULL;
+  }
+  
+  if ((list->lock != NULL) && (mtx_lock(list->lock) != thrd_success)) {
+    printLog(WARN, "Could not lock list mutex.\n");
+  }
+  
+  ListNode *node = NULL;
+  for (node = list->tail; node != NULL; node = node->prev) {
+    if (list->keyType->compare(node->key, key) == 0) {
+      break;
+    }
+  }
+  
+  if (list->lock != NULL) {
+    mtx_unlock(list->lock);
+  }
+  
+  printLog(TRACE, "EXIT listGetReverse(list=%p, key=%p) = {%p}\n", list, key, node);
   return node;
 }
 
@@ -1965,9 +2004,15 @@ bool listTestCases(List *list) { \
   } \
  \
   printLog(INFO, "Getting NULL key of %s list.\n", (list == NULL) ? "NULL" : "empty"); \
-  node = listGet(list, NULL); \
+  node = listGetForward(list, NULL); \
   if (node != NULL) { \
-    printLog(ERR, "Expected NULL from listGet.\n"); \
+    printLog(ERR, "Expected NULL from listGetForward.\n"); \
+    printLog(ERR, "Got %p.\n", node); \
+    return false; \
+  } \
+  node = listGetReverse(list, NULL); \
+  if (node != NULL) { \
+    printLog(ERR, "Expected NULL from listGetReverse.\n"); \
     printLog(ERR, "Got %p.\n", node); \
     return false; \
   } \
@@ -2082,27 +2127,52 @@ bool listTestCases(List *list) { \
   } \
   list2 = (List*) listDestroy(list2); \
  \
-  node = listGet(list, "key1"); \
+  node = listGetForward(list, "key1"); \
   if ((list != NULL) && (node == NULL)) { \
     printLog(ERR, "Could not get key1 from list.\n"); \
     return false; \
   } \
-  node = listGet(list, "key2"); \
+  node = listGetForward(list, "key2"); \
   if ((list != NULL) && (node == NULL)) { \
     printLog(ERR, "Could not get key2 from list.\n"); \
     return false; \
   } \
-  node = listGet(list, "key3"); \
+  node = listGetForward(list, "key3"); \
   if ((list != NULL) && (node == NULL)) { \
     printLog(ERR, "Could not get key3 from list.\n"); \
     return false; \
   } \
-  node = listGet(list, "key4"); \
+  node = listGetForward(list, "key4"); \
   if ((list != NULL) && (node == NULL)) { \
     printLog(ERR, "Could not get key4 from list.\n"); \
     return false; \
   } \
-  node = listGet(list, "key5"); \
+  node = listGetForward(list, "key5"); \
+  if (node != NULL) { \
+    printLog(ERR, "Got key5 from list.\n"); \
+    return false; \
+  } \
+  node = listGetReverse(list, "key1"); \
+  if ((list != NULL) && (node == NULL)) { \
+    printLog(ERR, "Could not get key1 from list.\n"); \
+    return false; \
+  } \
+  node = listGetReverse(list, "key2"); \
+  if ((list != NULL) && (node == NULL)) { \
+    printLog(ERR, "Could not get key2 from list.\n"); \
+    return false; \
+  } \
+  node = listGetReverse(list, "key3"); \
+  if ((list != NULL) && (node == NULL)) { \
+    printLog(ERR, "Could not get key3 from list.\n"); \
+    return false; \
+  } \
+  node = listGetReverse(list, "key4"); \
+  if ((list != NULL) && (node == NULL)) { \
+    printLog(ERR, "Could not get key4 from list.\n"); \
+    return false; \
+  } \
+  node = listGetReverse(list, "key5"); \
   if (node != NULL) { \
     printLog(ERR, "Got key5 from list.\n"); \
     return false; \
@@ -2171,7 +2241,7 @@ bool listUnitTest() { \
     return false; \
   } \
   printLog(INFO, "Getting myList1 from parsed list.\n"); \
-  ListNode *node = listGet(list, "myList1"); \
+  ListNode *node = listGetForward(list, "myList1"); \
   if (node == NULL) { \
     printLog(ERR, "myList1 did not appear in parsed list.\n"); \
     return false; \
@@ -2182,17 +2252,17 @@ bool listUnitTest() { \
     return false; \
   } \
   printLog(INFO, "Getting key1 from myList1.\n"); \
-  if (listGet((List*) node->value, "key1") == NULL) { \
+  if (listGetForward((List*) node->value, "key1") == NULL) { \
     printLog(ERR, "key1 did not appear in myList1.\n"); \
     return false; \
   } \
   printLog(INFO, "Getting key2 from myList1.\n"); \
-  if (listGet((List*) node->value, "key2") == NULL) { \
+  if (listGetForward((List*) node->value, "key2") == NULL) { \
     printLog(ERR, "key2 did not appear in myList1.\n"); \
     return false; \
   } \
   printLog(INFO, "Getting key3 from parsed list.\n"); \
-  node = listGet(list, "key3"); \
+  node = listGetForward(list, "key3"); \
   if (node == NULL) { \
     printLog(ERR, "key3 did not appear in parsed list.\n"); \
     return false; \
@@ -2203,7 +2273,7 @@ bool listUnitTest() { \
     return false; \
   } \
   printLog(INFO, "Getting myList2 from parsed list.\n"); \
-  node = listGet(list, "myList2"); \
+  node = listGetForward(list, "myList2"); \
   if (node == NULL) { \
     printLog(ERR, "myList2 did not appear in parsed list.\n"); \
     return false; \
@@ -2214,22 +2284,22 @@ bool listUnitTest() { \
     return false; \
   } \
   printLog(INFO, "Getting key4 from myList2.\n"); \
-  if (listGet((List*) node->value, "key4") == NULL) { \
+  if (listGetForward((List*) node->value, "key4") == NULL) { \
     printLog(ERR, "key4 did not appear in myList2.\n"); \
     return false; \
   } \
   printLog(INFO, "Getting key5 from myList2.\n"); \
-  if (listGet((List*) node->value, "key5") == NULL) { \
+  if (listGetForward((List*) node->value, "key5") == NULL) { \
     printLog(ERR, "key5 did not appear in myList2.\n"); \
     return false; \
   } \
   printLog(INFO, "Getting key6 from myList2.\n"); \
-  if (listGet((List*) node->value, "key6") == NULL) { \
+  if (listGetForward((List*) node->value, "key6") == NULL) { \
     printLog(ERR, "key6 did not appear in myList2.\n"); \
     return false; \
   } \
   printLog(INFO, "Getting myList3 from parsed list.\n"); \
-  node = listGet(list, "myList3"); \
+  node = listGetForward(list, "myList3"); \
   if (node == NULL) { \
     printLog(ERR, "myList3 did not appear in parsed list.\n"); \
     return false; \
@@ -2240,12 +2310,12 @@ bool listUnitTest() { \
     return false; \
   } \
   printLog(INFO, "Getting key9 from myList3.\n"); \
-  if (listGet((List*) node->value, "key9") == NULL) { \
+  if (listGetForward((List*) node->value, "key9") == NULL) { \
     printLog(ERR, "key9 did not appear in myList3.\n"); \
     return false; \
   } \
   printLog(INFO, "Getting myList4 from myList3.\n"); \
-  node = listGet((List*) node->value, "myList4"); \
+  node = listGetForward((List*) node->value, "myList4"); \
   printLog(INFO, "node = %p\n", node); \
   if (node == NULL) { \
     printLog(ERR, "myList4 did not appear in myList3.\n"); \
@@ -2259,12 +2329,111 @@ bool listUnitTest() { \
     return false; \
   } \
   printLog(INFO, "Getting key7 from myList4.\n"); \
-  if (listGet((List*) node->value, "key7") == NULL) { \
+  if (listGetForward((List*) node->value, "key7") == NULL) { \
     printLog(ERR, "key7 did not appear in myList4.\n"); \
     return false; \
   } \
   printLog(INFO, "Getting key8 from myList4.\n"); \
-  if (listGet((List*) node->value, "key8") == NULL) { \
+  if (listGetForward((List*) node->value, "key8") == NULL) { \
+    printLog(ERR, "key8 did not appear in myList4.\n"); \
+    return false; \
+  } \
+ \
+  printLog(INFO, "Getting myList1 from parsed list.\n"); \
+  node = listGetReverse(list, "myList1"); \
+  if (node == NULL) { \
+    printLog(ERR, "myList1 did not appear in parsed list.\n"); \
+    return false; \
+  } \
+  if (node->type != typeList) { \
+    printLog(ERR, "myList1 was of type %lld instead of typeList.\n", \
+      lld(getIndexFromTypeDescriptor(node->type))); \
+    return false; \
+  } \
+  printLog(INFO, "Getting key1 from myList1.\n"); \
+  if (listGetReverse((List*) node->value, "key1") == NULL) { \
+    printLog(ERR, "key1 did not appear in myList1.\n"); \
+    return false; \
+  } \
+  printLog(INFO, "Getting key2 from myList1.\n"); \
+  if (listGetReverse((List*) node->value, "key2") == NULL) { \
+    printLog(ERR, "key2 did not appear in myList1.\n"); \
+    return false; \
+  } \
+  printLog(INFO, "Getting key3 from parsed list.\n"); \
+  node = listGetReverse(list, "key3"); \
+  if (node == NULL) { \
+    printLog(ERR, "key3 did not appear in parsed list.\n"); \
+    return false; \
+  } \
+  if (strcmp("value3", (char*) node->value) != 0) { \
+    printLog(ERR, "Expected value of key3 to be value3, got \"%s\".\n", \
+      (char*) node->value); \
+    return false; \
+  } \
+  printLog(INFO, "Getting myList2 from parsed list.\n"); \
+  node = listGetReverse(list, "myList2"); \
+  if (node == NULL) { \
+    printLog(ERR, "myList2 did not appear in parsed list.\n"); \
+    return false; \
+  } \
+  if (node->type != typeList) { \
+    printLog(ERR, "myList2 was of type %lld instead of typeList.\n", \
+      lld(getIndexFromTypeDescriptor(node->type))); \
+    return false; \
+  } \
+  printLog(INFO, "Getting key4 from myList2.\n"); \
+  if (listGetReverse((List*) node->value, "key4") == NULL) { \
+    printLog(ERR, "key4 did not appear in myList2.\n"); \
+    return false; \
+  } \
+  printLog(INFO, "Getting key5 from myList2.\n"); \
+  if (listGetReverse((List*) node->value, "key5") == NULL) { \
+    printLog(ERR, "key5 did not appear in myList2.\n"); \
+    return false; \
+  } \
+  printLog(INFO, "Getting key6 from myList2.\n"); \
+  if (listGetReverse((List*) node->value, "key6") == NULL) { \
+    printLog(ERR, "key6 did not appear in myList2.\n"); \
+    return false; \
+  } \
+  printLog(INFO, "Getting myList3 from parsed list.\n"); \
+  node = listGetReverse(list, "myList3"); \
+  if (node == NULL) { \
+    printLog(ERR, "myList3 did not appear in parsed list.\n"); \
+    return false; \
+  } \
+  if (node->type != typeList) { \
+    printLog(ERR, "myList3 was of type %lld instead of typeList.\n", \
+      lld(getIndexFromTypeDescriptor(node->type))); \
+    return false; \
+  } \
+  printLog(INFO, "Getting key9 from myList3.\n"); \
+  if (listGetReverse((List*) node->value, "key9") == NULL) { \
+    printLog(ERR, "key9 did not appear in myList3.\n"); \
+    return false; \
+  } \
+  printLog(INFO, "Getting myList4 from myList3.\n"); \
+  node = listGetReverse((List*) node->value, "myList4"); \
+  printLog(INFO, "node = %p\n", node); \
+  if (node == NULL) { \
+    printLog(ERR, "myList4 did not appear in myList3.\n"); \
+    return false; \
+  } \
+  printLog(INFO, "node->type = %p\n", node->type); \
+  if (node->type != typeList) { \
+    printLog(ERR, "myList4 type was wrong.\n"); \
+    printLog(ERR, "myList4 was of type %lld instead of typeList.\n", \
+      lld(getIndexFromTypeDescriptor(node->type))); \
+    return false; \
+  } \
+  printLog(INFO, "Getting key7 from myList4.\n"); \
+  if (listGetReverse((List*) node->value, "key7") == NULL) { \
+    printLog(ERR, "key7 did not appear in myList4.\n"); \
+    return false; \
+  } \
+  printLog(INFO, "Getting key8 from myList4.\n"); \
+  if (listGetReverse((List*) node->value, "key8") == NULL) { \
     printLog(ERR, "key8 did not appear in myList4.\n"); \
     return false; \
   } \
