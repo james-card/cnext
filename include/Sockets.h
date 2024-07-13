@@ -46,6 +46,8 @@
 #include <stdbool.h>
 #include <signal.h>
 
+#include "StringLib.h"
+
 #ifdef TLS_SOCKETS_ENABLED
 #include <openssl/ssl.h>
 #include <openssl/err.h>
@@ -60,8 +62,6 @@
 #include <windows.h>
 #include <ws2tcpip.h>
 #include <iphlpapi.h>
-
-#include "StringLib.h"
 
 /// @def rawSocketClose
 ///
