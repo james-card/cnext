@@ -45,7 +45,6 @@
 #define loggingStop() {}
 #define LOG_MALLOC_FAILURE() {}
 #define logFile stderr
-static bool exitNow = false;
 #endif
 
 /// @var _internalSeed
