@@ -39,6 +39,9 @@
 #ifndef GCC_2_7_COMPAT_LIB_H
 #define GCC_2_7_COMPAT_LIB_H
 
+#undef _GNU_SOURCE
+#define _GNU_SOURCE
+
 // Standard C includes.
 #include <stdio.h>
 
