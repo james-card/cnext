@@ -4,3 +4,6 @@ CC          := gcc -m32 -march=i686 -mtune=i686
 CXX         := gcc -m32 -march=i686 -mtune=i686
 
 include include.mk
+
+clean:
+	$(REMOVE) $(OBJ_DIR)

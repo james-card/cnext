@@ -4,3 +4,6 @@ CC          := gcc
 CXX         := g++
 
 include include.mk
+
+clean:
+	$(REMOVE) $(OBJ_DIR)

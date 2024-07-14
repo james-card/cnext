@@ -48,3 +48,5 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(INCLUDE_DIR)/%.h $(MAKEFILE) include.mk
 	$(MKDIR) $(OBJ_DIR)
 	$(CXX) $(FLAGS) $(INCLUDES) $(DEFINES) $(WARNINGS) -c $< -o $@
 
+cleanall:
+	$(REMOVE) $(BUILD_DIR)
