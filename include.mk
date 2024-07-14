@@ -42,7 +42,7 @@ WARNINGS := \
     -Werror \
 
 all: $(OBJ_FILES)
-	$(ARCHIVE) $(OBJ_DIR)/cnext.a $(OBJ_FILES)
+	$(ARCHIVE) $(OBJ_DIR)/Cnext.a $(OBJ_FILES)
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(INCLUDE_DIR)/%.h $(MAKEFILE) include.mk
 	$(MKDIR) $(OBJ_DIR)
