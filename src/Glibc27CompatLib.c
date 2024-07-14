@@ -272,6 +272,11 @@ int __wrap_pthread_setspecific(pthread_key_t __key, const void *__pointer) {
   return pthread_setspecific(__key, __pointer);
 }
 
+int __wrap_pthread_cancel(pthread_key_t __th) {
+  return pthread_cancel(__th);
+}
+
+
 // Break the dependency on GLIBC 2.33 in newer versions of gcc.
 // Taking the definitions from sys/stat.h and bits/stat.h in older versions of
 // gcc.
