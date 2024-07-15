@@ -13,6 +13,7 @@ OBJ_FILES := \
     $(OBJ_DIR)/Glibc27CompatLib.o \
     $(OBJ_DIR)/HashTable.o \
     $(OBJ_DIR)/List.o \
+    $(OBJ_DIR)/LoggingLib.o \
     $(OBJ_DIR)/PosixCThreads.o \
     $(OBJ_DIR)/PosixProcesses.o \
     $(OBJ_DIR)/Queue.o \
@@ -34,7 +35,7 @@ INCLUDES := \
 
 LINKS := \
 
-DEFINES := \
+include defines.mk
 
 WARNINGS := \
     -Wall \
