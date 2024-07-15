@@ -2,6 +2,7 @@ BUILD_DIR   := build
 OBJ_DIR     := $(BUILD_DIR)/obj32
 CC          := gcc -m32 -march=i686 -mtune=i686
 CXX         := gcc -m32 -march=i686 -mtune=i686
+MAKEFILE    := makefile32
 
 include include.mk
 
