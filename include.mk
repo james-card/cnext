@@ -35,12 +35,12 @@ INCLUDES := \
 
 LINKS := \
 
-include defines.mk
-
 WARNINGS := \
     -Wall \
     -Wextra \
     -Werror \
+
+include defines.mk
 
 all: $(OBJ_DIR)/Cnext.a
 
