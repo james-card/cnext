@@ -22,6 +22,8 @@ OBJ_FILES := \
     $(OBJ_DIR)/RsaLib.o \
     $(OBJ_DIR)/Scope.o \
     $(OBJ_DIR)/Sockets.o \
+    $(OBJ_DIR)/SslCertificate.o \
+    $(OBJ_DIR)/SslKey.o \
     $(OBJ_DIR)/Stack.o \
     $(OBJ_DIR)/StringLib.o \
     $(OBJ_DIR)/TimeUtils.o \
