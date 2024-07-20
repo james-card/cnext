@@ -234,7 +234,7 @@ Bytes dataToHexBytes(const volatile void *data, u64 length);
 Bytes hexStringToBytes(const char *hexString, u64 length);
 #ifdef USE_OPENSSL
 Bytes dataToBase64(const volatile void *data, u64 dataLength);
-Bytes base64ToBytes(const char *hexString, u64 hexStringLength);
+Bytes base64ToBytes(const char *base64String, u64 base64StringLength);
 #endif // USE_OPENSSL
 
 

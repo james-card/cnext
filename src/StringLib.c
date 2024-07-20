@@ -3214,9 +3214,8 @@ bool dataIsString(const volatile void *data, u64 dataLength) {
   return returnValue;
 }
 
-#ifdef USE_OPENSSL
-
-#include <openssl/evp.h>
+extern char base64Characters[64];
+extern u32 base64Values[128];
 
 /// @fn Bytes dataToBase64(const volatile void *data, u64 dataLength)
 ///
@@ -3231,88 +3230,316 @@ Bytes dataToBase64(const volatile void *data, u64 dataLength) {
   printLog(TRACE, "ENTER dataToBase64(data=%p, dataLength=%llu)\n",
     data, llu(dataLength));
   
-  // Maximum integer value divisible by 3.
-  const u64 maxBytesToEncode = 0x7ffffffe;
   u64 outputLength = (dataLength << 2) / 3;
-  if (dataLength % 3) {
-    outputLength += 4;
+  u64 remainder = dataLength % 3;
+  if (remainder == 1) {
+    outputLength += 3;
+  } else if (remainder == 2) {
+    outputLength += 2;
   }
   Bytes output = NULL;
   bytesAllocate(&output, outputLength);
+  bytesSetLength(output, outputLength);
   
-  u64 finalLength = 0;
-  while (dataLength > 0) {
-    u64 numBytesToEncode
-      = (dataLength <= maxBytesToEncode) ? dataLength : maxBytesToEncode;
-    u64 numBytesEncoded = (u64) EVP_EncodeBlock(
-      ustr(&output[finalLength]), ustr(data), numBytesToEncode);
-    if (numBytesEncoded == 0) {
-      // dataLength has to be non-zero or we wouldn't be in this loop.  Encoding
-      // no bytes would be an error.  The rest of this loop doesn't make any
-      // sense.  Free the output and bail.
-      printLog(ERR, "Attempt to base64-encode %llu bytes failed.\n",
-        llu(numBytesToEncode));
-      output = bytesDestroy(output);
-      finalLength = 0;
-      break;
-    }
+  unsigned char *dataChars = (unsigned char*) data;
+  char *outputChars = (char*) output;
+  u64 numBytesInLoop = (dataLength / 3) * 3;
+  u32 numberToEncode = 0;
+  u64 ii = 0;
+  for (ii = 0; ii < numBytesInLoop; ii += 3) {
+    // First, convert three characters to a 24-bit number stored in a 32-bit
+    // number.
+    numberToEncode
+      = (((u32) dataChars[0]) << 16)
+      | (((u32) dataChars[1]) <<  8)
+      | (((u32) dataChars[2])      );
+    dataChars += 3;
     
-    dataLength -= numBytesToEncode;
-    finalLength += numBytesEncoded;
-    data = ustr(data) + numBytesToEncode;
+    // Next, map the numbers to their corrsponding Base64 ASCII characters.
+    outputChars[0] = base64Characters[(numberToEncode >> 18) & 0x3f];
+    outputChars[1] = base64Characters[(numberToEncode >> 12) & 0x3f];
+    outputChars[2] = base64Characters[(numberToEncode >>  6) & 0x3f];
+    outputChars[3] = base64Characters[(numberToEncode      ) & 0x3f];
+    outputChars += 4;
   }
-  bytesSetLength(output, finalLength);
+  if (ii < dataLength) {
+    numberToEncode
+      = (((u32) dataChars[0]) << 16)
+      | (((dataLength - ii) > 1) ? (((u32) dataChars[1]) <<  8) : 0)
+      | (((dataLength - ii) > 2) ? (((u32) dataChars[2])      ) : 0);
+    dataChars += 3;
+    
+    outputChars[0] = base64Characters[(numberToEncode >> 18) & 0x3f];
+    outputChars[1] = base64Characters[(numberToEncode >> 12) & 0x3f];
+    outputChars[2] = ((dataLength - ii) > 1)
+      ? base64Characters[(numberToEncode >> 6) & 0x3f]
+      : '=';
+    outputChars[3] = ((dataLength - ii) > 2)
+      ? base64Characters[numberToEncode & 0x3f]
+      : '=';
+    outputChars += 4;
+  }
+  *outputChars = '\0';
   
   printLog(TRACE, "EXIT dataToBase64(data=%p, dataLength=%llu) = {%p}\n",
     data, llu(dataLength), output);
   return output;
 }
 
-/// @fn Bytes base64ToBytes(const char *hexString, u64 hexStringLength)
+/// @fn Bytes base64ToBytes(const char *base64String, u64 base64StringLength)
 ///
 /// @brief Convert a base64-encoded string back to its binary representation.
 ///
-/// @param hexString The base64-encoded string to decode.
-/// @param hexStringLength The number of bytes that make up the hexString.
+/// @param base64String The base64-encoded string to decode.
+/// @param base64StringLength The number of bytes that make up the base64String.
 ///
 /// @return Returns a Bytes object with the decoded content on success, NULL on
 /// failure.
-Bytes base64ToBytes(const char *hexString, u64 hexStringLength) {
-  printLog(TRACE, "ENTER base64ToBytes(hexString=%p, hexStringLength=%llu)\n",
-    hexString, llu(hexStringLength));
+Bytes base64ToBytes(const char *base64String, u64 base64StringLength) {
+  printLog(TRACE,
+    "ENTER base64ToBytes(base64String=%p, base64StringLength=%llu)\n",
+    base64String, llu(base64StringLength));
   
-  // Maximum integer value divisible by 4.
-  const u64 maxBytesToDecode = 0x7ffffffc;
-  u64 outputLength = (hexStringLength * 3) >> 2;
   Bytes output = NULL;
-  bytesAllocate(&output, outputLength);
-  
-  u64 finalLength = 0;
-  while (hexStringLength > 0) {
-    u64 numBytesToDecode
-      = (hexStringLength <= maxBytesToDecode)
-      ? hexStringLength
-      : maxBytesToDecode;
-    int numBytesDecoded = (u64) EVP_DecodeBlock(
-      ustr(&output[finalLength]), ustr(hexString), numBytesToDecode);
-    if (numBytesDecoded < 0) {
-      // The rest of this loop doesn't make any sense.  Free the output and
-      // bail.
-      printLog(ERR, "Attempt to base64-decode %llu bytes failed.\n",
-        llu(numBytesToDecode));
-      output = bytesDestroy(output);
-      finalLength = 0;
-      break;
-    }
-    
-    hexStringLength -= numBytesToDecode;
-    finalLength += (u64) numBytesDecoded;
-    hexString += numBytesToDecode;
+  if ((base64StringLength * 3) % 4) {
+    printLog(ERR, "Invalid base64StringLength %llu.\n",
+      llu(base64StringLength));
+    printLog(TRACE,
+      "EXIT base64ToBytes(base64String=%p, base64StringLength=%llu) = {%p}\n",
+      base64String, llu(base64StringLength), output);
+    return output; // NULL
   }
-  bytesSetLength(output, finalLength);
   
+  u64 outputLength = (base64StringLength * 3) >> 2;
+  bytesAllocate(&output, outputLength);
+  unsigned char *outputChars = output;
+  
+  for (u64 ii = 0; ii < base64StringLength; ii += 4) {
+    // C doesn't like it when array indexes are chars, so cast them to size_t.
+    u32 numberToDecode
+      = (base64Values[(size_t) base64String[0]] << 18)
+      | (base64Values[(size_t) base64String[1]] << 12)
+      | (base64Values[(size_t) base64String[2]] <<  6)
+      | (base64Values[(size_t) base64String[3]]      );
+    base64String += 4;
+
+    outputChars[0] = numberToDecode >> 16 & 0xff;
+    outputChars[1] = numberToDecode >>  8 & 0xff;
+    outputChars[2] = numberToDecode       & 0xff;
+    outputChars += 3;
+  }
+  if (outputLength > 0) {
+    for (; output[outputLength - 1] == '\0'; outputLength--);
+  }
+  bytesSetLength(output, outputLength);
+  
+  printLog(TRACE,
+    "EXIT base64ToBytes(base64String=%p, base64StringLength=%llu) = {%p}\n",
+    base64String, llu(base64StringLength), output);
   return output;
 }
 
-#endif // USE_OPENSSL
+/// @var base64Characters
+///
+/// @brief Mapping of Base64 values to their corresponding characters.
+char base64Characters[64] = {
+  'A',
+  'B',
+  'C',
+  'D',
+  'E',
+  'F',
+  'G',
+  'H',
+  'I',
+  'J',
+  'K',
+  'L',
+  'M',
+  'N',
+  'O',
+  'P',
+  'Q',
+  'R',
+  'S',
+  'T',
+  'U',
+  'V',
+  'W',
+  'X',
+  'Y',
+  'Z',
+  'a',
+  'b',
+  'c',
+  'd',
+  'e',
+  'f',
+  'g',
+  'h',
+  'i',
+  'j',
+  'k',
+  'l',
+  'm',
+  'n',
+  'o',
+  'p',
+  'q',
+  'r',
+  's',
+  't',
+  'u',
+  'v',
+  'w',
+  'x',
+  'y',
+  'z',
+  '0',
+  '1',
+  '2',
+  '3',
+  '4',
+  '5',
+  '6',
+  '7',
+  '8',
+  '9',
+  '+',
+  '/'
+};
+
+/// @var base64Values
+///
+/// @brief Mapping of Base64 characters to their corresponding values.
+u32 base64Values[128] = {
+  0,  // 0
+  0,  // 1
+  0,  // 2
+  0,  // 3
+  0,  // 4
+  0,  // 5
+  0,  // 6
+  0,  // 7
+  0,  // 8
+  0,  // 9
+  0,  // 10
+  0,  // 11
+  0,  // 12
+  0,  // 13
+  0,  // 14
+  0,  // 15
+  0,  // 16
+  0,  // 17
+  0,  // 18
+  0,  // 19
+  0,  // 20
+  0,  // 21
+  0,  // 22
+  0,  // 23
+  0,  // 24
+  0,  // 25
+  0,  // 26
+  0,  // 27
+  0,  // 28
+  0,  // 29
+  0,  // 30
+  0,  // 31
+  0,  // space
+  0,  // !
+  0,  // "
+  0,  // #
+  0,  // $
+  0,  // %
+  0,  // &
+  0,  // '
+  0,  // (
+  0,  // )
+  0,  // *
+  62, // +
+  0,  // ,
+  0,  // -
+  0,  // .
+  63, // /
+  52, // 0
+  53, // 1
+  54, // 2
+  55, // 3
+  56, // 4
+  57, // 5
+  58, // 6
+  59, // 7
+  60, // 8
+  61, // 9
+  0,  // :
+  0,  // ;
+  0,  // <
+  0,  // =
+  0,  // >
+  0,  // ?
+  0,  // @
+  0,  // A
+  1,  // B
+  2,  // C
+  3,  // D
+  4,  // E
+  5,  // F
+  6,  // G
+  7,  // H
+  8,  // I
+  9,  // J
+  10, // K
+  11, // L
+  12, // M
+  13, // N
+  14, // O
+  15, // P
+  16, // Q
+  17, // R
+  18, // S
+  19, // T
+  20, // U
+  21, // V
+  22, // W
+  23, // X
+  24, // Y
+  25, // Z
+  0,  // [
+  0,  // backslash
+  0,  // ]
+  0,  // ^
+  0,  // _
+  0,  // `
+  26, // a
+  27, // b
+  28, // c
+  29, // d
+  30, // e
+  31, // f
+  32, // g
+  33, // h
+  34, // i
+  35, // j
+  36, // k
+  37, // l
+  38, // m
+  39, // n
+  40, // o
+  41, // p
+  42, // q
+  43, // r
+  44, // s
+  45, // t
+  46, // u
+  47, // v
+  48, // w
+  49, // x
+  50, // y
+  51, // z
+  0,  // {
+  0,  // |
+  0,  // }
+  0,  // ~
+  0   // delete
+};
 
