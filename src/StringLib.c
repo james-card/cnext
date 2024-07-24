@@ -3214,6 +3214,89 @@ bool dataIsString(const volatile void *data, u64 dataLength) {
   return returnValue;
 }
 
+/// @fn bool dataIsAscii(const volatile void *data, u64 dataLength)
+///
+/// @brief Determine whether or not a block of arbitrary data constitutes a
+/// C string.
+///
+/// @param data A pointer to an arbitrary block of memory (cast to a void*).
+/// @param dataLength The number of bytes pointed to by the data pointer.
+///
+/// @return Returns true if the data provided constitutes a C string, false
+/// if not.
+bool dataIsAscii(const volatile void *data, u64 dataLength) {
+  printLog(TRACE, "ENTER dataIsAscii(data=%p, dataLength=%llu)\n",
+    data, llu(dataLength));
+  
+  u8 *dataBytes = (u8*) data;
+  bool returnValue = true;
+  u64 lastCharIndex = 0;
+  if (dataLength > 0) {
+    lastCharIndex = dataLength - 1;
+  }
+  
+  if (data == NULL) {
+    // NULL data is not a string.
+    returnValue = false;
+    printLog(TRACE, "EXIT dataIsAscii(data=%p, dataLength=%llu) = {%s}\n",
+      data, llu(dataLength), boolNames[returnValue]);
+    return returnValue;
+  }
+  
+  u64 i = 0;
+  for (i = 0; i < lastCharIndex; i++) {
+    if (dataBytes[i] > 127) {
+      returnValue = false;
+      break;
+    }
+  }
+  
+  printLog(TRACE, "EXIT dataIsAscii(data=%p, dataLength=%llu) = {%s}\n",
+    data, llu(dataLength), boolNames[returnValue]);
+  return returnValue;
+}
+
+/// @fn bool nonPrintableToWhitespace(const volatile void *data, u64 dataLength)
+///
+/// @brief Determine whether or not a block of arbitrary data constitutes a
+/// C string.
+///
+/// @param data A pointer to an arbitrary block of memory (cast to a void*).
+/// @param dataLength The number of bytes pointed to by the data pointer.
+///
+/// @return Returns true if the data provided constitutes a C string, false
+/// if not.
+bool nonPrintableToWhitespace(const volatile void *data, u64 dataLength) {
+  printLog(TRACE, "ENTER nonPrintableToWhitespace(data=%p, dataLength=%llu)\n",
+    data, llu(dataLength));
+  
+  u8 *dataBytes = (u8*) data;
+  bool returnValue = true;
+  
+  if (data == NULL) {
+    // NULL data is not a string.
+    returnValue = false;
+    printLog(TRACE,
+      "EXIT nonPrintableToWhitespace(data=%p, dataLength=%llu) = {%s}\n",
+      data, llu(dataLength), boolNames[returnValue]);
+    return returnValue;
+  }
+  
+  for (u64 i = 0; i < dataLength; i++) {
+    if (((dataBytes[i] < 32) || (dataBytes[i] > 126))
+      && (dataBytes[i] != '\r') && (dataBytes[i] != '\n')
+      && (dataBytes[i] != '\0')
+    ) {
+      dataBytes[i] = ' ';
+    }
+  }
+  
+  printLog(TRACE,
+    "EXIT nonPrintableToWhitespace(data=%s, dataLength=%llu) = {%s}\n",
+    str(data), llu(dataLength), boolNames[returnValue]);
+  return returnValue;
+}
+
 extern char base64Characters[64];
 extern u32 base64Values[128];
 
@@ -3542,4 +3625,62 @@ u32 base64Values[128] = {
   0,  // ~
   0   // delete
 };
+
+/// @fn bool dataEndsWith(const volatile void *haystack, u64 haystackLength, const volatile void *needle, u64 needleLength)
+///
+/// @brief Determine if a block of data ends with a another specified block of
+/// data.
+///
+/// @param haystack A pointer to the block of data to check the end of.
+/// @param haystackLength The number of bytes at haystack.
+/// @param needle A pointer to the data to search for.
+/// @param needleLength The number of bytes at needle.
+///
+/// @return Returns true if the last needleLength bytes of haystack end with
+/// needle, false otherwise.
+bool dataEndsWith(const volatile void *haystack, u64 haystackLength,
+  const volatile void *needle, u64 needleLength
+) {
+  printLog(TRACE, "ENTER dataEndsWith(haystack=%p, haystackLength=%llu, "
+    "needle=%p, needleLength=%llu)\n", haystack, llu(haystackLength),
+    needle, llu(needleLength));
+  
+  bool returnValue = false;
+  if ((haystack == NULL) != (needle == NULL)) {
+    printLog(ERR, "Mismatch in NULL pointer values.\n");
+    printLog(TRACE, "EXIT dataEndsWith(haystack=%p, haystackLength=%llu, "
+      "needle=%p, needleLength=%llu) = {%s}\n", haystack, llu(haystackLength),
+      needle, llu(needleLength), boolNames[returnValue]);
+    return returnValue; // false
+  } else if (needleLength > haystackLength) {
+    printLog(ERR, "needleLength exceeds haystackLength.\n");
+    printLog(TRACE, "EXIT dataEndsWith(haystack=%p, haystackLength=%llu, "
+      "needle=%p, needleLength=%llu) = {%s}\n", haystack, llu(haystackLength),
+      needle, llu(needleLength), boolNames[returnValue]);
+    return returnValue; // false
+  }
+  
+  if (((haystack == NULL) && (needle == NULL))
+    || ((haystackLength == 0) && (needleLength == 0))
+  ) {
+    // Both values are empty.  Return true.
+    returnValue = true;
+    printLog(ERR, "Mismatch in NULL pointer values.\n");
+    printLog(TRACE, "EXIT dataEndsWith(haystack=%p, haystackLength=%llu, "
+      "needle=%p, needleLength=%llu) = {%s}\n", haystack, llu(haystackLength),
+      needle, llu(needleLength), boolNames[returnValue]);
+    return returnValue; // false
+  }
+  
+  u64 startIndex = haystackLength - needleLength;
+  unsigned char *haystackChars = ustr(haystack);
+  if (memcmp(&haystackChars[startIndex], (void*) needle, needleLength) == 0) {
+    returnValue = true;
+  }
+  
+  printLog(TRACE, "EXIT dataEndsWith(haystack=%p, haystackLength=%llu, "
+    "needle=%p, needleLength=%llu) = {%s}\n", haystack, llu(haystackLength),
+    needle, llu(needleLength), boolNames[returnValue]);
+  return returnValue;
+}
 

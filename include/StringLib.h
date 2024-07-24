@@ -193,6 +193,8 @@ const char *getProgramName(const char *argv0);
 bool stringStartsWith(const char *haystack, const char *beginning);
 bool stringStartsWithCi(const char *haystack, const char *beginning);
 bool dataIsString(const volatile void *data, u64 dataLength);
+bool dataIsAscii(const volatile void *data, u64 dataLength);
+bool nonPrintableToWhitespace(const volatile void *data, u64 dataLength);
 #define firstFourEq(strA, strB) \
   ( \
     ((strA == NULL) || (strB == NULL)) \
@@ -201,6 +203,16 @@ bool dataIsString(const volatile void *data, u64 dataLength);
         ? (*((char*) strA) == *((char*) strB)) \
         : (*((u32*) strA) == *((u32*) strB)) \
   )
+bool dataEndsWith(const volatile void *haystack, u64 haystackLength,
+  const volatile void *needle, u64 needleLength);
+#define strEndsWithStr(str1, str2) \
+  dataEndsWith(str1, strlen(str(str1)), str2, strlen(str(str2)))
+#define strEndsWithBytes(str1, bytes2) \
+  dataEndsWith(str1, strlen(str(str1)), bytes2, bytesLength(bytes2))
+#define bytesEndsWithStr(bytes1, str2) \
+  dataEndsWith(bytes1, bytesLength(bytes1), str2, strlen(str(str2)))
+#define bytesEndsWithBytes(bytes1, bytes2) \
+  dataEndsWith(bytes1, bytesLength(bytes1), bytes2, bytesLength(bytes2))
 
 // Bytes functions
 Bytes bytesAllocate(Bytes *buffer, u64 size);
