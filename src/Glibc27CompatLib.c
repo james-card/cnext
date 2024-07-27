@@ -41,35 +41,35 @@ extern "C"
 {
 #endif
 
-//// // Break the dependency on GLIBC 2.38 in newer versions of gcc.
-//// #ifdef __x86_64__
-////   asm (".symver ___strtoll, strtoll@GLIBC_2.2.5");
-////   asm (".symver ___strtol, strtol@GLIBC_2.2.5");
-//// #else // 32-bit
-////   asm (".symver ___strtoll, strtoll@GLIBC_2.0");
-////   asm (".symver ___strtol, strtol@GLIBC_2.0");
-//// #endif // __x86_64__
-//// asm (".symver ___vsscanf, __isoc99_vsscanf@GLIBC_2.7");
-//// 
-//// long long strtoll(const char *nptr, char **endptr, int base) {
-////   long long ___strtoll(const char *nptr, char **endptr, int base);
-////   return ___strtoll(nptr, endptr, base);
-//// }
-//// 
-//// long strtol(const char *nptr, char **endptr, int base) {
-////   long ___strtol(const char *nptr, char **endptr, int base);
-////   return ___strtol(nptr, endptr, base);
-//// }
-//// 
-//// int sscanf(const char *str, const char *format, ...) {
-////   int ___vsscanf(const char *str, const char *format, va_list ap);
-////   va_list args;
-////   va_start(args, format);
-////   int returnValue = ___vsscanf(str, format, args);
-////   va_end(args);
-////   
-////   return returnValue;
-//// }
+// Break the dependency on GLIBC 2.38 in newer versions of gcc.
+#ifdef __x86_64__
+  asm (".symver ___strtoll, strtoll@GLIBC_2.2.5");
+  asm (".symver ___strtol, strtol@GLIBC_2.2.5");
+#else // 32-bit
+  asm (".symver ___strtoll, strtoll@GLIBC_2.0");
+  asm (".symver ___strtol, strtol@GLIBC_2.0");
+#endif // __x86_64__
+asm (".symver ___vsscanf, __isoc99_vsscanf@GLIBC_2.7");
+
+long long strtoll(const char *nptr, char **endptr, int base) {
+  long long ___strtoll(const char *nptr, char **endptr, int base);
+  return ___strtoll(nptr, endptr, base);
+}
+
+long strtol(const char *nptr, char **endptr, int base) {
+  long ___strtol(const char *nptr, char **endptr, int base);
+  return ___strtol(nptr, endptr, base);
+}
+
+int sscanf(const char *str, const char *format, ...) {
+  int ___vsscanf(const char *str, const char *format, va_list ap);
+  va_list args;
+  va_start(args, format);
+  int returnValue = ___vsscanf(str, format, args);
+  va_end(args);
+  
+  return returnValue;
+}
 
 
 // Break the dependency on GLIBC 2.34 in newer versions of gcc.
