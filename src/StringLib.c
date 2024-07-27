@@ -1873,6 +1873,58 @@ Bytes bytesAddChr(Bytes *buffer, char input) {
   return returnValue;
 }
 
+/// @fn Bytes bytesReplace(Bytes *buffer, const volatile void *input, u64 inputLength)
+///
+/// @brief This function appends the contents of a memory block to a bytes
+///   object.  A NULL byte will then be appended to the resulting object, but
+///   this byte will not be counted in the length returned by bytesLength.
+///   This allows for the Bytes objects to be directly treated as strings if
+///   desired.
+///
+/// @param buffer is a pointer to an allocated Bytes object or NULL.
+/// @param input is a pointer to a memory block which should be appended to
+///   *buffer.
+/// @param inputLength is the size of the memory block pointed to by input.
+///
+/// @return Returns the value of of *buffer.
+Bytes bytesReplace(Bytes *buffer,
+  const volatile void *input, u64 inputLength
+) {
+  printLog(FLOOD,
+    "ENTER bytesReplace(*buffer=%p, input=%p, inputLength=%llu)\n",
+    (buffer) ? *buffer : NULL, input, llu(inputLength));
+  
+  Bytes returnValue = NULL;
+  
+  if (buffer == NULL) {
+    printLog(DEBUG, "NULL base buffer pointer detected in bytesReplace.\n");
+    printLog(FLOOD,
+      "EXIT bytesReplace(*buffer=%p, input=%p, inputLength=%llu) = {%p}\n",
+      (buffer) ? *buffer : NULL, input, llu(inputLength), returnValue);
+    return returnValue;
+  } else if (input == NULL) {
+    // No-op.
+    printLog(FLOOD,
+      "EXIT bytesReplace(*buffer=%p, input=%p, inputLength=%llu) = {%p}\n",
+      (buffer) ? *buffer : NULL, input, llu(inputLength), returnValue);
+    return returnValue;
+  }
+  
+  if (bytesAllocate(buffer, inputLength) != NULL) {
+    memcpy((void*)(&(((*buffer))[0])), (const void*) input,
+      inputLength);
+    (*buffer)[inputLength] = '\0';
+  }
+  
+  bytesSetLength(*buffer, inputLength);
+  returnValue = (buffer) ? *buffer : NULL;
+  
+  printLog(FLOOD,
+    "EXIT bytesReplace(*buffer=%p, input=%p, inputLength=%llu) = {%p}\n",
+    returnValue, input, llu(inputLength), returnValue);
+  return returnValue;
+}
+
 /// @fn Bytes bytesDestroy(Bytes value)
 ///
 /// @brief Release the memory associated with a Bytes value.

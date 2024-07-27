@@ -214,12 +214,56 @@ bool dataEndsWith(const volatile void *haystack, u64 haystackLength,
 #define bytesEndsWithBytes(bytes1, bytes2) \
   dataEndsWith(bytes1, bytesLength(bytes1), bytes2, bytesLength(bytes2))
 
+/// @fn static inline char* getToken(char *start, char **end, const char *delimiters)
+///
+/// @brief Get the next token a string given an alphabet of delimiters.
+///
+/// @param start The beginning of the string to search.  Characters in the
+///   delimiter alphabet at the beginning of the string will be skipped.
+/// @param end A pointer to be populated with the first character past the end
+///   of the token.  i.e. The first character in the delimiter alphabet after
+///   the return value.
+/// @param delimiters A string containing the delimiter alphabet.
+///
+/// @return Returns a pointer to the next token after start if there is one,
+/// NULL otherwise.  If the end pointer is not null, it will be set to the first
+/// character not in the delimiter alphabet if the return value is not NULL and
+/// will be set to NULL if the return value is NULL.
+static inline char* getToken(char *start, char **end,
+  const char *delimiters
+) {
+  char *returnValue = NULL;
+  if (start == NULL) {
+    return returnValue; // NULL
+  }
+  
+  // First, get the next token after start.
+  returnValue = &start[strspn(start, delimiters)];
+  if (*returnValue == '\0') {
+    // We're at the end of the string and there is no next token.  Return NULL.
+    returnValue = NULL;
+  }
+  
+  if (end != NULL) {
+    if (returnValue != NULL) {
+      // Find the next instance of a delimiter.
+      *end = &returnValue[strcspn(returnValue, delimiters)];
+    } else {
+      // Set end to NULL too.
+      *end = NULL;
+    }
+  }
+  
+  return returnValue;
+}
+
 // Bytes functions
 Bytes bytesAllocate(Bytes *buffer, u64 size);
 Bytes bytesAddData(Bytes *buffer, const volatile void *input, u64 inputLength);
 Bytes bytesAddBytes(Bytes *buffer, const Bytes input);
 Bytes bytesAddStr(Bytes *buffer, const char *input);
 Bytes bytesAddChr(Bytes *buffer, char input);
+Bytes bytesReplace(Bytes *buffer, const volatile void *input, u64 inputLength);
 Bytes bytesDestroy(Bytes value);
 // These next four functions are delcared inline because they were originally
 // macros, but those were not type safe because of the casts involved.
