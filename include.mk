@@ -42,6 +42,7 @@ WARNINGS := \
     -Wall \
     -Wextra \
     -Werror \
+    -Wno-format-truncation \
 
 include defines.mk
 
