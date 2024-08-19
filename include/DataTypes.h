@@ -782,7 +782,7 @@ Type* jsonTo##Type(const char *jsonText, long long int *position) { \
     if ((charAtPosition != '"') && (charAtPosition != '{') \
       && (charAtPosition != '[') && !stringIsNumber(&jsonText[*position]) \
       && !stringIsBoolean(&jsonText[*position]) \
-      && (strncmp(&jsonText[*position], "null", 4) != 0) \
+      && (*((u32*) &jsonText[*position]) != *((u32*) "null")) \
     ) { \
       printLog(ERR, "Malformed JSON input.\n"); \
       key = bytesDestroy(key); \
@@ -855,12 +855,12 @@ Type* jsonTo##Type(const char *jsonText, long long int *position) { \
     } else if (stringIsNumber(&jsonText[*position])) { \
       /* Parse the number. */ \
       char *endpos = NULL; \
-      if (stringIsInteger(&jsonText[*position])) { \
-        i64 longLongValue = (i64) strtoll(&jsonText[*position], &endpos, 10); \
-        prefix##AddEntry(returnValue, key, &longLongValue, typeI64); \
-      } else { /* stringIsFloat(&jsonText[*position]) */ \
+      if (stringIsFloat(&jsonText[*position])) { \
         double doubleValue = strtod(&jsonText[*position], &endpos); \
         prefix##AddEntry(returnValue, key, &doubleValue, typeDouble); \
+      } else { /* stringIsInteger(&jsonText[*position]) */ \
+        i64 longLongValue = (i64) strtoll(&jsonText[*position], &endpos, 10); \
+        prefix##AddEntry(returnValue, key, &longLongValue, typeI64); \
       } \
       *position \
         += ((long long int) ((intptr_t) endpos)) \

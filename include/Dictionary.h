@@ -74,6 +74,7 @@ DictionaryEntry* dictionaryAddEntry_(Dictionary **dictionary, const volatile voi
   dictionaryAddEntry_(dictionary, key, value, ##__VA_ARGS__, typeString)
 #define dictionaryDestroy rbTreeDestroy
 extern int (*dictionaryRemove)(Dictionary *dictionary, const char *key);
+#define dictionaryRemoveEntry rbTreeRemove
 /// @def dictionaryToXml
 /// Method for converting a dictionary to its XML representation.
 #define dictionaryToXml(dictionary, elementName, ...)  \

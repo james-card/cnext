@@ -4206,6 +4206,13 @@ char *floatToString(const volatile void *value) {
     // returned.  This check is just here to make the compiler happy.
   }
   
+  if ((*((u64*) floatString) == *((u64*) "0.000000"))
+    || (*((u64*) floatString) == *((u64*) "-0.000000"))
+  ) {
+    floatString = stringDestroy(floatString);
+    (void) asprintf(&floatString, "%g", floatValue);
+  }
+  
   printLog(TRACE, "EXIT floatToString(value=%f) = {%s}\n", *((float*) value), floatString);
   return floatString;
 }
@@ -4230,6 +4237,13 @@ Bytes floatToBytes(const volatile void *value) {
   Bytes floatBytes = NULL;
   float floatValue = *((float*) value);
   abprintf(&floatBytes, "%f", floatValue);
+  
+  if ((*((u64*) floatBytes) == *((u64*) "0.000000"))
+    || (*((u64*) floatBytes) == *((u64*) "-0.000000"))
+  ) {
+    floatBytes = bytesDestroy(floatBytes);
+    (void) abprintf(&floatBytes, "%g", floatValue);
+  }
   
   printLog(TRACE, "EXIT floatToBytes(value=%f) = {%s}\n",
     *((float*) value), floatBytes);
@@ -4520,6 +4534,13 @@ char *doubleToString(const volatile void *value) {
     // returned.  This check is just here to make the compiler happy.
   }
   
+  if ((*((u64*) doubleString) == *((u64*) "0.000000"))
+    || (*((u64*) doubleString) == *((u64*) "-0.000000"))
+  ) {
+    doubleString = stringDestroy(doubleString);
+    (void) asprintf(&doubleString, "%lg", doubleValue);
+  }
+  
   printLog(TRACE, "EXIT doubleToString(value=%lf) = {%s}\n", *((double*) value), doubleString);
   return doubleString;
 }
@@ -4544,6 +4565,13 @@ Bytes doubleToBytes(const volatile void *value) {
   Bytes doubleBytes = NULL;
   double doubleValue = *((double*) value);
   abprintf(&doubleBytes, "%lf", doubleValue);
+  
+  if ((*((u64*) doubleBytes) == *((u64*) "0.000000"))
+    || (*((u64*) doubleBytes) == *((u64*) "-0.000000"))
+  ) {
+    doubleBytes = bytesDestroy(doubleBytes);
+    (void) abprintf(&doubleBytes, "%lg", doubleValue);
+  }
   
   printLog(TRACE, "EXIT doubleToBytes(value=%f) = {%s}\n",
     *((double*) value), doubleBytes);
@@ -4835,6 +4863,13 @@ char *longDoubleToString(const volatile void *value) {
     // returned.  This check is just here to make the compiler happy.
   }
   
+  if ((*((u64*) longDoubleString) == *((u64*) "0.000000"))
+    || (*((u64*) longDoubleString) == *((u64*) "-0.000000"))
+  ) {
+    longDoubleString = stringDestroy(longDoubleString);
+    (void) asprintf(&longDoubleString, "%Lg", longDoubleValue);
+  }
+  
   printLog(TRACE, "EXIT longDoubleToString(value=%Lf) = {%s}\n",
     longDoubleValue, longDoubleString);
   return longDoubleString;
@@ -4859,6 +4894,13 @@ Bytes longDoubleToBytes(const volatile void *value) {
   Bytes longDoubleBytes = NULL;
   long double longDoubleValue = *((long double*) value);
   abprintf(&longDoubleBytes, "%Lf", longDoubleValue);
+  
+  if ((*((u64*) longDoubleBytes) == *((u64*) "0.000000"))
+    || (*((u64*) longDoubleBytes) == *((u64*) "-0.000000"))
+  ) {
+    longDoubleBytes = bytesDestroy(longDoubleBytes);
+    (void) abprintf(&longDoubleBytes, "%Lg", longDoubleValue);
+  }
   
   printLog(TRACE, "EXIT longDoubleToBytes(value=%Lf) = {%s}\n",
     longDoubleValue, longDoubleBytes);
@@ -6437,22 +6479,28 @@ bool stringIsFloat(const char *str) {
   
   int numDecimals = 0;
   int numNumerals = 0;
+  int numExponents = 0;
   while (((*strp >= '0') && (*strp <= '9')) || (*strp == '.')
+    || (*strp == '-') || (*strp == 'e') || (*strp == 'E')
   ) {
     if ((*strp == '.') && (strp[1] >= '0') && (strp[1] <= '9')) {
       numDecimals++;
+    } else if (((*strp == 'e') || (*strp == 'E'))
+      && (strp[1] >= '0') && (strp[1] <= '9')
+    ) {
+      numExponents++;
     } else {
       numNumerals++;
     }
     
-    if (numDecimals > 1) {
+    if ((numDecimals > 1) || (numExponents > 1)) {
       return false;
     }
     
     strp++;
   }
   
-  return ((numNumerals > 0) && (numDecimals == 1));
+  return ((numNumerals > 0) && ((numDecimals == 1) || (numExponents == 1)));
 }
 
 /// @fn bool stringIsNumber(const char *str)
@@ -6550,7 +6598,7 @@ bool SMALL_TYPE##UnitTest() { \
    \
   string = (char*) type##BIG_TYPE->toBytes(NULL); \
   if (string != NULL) { \
-    printLog(ERR, "type%s->toString returned \"%s\" instead of NULL.\n", \
+    printLog(ERR, "type%s->toBytes returned \"%s\" instead of NULL.\n", \
       #BIG_TYPE, string); \
     string = (char*) typeBytes->destroy(string); \
     return false; \
@@ -6558,7 +6606,7 @@ bool SMALL_TYPE##UnitTest() { \
   string = (char*) typeBytes->destroy(string); \
   string = (char*) type##BIG_TYPE->toBytes(&value1); \
   if (strcmp(string, #MAX_VALUE) != 0) { \
-    printLog(ERR, "type%s->toString returned \"%s\" instead of \"%s\".\n", \
+    printLog(ERR, "type%s->toBytes returned \"%s\" instead of \"%s\".\n", \
       #BIG_TYPE, string, #MAX_VALUE); \
     string = (char*) typeBytes->destroy(string); \
     return false; \
@@ -6566,7 +6614,7 @@ bool SMALL_TYPE##UnitTest() { \
   string = (char*) typeBytes->destroy(string); \
   string = (char*) type##BIG_TYPE->toBytes(&value2); \
   if (strcmp(string, #MIN_VALUE) != 0) { \
-    printLog(ERR, "type%s->toString returned \"%s\" instead of \"%s\".\n", \
+    printLog(ERR, "type%s->toBytes returned \"%s\" instead of \"%s\".\n", \
       #BIG_TYPE, string, #MIN_VALUE); \
     string = (char*) typeBytes->destroy(string); \
     return false; \
@@ -6723,9 +6771,9 @@ DATA_TYPE_UNIT_TEST(i32, I32, -2147483647, 2147483647, 4)
 // Min value for i64 should be -2147483648, but this causes a compile error
 // in Windows.
 DATA_TYPE_UNIT_TEST(i64, I64, -2147483647, 2147483647, 8)
-DATA_TYPE_UNIT_TEST(float, Float, 0.000000, 3.140000, 4)
-DATA_TYPE_UNIT_TEST(double, Double, 0.000000, 3.140000, 8)
-DATA_TYPE_UNIT_TEST(longDouble, LongDouble, 0.000000, 3.140000, ((int) sizeof(long double)))
+DATA_TYPE_UNIT_TEST(float, Float, 0, 3.140000, 4)
+DATA_TYPE_UNIT_TEST(double, Double, 0, 3.140000, 8)
+DATA_TYPE_UNIT_TEST(longDouble, LongDouble, 0, 3.140000, ((int) sizeof(long double)))
 
 /// @def STRING_UNIT_TEST 
 ///

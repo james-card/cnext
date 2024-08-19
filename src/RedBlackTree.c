@@ -2169,21 +2169,21 @@ bool redBlackTreeUnitTest() { \
  \
   const char *jsonString = "{\n" \
     "  \"myRedBlackTree1\": {\n" \
-    "    \"key1\": \"value1\",\n" \
-    "    \"key2\": \"value2\"\n" \
+    "    \"key1\":1,\n" \
+    "    \"key2\":-2.0\n" \
     "  },\n" \
-    "  \"key3\": \"value3\",\n" \
+    "  \"key3\":-1E3,\n" \
     "  \"myRedBlackTree2\": {\n" \
-    "    \"key4\": \"value4\",\n" \
-    "    \"key5\": \"value5\",\n" \
-    "    \"key6\": \"value6\"\n" \
+    "    \"key4\":\"value4\",\n" \
+    "    \"key5\":\"value5\",\n" \
+    "    \"key6\":\"value6\"\n" \
     "  },\n" \
-    "  \"myRedBlackTree3\": {\n" \
-    "    \"myRedBlackTree4\": {\n" \
+    "  \"myRedBlackTree3\":{\n" \
+    "    \"myRedBlackTree4\":{\n" \
     "      \"key7\": \"value7\",\n" \
     "      \"key8\": \"value8\"\n" \
     "    },\n" \
-    "    \"key9\": \"value9\"\n" \
+    "    \"key9\":\"value9\"\n" \
     "  }\n" \
     "}"; \
   long long int startPosition = 0; \
@@ -2203,7 +2203,7 @@ bool redBlackTreeUnitTest() { \
   if (stringValue == NULL) { \
     printLog(ERR, "Value for key3 was NULL.\n"); \
     return false; \
-  } else if (strcmp(stringValue, "value3") != 0) { \
+  } else if (*((double*) stringValue) != -1E3) { \
     printLog(ERR, "Expected \"value3\", got \"%s\".\n", stringValue); \
     return false; \
   } \
@@ -2220,16 +2220,16 @@ bool redBlackTreeUnitTest() { \
   if (stringValue == NULL) { \
     printLog(ERR, "Value for key1 was NULL.\n"); \
     return false; \
-  } else if (strcmp(stringValue, "value1") != 0) { \
-    printLog(ERR, "Expected \"value1\", got \"%s\".\n", stringValue); \
+  } else if (*((i64*) stringValue) != 1) { \
+    printLog(ERR, "Expected 1, got %lld.\n", lld(*((i64*) stringValue))); \
     return false; \
   } \
   stringValue = (char*) rbTreeGetValue(tree2, "key2"); \
   if (stringValue == NULL) { \
     printLog(ERR, "Value for key2 was NULL.\n"); \
     return false; \
-  } else if (strcmp(stringValue, "value2") != 0) { \
-    printLog(ERR, "Expected \"value2\", got \"%s\".\n", stringValue); \
+  } else if (*((double*) stringValue) != -2.0) { \
+    printLog(ERR, "Expected -2.0, got %lf.\n", *((double*) stringValue)); \
     return false; \
   } \
   stringValue = (char*) rbTreeGetValue(tree2, "key6"); \
