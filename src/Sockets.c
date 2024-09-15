@@ -468,11 +468,22 @@ int sslBioHandshakeWatch(void *args) {
     (void*) sslBioSslBioHandshakeWatchArgs->bio,
     (*connected == true) ? "true" : "false", timeoutMilliseconds);
   
+  int returnValue = 0;
+  if (timeoutMilliseconds < 0) {
+    // Infinite timeout.  Just exit the thread gracefully.
+    printLog(TRACE,
+      "EXIT sslBioHandshakeWatch(bio=%p, connected=%s, timeoutMilliseconds=%d) "
+        "= {%d}\n",
+      (void*) sslBioSslBioHandshakeWatchArgs->bio,
+      (*connected == true) ? "true" : "false",
+      timeoutMilliseconds, returnValue);
+    return returnValue;
+  }
+  
   for (int i = 0; (i < timeoutMilliseconds) && (*connected == false); i++) {
     socketsMsleep(1);
   }
   
-  int returnValue = 0;
   if (*connected == false) {
     printLog(WARN, "Connection timed out after %d milliseconds.\n",
       timeoutMilliseconds);

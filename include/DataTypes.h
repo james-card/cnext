@@ -646,6 +646,7 @@ int registerTypeDescriptor(TypeDescriptor *typeDescriptor);
 TypeDescriptor* getTypeDescriptorFromIndex(i64 typeDescriptorIndex);
 #define pointerDestroy(pointer) ((void*) (free((void*) pointer), NULL))
 void* pointerDestroyFunction(volatile void *pointer);
+#define stringDestroyFunction pointerDestroyFunction
 
 // Endianness functions and macros
 //

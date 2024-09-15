@@ -43,6 +43,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <string.h> // For memcmp
 

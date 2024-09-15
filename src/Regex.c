@@ -26,17 +26,6 @@
 
 #include "Regex.h"
 
-#ifdef LOGGING_ENABLED
-#include "LoggingLib.h"
-#else
-#undef printLog
-#define printLog(...) {}
-#undef printBinary
-#define printBinary(...) {}
-#define logFile stderr
-#define LOG_MALLOC_FAILURE(...) {}
-#endif
-
 #define END_LINE '\0'
 #define MAX_QUANTIFICATION_VALUE  1024  // Max in {M,N} - Denotes the minimum M and the maximum N regexMatch count.
 
@@ -91,6 +80,10 @@ void regexCompile(Regex *regex, const char *pattern) {
     if (pattern == NULL) {
         regex->isPatternValid = false;
         regex->errorMessage = "NULL pattern string";
+        return;
+    } else if (pattern[0] == END_LINE) {
+        regex->isPatternValid = false;
+        regex->errorMessage = "Empty pattern string";
         return;
     }
 
@@ -617,51 +610,81 @@ static bool isMatchingMetaChar(unsigned char character, const unsigned char *met
     }
 }
 
-char* substitute(const char *haystack, const char *pattern, const char *replacement, bool greedy) {
-    char *returnValue = NULL;
-    void *check = NULL;
-    uint64_t returnValueLength = 0;
+uint64_t substitute_(const char *haystack, const char *pattern,
+    const char *replacement, bool greedy,
+    char *buffer, uint64_t bufferLength,
+    bool *successful, const char **errorMessage, ...
+) {
+    uint64_t bufferPosition = 0;
     uint64_t haystackPosition = 0;
     uint64_t replacementLength = 0;
     uint64_t copyLength = 0;
 
-    if ((haystack == NULL) || (pattern == NULL) || (replacement == NULL)) {
-        printLog(ERR, "One or more NULL parameters.\n");
-        return returnValue; // NULL
+    if ((haystack == NULL) || (pattern == NULL)
+        || (replacement == NULL) || (buffer == NULL)
+    ) {
+        if (successful != NULL) {
+            *successful = false;
+        }
+        if (errorMessage != NULL) {
+            *errorMessage = "One or more NULL parameters to substitute.\n";
+        }
+        return bufferPosition; // 0
     }
     replacementLength = (uint64_t) strlen(replacement);
 
     Regex regex;
     regexCompile(&regex, pattern);
     if (!regex.isPatternValid) {
-        printLog(ERR, "Error: %s\n", regex.errorMessage);
-        return returnValue; // NULL
+        if (successful != NULL) {
+            *successful = false;
+        }
+        if (errorMessage != NULL) {
+            *errorMessage = regex.errorMessage;
+        }
+        goto final;
+    }
+
+    if (errorMessage != NULL) {
+        // Initialize *errorMessage to NULL so that we can tell when we've
+        // already set the value before.
+        *errorMessage = NULL;
     }
 
     Matcher matcher;
     regexMatch(&regex, &haystack[haystackPosition], &matcher);
     while (matcher.isFound) {
         copyLength = (haystackPosition + matcher.foundAtIndex) - haystackPosition;
-        check = realloc(returnValue, returnValueLength + copyLength + 1);
-        if (check == NULL) {
-            LOG_MALLOC_FAILURE();
-            free(returnValue); returnValue = NULL;
-            return returnValue; // NULL
+        if ((bufferPosition + copyLength) < bufferLength) {
+            memcpy(&buffer[bufferPosition], &haystack[haystackPosition], copyLength);
+        } else {
+            if (successful != NULL) {
+                *successful = false;
+            }
+            if ((errorMessage != NULL) && (*errorMessage == NULL)) {
+                // We want error message to hold the FIRST error, so don't set
+                // it again if it's already set.
+                *errorMessage
+                    = "Provided output buffer too small for replaced output.";
+            }
         }
-        returnValue = (char*) check;
-        memcpy(&returnValue[returnValueLength], &haystack[haystackPosition], copyLength);
-        returnValueLength += copyLength;
+        bufferPosition += copyLength;
         haystackPosition += copyLength;
 
-        check = realloc(returnValue, returnValueLength + replacementLength + 1);
-        if (check == NULL) {
-            LOG_MALLOC_FAILURE();
-            free(returnValue); returnValue = NULL;
-            return returnValue; // NULL
+        if ((bufferPosition + replacementLength) < bufferLength) {
+            memcpy(&buffer[bufferPosition], replacement, replacementLength);
+        } else {
+            if (successful != NULL) {
+                *successful = false;
+            }
+            if ((errorMessage != NULL) && (*errorMessage == NULL)) {
+                // We want error message to hold the FIRST error, so don't set
+                // it again if it's already set.
+                *errorMessage
+                    = "Provided output buffer too small for replaced output.";
+            }
         }
-        returnValue = (char*) check;
-        memcpy(&returnValue[returnValueLength], replacement, replacementLength);
-        returnValueLength += replacementLength;
+        bufferPosition += replacementLength;
         haystackPosition += matcher.matchLength;
 
         if (greedy == true) {
@@ -671,19 +694,97 @@ char* substitute(const char *haystack, const char *pattern, const char *replacem
         }
     }
 
+    if (successful != NULL) {
+        *successful = true;
+    }
+
+final:
     // Take care of the last of the string.
     copyLength = ((uint64_t) strlen(haystack)) - haystackPosition;
-    check = realloc(returnValue, returnValueLength + copyLength + 1);
-    if (check == NULL) {
-        LOG_MALLOC_FAILURE();
-        free(returnValue); returnValue = NULL;
-        return returnValue; // NULL
+    if ((bufferPosition + copyLength) < bufferLength) {
+        memcpy(&buffer[bufferPosition], &haystack[haystackPosition], copyLength);
+    } else {
+        if (successful != NULL) {
+            *successful = false;
+        }
+        if ((errorMessage != NULL) && (*errorMessage == NULL)) {
+            // We want error message to hold the FIRST error, so don't set
+            // it again if it's already set.
+            *errorMessage
+                = "Provided output buffer too small for replaced output.";
+        }
     }
-    returnValue = (char*) check;
-    memcpy(&returnValue[returnValueLength], &haystack[haystackPosition], copyLength);
-    returnValueLength += copyLength;
+    bufferPosition += copyLength;
 
-    returnValue[returnValueLength] = '\0';
-    return returnValue;
+    if (bufferPosition < bufferLength) {
+        buffer[bufferPosition] = '\0';
+    } else {
+        buffer[bufferPosition - copyLength] = '\0';
+    }
+
+    return bufferPosition;
+}
+
+uint64_t substituteMultiple_(const char *haystack, const char **patterns, const char **replacements,
+    bool greedy, char **buffers, uint64_t bufferLength, unsigned int *finalIndex,
+    bool *successful, const char **errorMessage, ...
+) {
+    uint64_t maxReplacementLength = 0;
+    uint64_t replacementLength = 0;
+    if ((haystack == NULL) || (patterns == NULL) || (replacements == NULL)
+        || (buffers == NULL) || (buffers[0] == NULL) || (buffers[1] == NULL)
+        || (finalIndex == NULL)
+    ) {
+        if (successful != NULL) {
+            *successful = false;
+        }
+        if (errorMessage != NULL) {
+            *errorMessage = "One or more NULL parameters to substituteMultiple.\n";
+        }
+        return replacementLength; // 0
+    }
+
+    if (errorMessage != NULL) {
+        // Clear it out.
+        *errorMessage = NULL;
+    }
+
+    const char *input = haystack;
+    unsigned int bufferIndex = 0;
+    char *output = NULL;
+
+    bool allSuccessful = true; // Until proven false.
+    bool substituteSuccessful = false; // Until proven true;
+    const char *substituteErrorMessage = NULL;
+    for (uint64_t ii = 0; (patterns[ii] != NULL) && (replacements[ii] != NULL); ii++) {
+        output = buffers[bufferIndex];
+        replacementLength = substitute(input, patterns[ii], replacements[ii],
+            greedy, output, bufferLength,
+            &substituteSuccessful, &substituteErrorMessage);
+        if (replacementLength > maxReplacementLength) {
+            maxReplacementLength = replacementLength;
+        }
+        allSuccessful &= substituteSuccessful;
+        // We want the error message reported by this function to be the FIRST
+        // error message we encounter.  Since substitute only sets the error
+        // message on failure, we can just blindly set the errorMessage pointer
+        // we were provided to substituteErrorMessage until errorMessage is set.
+        if ((errorMessage != NULL) && (*errorMessage == NULL)) {
+            *errorMessage = substituteErrorMessage;
+        }
+
+        // Use the current output buffer as the input buffer on the next pass.
+        input = (const char*) output;
+        // Switch to the other buffer for the next pass.
+        bufferIndex ^= 1;
+    }
+
+    bufferIndex ^= 1;
+    *finalIndex = bufferIndex;
+
+    if (successful != NULL) {
+        *successful = allSuccessful;
+    }
+    return maxReplacementLength;
 }
 

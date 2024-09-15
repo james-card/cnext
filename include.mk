@@ -19,6 +19,7 @@ OBJ_FILES := \
     $(OBJ_DIR)/Queue.o \
     $(OBJ_DIR)/RandomLib.o \
     $(OBJ_DIR)/RedBlackTree.o \
+    $(OBJ_DIR)/Regex.o \
     $(OBJ_DIR)/RsaLib.o \
     $(OBJ_DIR)/Scope.o \
     $(OBJ_DIR)/Sockets.o \

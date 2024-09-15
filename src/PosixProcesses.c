@@ -623,10 +623,25 @@ int killProcessTree(uint32_t processId) {
     for (uint32_t ii = 0; directories[ii] != NULL; ii++) {
       sprintf(path, "/proc/%u/task/%s/children", processId, directories[ii]);
       Bytes fileContent = NULL;
-      for (
-        i64 length = 4096;
+      i64 length = 4096;
+      for (;
         (bytesLength(fileContent) == 0) && (length > 0);
         length >>= 1
+      ) {
+        fileContent = bytesDestroy(fileContent);
+        fileContent = getFileContent(path, 0, length);
+      }
+      for (;
+        bytesLength(fileContent) != 0;
+        length++
+      ) {
+        fileContent = bytesDestroy(fileContent);
+        fileContent = getFileContent(path, 0, length);
+      }
+      fileContent = bytesDestroy(fileContent);
+      for (;
+        (bytesLength(fileContent) == 0) && (length > 0);
+        length--
       ) {
         fileContent = bytesDestroy(fileContent);
         fileContent = getFileContent(path, 0, length);
