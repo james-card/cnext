@@ -108,6 +108,11 @@ typedef struct Matcher {
     bool isFound;
 } Matcher;
 
+typedef struct Substitution {
+    const char *pattern;
+    const char *replacement;
+} Substitution;
+
 // Compile regex string pattern to a regex
 void regexCompile(Regex *regex, const char *pattern);
 
@@ -127,14 +132,14 @@ uint64_t substitute_(const char *haystack, const char *pattern,
     substitute_(haystack, pattern, replacement, greedy, buffer, bufferLength, ##__VA_ARGS__, 0, 0)
 
 // Apply successive patterns and replacements to an initial string using two
-// buffers provided.  patterns and replacements must be NULL-terminated arrays.
-// buffer must be an array of (at least) two stirng buffers.  bufferLength must
-// be the minimum length of the first two buffers provided.  The index of the
+// buffers provided.  substitutions must be a NULL-terminated array.  buffer
+// must be an array of (at least) two stirng buffers.  bufferLength must be
+// the minimum length of the first two buffers provided.  The index of the
 // final output will be stored in the finalIndex parameter.  Substitution will
-// stop when NULL is reached in either the patterns or replacements arrays.
-uint64_t substituteMultiple_(const char *haystack, const char **patterns, const char **replacements,
+// stop when NULL is reached in the substitutions array.
+uint64_t substituteMultiple_(const char *haystack, Substitution *substitutions,
     bool greedy, char **buffers, uint64_t bufferLength, unsigned int *finalIndex,
     bool *successful, const char **errorMessage, ...);
 
-#define substituteMultiple(haystack, patterns, replacements, greedy, buffers, bufferLength, finalIndex, ...) \
-    substituteMultiple_(haystack, patterns, replacements, greedy, buffers, bufferLength, finalIndex, ##__VA_ARGS__, 0, 0)
+#define substituteMultiple(haystack, substitutions, greedy, buffers, bufferLength, finalIndex, ...) \
+    substituteMultiple_(haystack, substitutions, greedy, buffers, bufferLength, finalIndex, ##__VA_ARGS__, 0, 0)

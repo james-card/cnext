@@ -725,13 +725,13 @@ final:
     return bufferPosition;
 }
 
-uint64_t substituteMultiple_(const char *haystack, const char **patterns, const char **replacements,
+uint64_t substituteMultiple_(const char *haystack, Substitution *substitutions,
     bool greedy, char **buffers, uint64_t bufferLength, unsigned int *finalIndex,
     bool *successful, const char **errorMessage, ...
 ) {
     uint64_t maxReplacementLength = 0;
     uint64_t replacementLength = 0;
-    if ((haystack == NULL) || (patterns == NULL) || (replacements == NULL)
+    if ((haystack == NULL) || (substitutions == NULL)
         || (buffers == NULL) || (buffers[0] == NULL) || (buffers[1] == NULL)
         || (finalIndex == NULL)
     ) {
@@ -756,9 +756,13 @@ uint64_t substituteMultiple_(const char *haystack, const char **patterns, const 
     bool allSuccessful = true; // Until proven false.
     bool substituteSuccessful = false; // Until proven true;
     const char *substituteErrorMessage = NULL;
-    for (uint64_t ii = 0; (patterns[ii] != NULL) && (replacements[ii] != NULL); ii++) {
+    for (uint64_t ii = 0;
+        ((substitutions[ii].pattern != NULL) && (substitutions[ii].replacement != NULL));
+        ii++
+    ) {
         output = buffers[bufferIndex];
-        replacementLength = substitute(input, patterns[ii], replacements[ii],
+        replacementLength = substitute(input,
+            substitutions[ii].pattern, substitutions[ii].replacement,
             greedy, output, bufferLength,
             &substituteSuccessful, &substituteErrorMessage);
         if (replacementLength > maxReplacementLength) {
