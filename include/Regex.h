@@ -31,6 +31,7 @@
 #include <stdint.h>
 #include <ctype.h>
 #include <string.h>
+#include <stdlib.h>
 
 /*
  * FORKED FROM: tiny-regex-c, see https://github.com/kokke/tiny-regex-c
@@ -63,6 +64,7 @@
 #define REGEX_DOT_MATCH_NEWLINE true
 #define MAX_REGEXP_OBJECTS  64    // Max number of regex symbols in expression.
 #define MAX_CHAR_CLASS_LENGTH  256    // Max length of character-class buffer in. Determines the size of buffer for chars in all char-classes in the expression.
+#define MAX_SUBEXPRESSIONS 20    // Max number of subexpressions when substituting with a replacement that matches part of a pattern.
 
 typedef enum RegexPatternType {
     REGEX_END_OF_PATTERN,     // is a sentinel used to indicate end-of-pattern
@@ -113,11 +115,18 @@ typedef struct Substitution {
     const char *replacement;
 } Substitution;
 
+typedef uint64_t (*SubstituteFunction)(const char *haystack, const char *pattern,
+    const char *replacement, bool greedy,
+    char *buffer, uint64_t bufferLength,
+    bool *successful, const char **errorMessage, ...);
+
 // Compile regex string pattern to a regex
+void regexCompileLength(Regex *regex, const char *pattern, size_t patternLength);
 void regexCompile(Regex *regex, const char *pattern);
 
 // Find matches of the compiled pattern inside text.
-bool regexMatch(Regex *regex, const char *text, Matcher *matcher);
+bool regexMatchMatcher(Regex *regex, const char *text, Matcher *matcher);
+Matcher regexMatch(Regex *regex, const char *text);
 
 // Substitute a matched regular expression with the provided replacement using
 // the provided output buffer.
@@ -131,6 +140,19 @@ uint64_t substitute_(const char *haystack, const char *pattern,
 #define substitute(haystack, pattern, replacement, greedy, buffer, bufferLength, ...) \
     substitute_(haystack, pattern, replacement, greedy, buffer, bufferLength, ##__VA_ARGS__, 0, 0)
 
+// Substitute a regular expression that contains one or more sub-expressions
+// delineated by \( and \) with a replacement that may contain references to
+// the matched sub-expressions using the provided output buffer.
+uint64_t substituteMatch_(const char *haystack, const char *pattern,
+    const char *replacement, bool greedy,
+    char *buffer, uint64_t bufferLength,
+    bool *successful, const char **errorMessage, ...);
+
+// Wrapper around substituteMatch_ that automatically provides NULLs for the
+// successful and errorMessage pointers if the caller isn't interested in them.
+#define substituteMatch(haystack, pattern, replacement, greedy, buffer, bufferLength, ...) \
+    substituteMatch_(haystack, pattern, replacement, greedy, buffer, bufferLength, ##__VA_ARGS__, 0, 0)
+
 // Apply successive patterns and replacements to an initial string using two
 // buffers provided.  substitutions must be a NULL-terminated array.  buffer
 // must be an array of (at least) two stirng buffers.  bufferLength must be
@@ -139,7 +161,7 @@ uint64_t substitute_(const char *haystack, const char *pattern,
 // stop when NULL is reached in the substitutions array.
 uint64_t substituteMultiple_(const char *haystack, Substitution *substitutions,
     bool greedy, char **buffers, uint64_t bufferLength, unsigned int *finalIndex,
-    bool *successful, const char **errorMessage, ...);
+    bool *successful, const char **errorMessage, SubstituteFunction substituteFunction, ...);
 
 #define substituteMultiple(haystack, substitutions, greedy, buffers, bufferLength, finalIndex, ...) \
-    substituteMultiple_(haystack, substitutions, greedy, buffers, bufferLength, finalIndex, ##__VA_ARGS__, 0, 0)
+    substituteMultiple_(haystack, substitutions, greedy, buffers, bufferLength, finalIndex, ##__VA_ARGS__, 0, 0, 0)

@@ -29,6 +29,10 @@
 #define END_LINE '\0'
 #define MAX_QUANTIFICATION_VALUE  1024  // Max in {M,N} - Denotes the minimum M and the maximum N regexMatch count.
 
+// Utility define.
+#define _STRINGIFY(x) #x
+#define STRINGIFY(x) _STRINGIFY(x)
+
 typedef struct InnerRegexCompiler {     // The sizes of the two static arrays below substantiates the static RAM usage of this module.
     Regex *regex;
     uint16_t regexIndex;
@@ -66,7 +70,41 @@ static inline bool isMatchingRange(unsigned char character, const unsigned char 
 static bool isMatchingMetaChar(unsigned char character, const unsigned char *metaCharString);
 
 
-void regexCompile(Regex *regex, const char *pattern) {
+static inline void setCompilerChar(RegexCompiler *regexCompiler, const char *pattern, char charInPattern) {
+    switch (charInPattern) {
+        case '^':   // Meta-characters
+            setBeginMetaChar(regexCompiler);
+            break;
+        case '$':
+            setDollarEndMetaChar(regexCompiler);
+            break;
+        case '.':
+            setDotMetaChar(regexCompiler);
+            break;
+        case '*':
+            setStarMetaChar(regexCompiler, pattern);
+            break;
+        case '+':
+            setPlusMetaChar(regexCompiler, pattern);
+            break;
+        case '?':
+            setQuestionMarkMetaChar(regexCompiler);
+            break;
+        case '\\':  // Escaped characters
+            resolveEscapedCharacterClasses(regexCompiler, pattern);
+            break;
+        case '[':   // Character class
+            resolveCharacterClass(regexCompiler, pattern);
+            break;
+        case '{':   // Quantifier
+            resolveQuantification(regexCompiler, pattern);
+            break;
+        default:    // Regular characters
+            setRegularChar(regexCompiler, charInPattern);
+    }
+}
+
+void regexCompileLength(Regex *regex, const char *pattern, size_t patternLength) {
     if (regex == NULL) return;
     regex->isPatternValid = true;
     regex->errorMessage = "Success";
@@ -87,52 +125,46 @@ void regexCompile(Regex *regex, const char *pattern) {
         return;
     }
 
-    while (pattern[regexCompiler.patternIndex] != END_LINE && ((regexCompiler.regexIndex + 1) < MAX_REGEXP_OBJECTS)) {
-        char charInPattern = pattern[regexCompiler.patternIndex];
+    if (patternLength == 0) {
+        // Go until the end of the line.
+        for (regexCompiler.patternIndex = 0;
+            (pattern[regexCompiler.patternIndex] != END_LINE)
+                && ((regexCompiler.regexIndex + 1) < MAX_REGEXP_OBJECTS);
+            regexCompiler.patternIndex++
+        ) {
+            char charInPattern = pattern[regexCompiler.patternIndex];
+            setCompilerChar(&regexCompiler, pattern, charInPattern);
 
-        switch (charInPattern) {
-            case '^':   // Meta-characters
-                setBeginMetaChar(&regexCompiler);
-                break;
-            case '$':
-                setDollarEndMetaChar(&regexCompiler);
-                break;
-            case '.':
-                setDotMetaChar(&regexCompiler);
-                break;
-            case '*':
-                setStarMetaChar(&regexCompiler, pattern);
-                break;
-            case '+':
-                setPlusMetaChar(&regexCompiler, pattern);
-                break;
-            case '?':
-                setQuestionMarkMetaChar(&regexCompiler);
-                break;
-            case '\\':  // Escaped characters
-                resolveEscapedCharacterClasses(&regexCompiler, pattern);
-                break;
-            case '[':   // Character class
-                resolveCharacterClass(&regexCompiler, pattern);
-                break;
-            case '{':   // Quantifier
-                resolveQuantification(&regexCompiler, pattern);
-                break;
-            default:    // Regular characters
-                setRegularChar(&regexCompiler, charInPattern);
+            if (!regex->isPatternValid) {
+                return;
+            }
+            regexCompiler.regexIndex++;
         }
+    } else {
+        // Process the number of characters specified.
+        for (regexCompiler.patternIndex = 0;
+            (regexCompiler.patternIndex < patternLength)
+                && ((regexCompiler.regexIndex + 1) < MAX_REGEXP_OBJECTS);
+            regexCompiler.patternIndex++
+        ) {
+            char charInPattern = pattern[regexCompiler.patternIndex];
+            setCompilerChar(&regexCompiler, pattern, charInPattern);
 
-        if (!regex->isPatternValid) {
-            return;
+            if (!regex->isPatternValid) {
+                return;
+            }
+            regexCompiler.regexIndex++;
         }
-        regexCompiler.patternIndex++;
-        regexCompiler.regexIndex++;
     }
 
     setRegexPatternType(REGEX_END_OF_PATTERN, &regexCompiler);
 }
 
-bool regexMatch(Regex *regex, const char *text, Matcher *matcher) {
+void regexCompile(Regex *regex, const char *pattern) {
+    regexCompileLength(regex, pattern, 0);
+}
+
+bool regexMatchMatcher(Regex *regex, const char *text, Matcher *matcher) {
     matcher->foundAtIndex = 0;
     matcher->matchLength = 0;
     matcher->isFound = false;
@@ -158,6 +190,11 @@ bool regexMatch(Regex *regex, const char *text, Matcher *matcher) {
     return matcher->isFound;
 }
 
+Matcher regexMatch(Regex *regex, const char *text) {
+    Matcher matcher;
+    regexMatchMatcher(regex, text, &matcher);
+    return matcher;
+}
 
 static inline void setBeginMetaChar(RegexCompiler *regexCompiler) {
     regexCompiler->isQuantifiable = false;
@@ -633,8 +670,14 @@ uint64_t substitute_(const char *haystack, const char *pattern,
     }
     replacementLength = (uint64_t) strlen(replacement);
 
+    if (errorMessage != NULL) {
+        // Initialize *errorMessage to NULL so that we can tell when we've
+        // already set the value before.
+        *errorMessage = NULL;
+    }
+
     Regex regex;
-    regexCompile(&regex, pattern);
+    regexCompileLength(&regex, pattern, 0);
     if (!regex.isPatternValid) {
         if (successful != NULL) {
             *successful = false;
@@ -645,14 +688,8 @@ uint64_t substitute_(const char *haystack, const char *pattern,
         goto final;
     }
 
-    if (errorMessage != NULL) {
-        // Initialize *errorMessage to NULL so that we can tell when we've
-        // already set the value before.
-        *errorMessage = NULL;
-    }
-
     Matcher matcher;
-    regexMatch(&regex, &haystack[haystackPosition], &matcher);
+    regexMatchMatcher(&regex, &haystack[haystackPosition], &matcher);
     while (matcher.isFound) {
         copyLength = (haystackPosition + matcher.foundAtIndex) - haystackPosition;
         if ((bufferPosition + copyLength) < bufferLength) {
@@ -688,7 +725,7 @@ uint64_t substitute_(const char *haystack, const char *pattern,
         haystackPosition += matcher.matchLength;
 
         if (greedy == true) {
-            regexMatch(&regex, &haystack[haystackPosition], &matcher);
+            regexMatchMatcher(&regex, &haystack[haystackPosition], &matcher);
         } else {
             break;
         }
@@ -727,7 +764,7 @@ final:
 
 uint64_t substituteMultiple_(const char *haystack, Substitution *substitutions,
     bool greedy, char **buffers, uint64_t bufferLength, unsigned int *finalIndex,
-    bool *successful, const char **errorMessage, ...
+    bool *successful, const char **errorMessage, SubstituteFunction substituteFunction, ...
 ) {
     uint64_t maxReplacementLength = 0;
     uint64_t replacementLength = 0;
@@ -749,6 +786,10 @@ uint64_t substituteMultiple_(const char *haystack, Substitution *substitutions,
         *errorMessage = NULL;
     }
 
+    if (substituteFunction == NULL) {
+        substituteFunction = substitute_;
+    }
+
     const char *input = haystack;
     unsigned int bufferIndex = 0;
     char *output = NULL;
@@ -761,7 +802,7 @@ uint64_t substituteMultiple_(const char *haystack, Substitution *substitutions,
         ii++
     ) {
         output = buffers[bufferIndex];
-        replacementLength = substitute(input,
+        replacementLength = substituteFunction(input,
             substitutions[ii].pattern, substitutions[ii].replacement,
             greedy, output, bufferLength,
             &substituteSuccessful, &substituteErrorMessage);
@@ -790,5 +831,343 @@ uint64_t substituteMultiple_(const char *haystack, Substitution *substitutions,
         *successful = allSuccessful;
     }
     return maxReplacementLength;
+}
+
+typedef struct Subexpression {
+    char value[MAX_CHAR_CLASS_LENGTH];
+    uint64_t length;
+} Subexpression;
+    
+static inline int getSubexpressions(const char *pattern,
+    Subexpression subexpressions[MAX_SUBEXPRESSIONS]
+) {
+    int numSubexpressions = 0;
+
+    const char *subexpressionStart = strstr(pattern, "\\(");
+    for (;
+        (subexpressionStart) && (numSubexpressions < MAX_SUBEXPRESSIONS - 1);
+        numSubexpressions++
+    ) {
+        const char *subexpressionEnd = strstr(subexpressionStart, "\\)");
+        if (!subexpressionEnd) {
+            // Not a properly-formed subexpression.  Bail.
+            break;
+        }
+
+        uint64_t initialExpressionLength = (uint64_t) (((uintptr_t) subexpressionStart) - ((uintptr_t) pattern));
+        if (initialExpressionLength > 0) {
+            strncpy(subexpressions[numSubexpressions].value, pattern, initialExpressionLength);
+            subexpressions[numSubexpressions].value[initialExpressionLength] = '\0';
+            subexpressions[numSubexpressions].length = initialExpressionLength;
+            numSubexpressions++;
+            if (numSubexpressions == MAX_SUBEXPRESSIONS - 1) {
+                break;
+            }
+        }
+
+        uint64_t subexpressionLength = (uint64_t) (((uintptr_t) subexpressionEnd + 2) - ((uintptr_t) subexpressionStart));
+        strncpy(subexpressions[numSubexpressions].value, subexpressionStart, subexpressionLength);
+        subexpressions[numSubexpressions].value[subexpressionLength] = '\0';
+        subexpressions[numSubexpressions].length = subexpressionLength;
+
+        pattern = subexpressionEnd + 2;
+        subexpressionStart = strstr(pattern, "\\(");
+    }
+
+    if (*pattern != '\0') {
+        subexpressions[numSubexpressions].length = strlen(pattern);
+        memcpy(subexpressions[numSubexpressions].value, pattern, subexpressions[numSubexpressions].length + 1);
+        numSubexpressions++;
+    }
+
+    return numSubexpressions;
+}
+
+static inline int getReplacements(const char *replacementString,
+    char replacements[MAX_SUBEXPRESSIONS][MAX_CHAR_CLASS_LENGTH]
+) {
+    int numReplacements = 0;
+
+    const char *backslashAt = strchr(replacementString, '\\');
+    while ((backslashAt) && (numReplacements < MAX_SUBEXPRESSIONS - 1)) {
+        char nextChar = *(backslashAt + 1);
+        if ((nextChar < '0') || (nextChar > '9')) {
+            replacementString += 2;
+            backslashAt = strchr(replacementString, '\\');
+            continue;
+        }
+
+        uint64_t replacementLength = (uint64_t) (((uintptr_t) backslashAt) - ((uintptr_t) replacementString));
+        if (replacementLength > 0) {
+            strncpy(replacements[numReplacements], replacementString, replacementLength);
+            replacements[numReplacements][replacementLength] = '\0';
+            numReplacements++;
+            replacementString = backslashAt;
+        }
+
+        backslashAt = strchr(replacementString + 1, '\\');
+    }
+
+    if (*replacementString != '\0') {
+        strcpy(replacements[numReplacements], replacementString);
+        numReplacements++;
+    }
+
+    return numReplacements;
+}
+
+uint64_t substituteMatch_(const char *haystack, const char *pattern,
+    const char *replacement, bool greedy,
+    char *buffer, uint64_t bufferLength,
+    bool *successful, const char **errorMessage, ...
+) {
+    uint64_t bufferPosition = 0;
+    uint64_t haystackPosition = 0;
+    uint64_t haystackLength = 0;
+    uint64_t copyLength = 0;
+    uint64_t numIterations = 0;
+    uint64_t lastMatchPosition = 0;
+    Regex regex;
+    Matcher matcher;
+
+    if ((haystack == NULL) || (pattern == NULL)
+        || (replacement == NULL) || (buffer == NULL)
+    ) {
+        if (successful != NULL) {
+            *successful = false;
+        }
+        if (errorMessage != NULL) {
+            *errorMessage = "One or more NULL parameters to substituteMatch.\n";
+        }
+        return bufferPosition; // 0
+    }
+    haystackLength = (uint64_t) strlen(haystack);
+
+    Subexpression subexpressions[MAX_SUBEXPRESSIONS];
+    int numSubexpressions = getSubexpressions(pattern, subexpressions);
+
+    char replacements[MAX_SUBEXPRESSIONS][MAX_CHAR_CLASS_LENGTH];
+    int numReplacements = getReplacements(replacement, replacements);
+
+    if (errorMessage != NULL) {
+        // Initialize *errorMessage to NULL so that we can tell when we've
+        // already set the value before.
+        *errorMessage = NULL;
+    }
+
+    while ((numIterations < 1) || ((greedy == true) && (haystackPosition < haystackLength))) {
+        // matches[0] will hold the entire match, so we need one more than MAX_SUBEXPRESSIONS.
+        char matches[MAX_SUBEXPRESSIONS + 1][MAX_CHAR_CLASS_LENGTH];
+        uint64_t match0Length = 0;
+        int numMatches = 1;
+
+        // First, we need to find all the matches.
+        uint64_t firstMatchPosition = 0;
+        for (int ii = 0; ii < numSubexpressions; ii++) {
+            const char *pattern = subexpressions[ii].value; // shadows input parameter
+            size_t patternLength = subexpressions[ii].length;
+            bool storeMatch = false;
+            if ((pattern[0] == '\\') && (pattern[1] == '(')) {
+              pattern += 2;
+              patternLength -= 4;
+              storeMatch = true;
+            }
+
+            regexCompileLength(&regex, pattern, patternLength);
+            if (!regex.isPatternValid) {
+                if (successful != NULL) {
+                    *successful = false;
+                }
+                if (errorMessage != NULL) {
+                    *errorMessage = regex.errorMessage;
+                }
+                goto final;
+            }
+
+            regexMatchMatcher(&regex, &haystack[lastMatchPosition], &matcher);
+            if (matcher.isFound) {
+                matcher.foundAtIndex += lastMatchPosition;
+                if (ii == 0) {
+                    firstMatchPosition = matcher.foundAtIndex;
+                }
+
+                if (match0Length + matcher.matchLength < MAX_CHAR_CLASS_LENGTH) {
+                    memcpy(&matches[0][match0Length], &haystack[matcher.foundAtIndex], matcher.matchLength);
+                    match0Length += matcher.matchLength;
+                } else {
+                    copyLength = MAX_CHAR_CLASS_LENGTH - match0Length - 1;
+                    memcpy(&matches[0][match0Length], &haystack[matcher.foundAtIndex], copyLength);
+                    match0Length = MAX_CHAR_CLASS_LENGTH - 1;
+                }
+                matches[0][match0Length] = '\0';
+
+                if (storeMatch) {
+                    if (matcher.matchLength < MAX_CHAR_CLASS_LENGTH) {
+                        memcpy(matches[numMatches], &haystack[matcher.foundAtIndex], matcher.matchLength);
+                        matches[numMatches][matcher.matchLength] = '\0';
+                        numMatches++;
+                    } else {
+                        if (successful != NULL) {
+                            *successful = false;
+                        }
+                        if ((errorMessage != NULL) && (*errorMessage == NULL)) {
+                            // We want error message to hold the FIRST error, so don't set
+                            // it again if it's already set.
+                            *errorMessage
+                                = "Matched expression is more than " STRINGIFY(MAX_CHAR_CLASS_LENGTH) " characters long.";
+                            numMatches = 0;
+                            goto final;
+                        }
+                    }
+                }
+
+                lastMatchPosition = matcher.foundAtIndex + matcher.matchLength;
+            } else {
+                // This isn't valid.  We either match all of the subexpressions or none of them.
+                numMatches = 0;
+                break;
+            }
+        }
+
+        // Now, we need to replace the parts of the input string with the pieces
+        // specified in the replacement.  Matches from the original input string are
+        // identified by the syntax "\index" where index is a non-negative integer.
+        // "\0" will yield the entier match (or as much of it as we could store).
+        // If an integer is not present then the replacement is taken as-is.
+        if (numMatches > 0) {
+            // First, we need to grab everything before the match and start our output
+            // with that.
+            copyLength = firstMatchPosition - haystackPosition;
+            if ((bufferPosition + copyLength) < bufferLength) {
+                memcpy(&buffer[bufferPosition], &haystack[haystackPosition], copyLength);
+                bufferPosition += copyLength;
+                haystackPosition += copyLength;
+            } else {
+                if (successful != NULL) {
+                    *successful = false;
+                }
+                if ((errorMessage != NULL) && (*errorMessage == NULL)) {
+                    // We want error message to hold the FIRST error, so don't set
+                    // it again if it's already set.
+                    *errorMessage
+                        = "Provided output buffer too small for replaced output.";
+                    goto final;
+                }
+            }
+
+            // Next, append the replacements to the output buffer.
+            for (int ii = 0; ii < numReplacements; ii++) {
+                long matchIndex = 0;
+                char *matchIndexStart = replacements[ii] + 1;
+                char *endPtr = matchIndexStart;
+                if (replacements[ii][0] == '\\') {
+                    matchIndex = strtol(matchIndexStart, &endPtr, 10);
+                }
+                if (endPtr != matchIndexStart) {
+                    // matchIndex was parsed into a valid number.  Use it.
+                    if (matchIndex < numMatches) {
+                        copyLength = strlen(matches[matchIndex]);
+                        if ((bufferPosition + copyLength) < bufferLength) {
+                            memcpy(&buffer[bufferPosition], matches[matchIndex], copyLength);
+                            bufferPosition += copyLength;
+                        } else {
+                            if (successful != NULL) {
+                                *successful = false;
+                            }
+                            if ((errorMessage != NULL) && (*errorMessage == NULL)) {
+                                // We want error message to hold the FIRST error, so don't set
+                                // it again if it's already set.
+                                *errorMessage
+                                    = "Provided output buffer too small for replaced output.";
+                                goto final;
+                            }
+                        }
+
+                        // Anything after the integer should be appended literally.
+                        copyLength = strlen(endPtr);
+                        if ((bufferPosition + copyLength) < bufferLength) {
+                            memcpy(&buffer[bufferPosition], endPtr, copyLength);
+                            bufferPosition += copyLength;
+                        } else {
+                            if (successful != NULL) {
+                                *successful = false;
+                            }
+                            if ((errorMessage != NULL) && (*errorMessage == NULL)) {
+                                // We want error message to hold the FIRST error, so don't set
+                                // it again if it's already set.
+                                *errorMessage
+                                    = "Provided output buffer too small for replaced output.";
+                                goto final;
+                            }
+                        }
+                    } else {
+                          if (successful != NULL) {
+                              *successful = false;
+                          }
+                          if ((errorMessage != NULL) && (*errorMessage == NULL)) {
+                              // We want error message to hold the FIRST error, so don't set
+                              // it again if it's already set.
+                              *errorMessage = "Invalid match index referenced.";
+                              goto final;
+                          }
+                    }
+                } else {
+                    // replacements[ii] is just a string.  Use it directly.
+                    copyLength = strlen(replacements[ii]);
+                    if ((bufferPosition + copyLength) < bufferLength) {
+                        memcpy(&buffer[bufferPosition], replacements[ii], copyLength);
+                        bufferPosition += copyLength;
+                    } else {
+                        if (successful != NULL) {
+                            *successful = false;
+                        }
+                        if ((errorMessage != NULL) && (*errorMessage == NULL)) {
+                            // We want error message to hold the FIRST error, so don't set
+                            // it again if it's already set.
+                            *errorMessage
+                                = "Provided output buffer too small for replaced output.";
+                            goto final;
+                        }
+                    }
+                }
+            }
+        } else {
+            // Error case.  Bail.
+            break;
+        }
+
+        haystackPosition = lastMatchPosition;
+        numIterations++;
+    }
+
+    if (successful != NULL) {
+        *successful = true;
+    }
+
+final:
+    // Take care of the last of the string.
+    copyLength = haystackLength - haystackPosition;
+    if ((bufferPosition + copyLength) < bufferLength) {
+        memcpy(&buffer[bufferPosition], &haystack[haystackPosition], copyLength);
+    } else {
+        if (successful != NULL) {
+            *successful = false;
+        }
+        if ((errorMessage != NULL) && (*errorMessage == NULL)) {
+            // We want error message to hold the FIRST error, so don't set
+            // it again if it's already set.
+            *errorMessage
+                = "Provided output buffer too small for replaced output.";
+        }
+    }
+    bufferPosition += copyLength;
+
+    if (bufferPosition < bufferLength) {
+        buffer[bufferPosition] = '\0';
+    } else {
+        buffer[bufferPosition - copyLength] = '\0';
+    }
+
+    return bufferPosition;
 }
 
