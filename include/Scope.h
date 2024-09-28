@@ -10,7 +10,7 @@
 ///                    that are intended to be temporary.
 ///
 /// @copyright
-///       (c) Copyright 2012-2022 James B. Card  All Rights Reserved.
+///                   Copyright (c) 2012-2024 James B. Card
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a
 /// copy of this software and associated documentation files (the "Software"),
@@ -60,44 +60,50 @@ typedef struct Scope {
   VariableAndDestructor variablesAndDestructors[MAX_SCOPE_VARS];
 } Scope;
 
-#define scopeBegin() \
-  Scope _scope_; \
+#define scopeBegin(scopeSize) \
+  struct Scope##scopeSize { \
+    u64            numVars; \
+    u64            maxVars; \
+    VariableAndDestructor variablesAndDestructors[scopeSize]; \
+  }; \
+   \
+  struct Scope##scopeSize _scope_; \
   _scope_.numVars = 0; \
-  _scope_.maxVars = MAX_SCOPE_VARS; \
+  _scope_.maxVars = scopeSize; \
 
 void* scopeAdd_(Scope *scope, volatile void *pointer, ...);
 #define scopeAdd(pointer, ...) \
-  scopeAdd_(&_scope_, (pointer), ##__VA_ARGS__, free)
+  scopeAdd_((Scope*) &_scope_, (pointer), ##__VA_ARGS__, free)
 void scopePop_(Scope *scope, u64 numEntries);
 #define scopePop(numEntries) \
-  scopePop_(&_scope_, (numEntries))
+  scopePop_((Scope*) &_scope_, (numEntries))
 #define scopePopAll() \
-  scopePop_(&_scope_, _scope_.numVars)
+  scopePop_((Scope*) &_scope_, _scope_.numVars)
 void* scopeDestroy_(Scope *scope, volatile void *pointer);
 #define scopeDestroy(pointer) \
-  scopeDestroy_(&_scope_, pointer)
+  scopeDestroy_((Scope*) &_scope_, pointer)
 void* scopeUpdate_(Scope *scope, volatile void *oldPointer, volatile void *newPointer);
 #define scopeUpdate(oldPointer, newPointer) \
   { \
     void *_tmpOldPointer_ = (oldPointer); \
     void *_tmpNewPointer_ = (newPointer); \
-    void *temp = scopeUpdate_(&_scope_, _tmpOldPointer_, _tmpNewPointer_); \
+    void *temp = scopeUpdate_((Scope*) &_scope_, _tmpOldPointer_, _tmpNewPointer_); \
     void **variableAddress = (void**) &(oldPointer); \
     *variableAddress = temp; \
   }
 #define scopeRemove(oldPointer) \
-  scopeUpdate_(&_scope_, (oldPointer), NULL)
+  scopeUpdate_((Scope*) &_scope_, (oldPointer), NULL)
 
 #define SCOPE_ENTER(argFormat, ...) \
   printLog(TRACE, "ENTER %s(" argFormat ")", __func__, ##__VA_ARGS__); \
-  scopeBegin();
+  scopeBegin(MAX_SCOPE_VARS);
 #define SCOPE_EXIT(argFormat, returnFormat, ...) \
   printLog(TRACE, "EXIT %s(" argFormat ") = {" returnFormat "}", __func__, ##__VA_ARGS__); \
-  scopeEnd_(&_scope_);
+  scopeEnd_((Scope*) &_scope_);
 
 int scopeEnd_(Scope *scope);
 #define scopeEnd() \
-  ((_scope_.numVars > 0) ? scopeEnd_(&_scope_) : TRINARY_ZERO)
+  ((_scope_.numVars > 0) ? scopeEnd_((Scope*) &_scope_) : TRINARY_ZERO)
 
 bool scopeUnitTest();
 

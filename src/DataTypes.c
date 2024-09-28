@@ -7478,7 +7478,7 @@ bool structUnitTest() {
 
 #include "Scope.h"
 bool valueToStringUnitTest() {
-  scopeBegin();
+  scopeBegin(MAX_SCOPE_VARS);
   
   bool boolValue = true;
   i8 i8Value = 1;
