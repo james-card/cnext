@@ -1879,10 +1879,12 @@ void printStackTrace(LogLevel logLevel) {
     = backtrace(addressList, sizeof(addressList) / sizeof(void*));
   
   if (addressLength == 0) {
-    if (logLevel >= CRITICAL) {
+    if ((logLevel >= CRITICAL) || (logFile == NULL)) {
       fputs("backtrace empty, possibly corrupt.\n", stderr);
     }
-    fputs("backtrace empty, possibly corrupt.\n", logFile);
+    if (logFile != NULL) {
+      fputs("backtrace empty, possibly corrupt.\n", logFile);
+    }
     _bypassRealMemorySystemCalls--;
     mtx_unlock(&_staticBufferLock);
     return;
