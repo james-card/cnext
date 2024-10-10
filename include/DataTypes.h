@@ -647,6 +647,12 @@ TypeDescriptor* getTypeDescriptorFromIndex(i64 typeDescriptorIndex);
 #define pointerDestroy(pointer) ((void*) (free((void*) pointer), NULL))
 void* pointerDestroyFunction(volatile void *pointer);
 #define stringDestroyFunction pointerDestroyFunction
+char *pointerToString(const volatile void *value);
+Bytes pointerToBytes(const volatile void *value);
+int pointerCompare(const volatile void *valueA, const volatile void *valueB);
+Bytes pointerToBlob(const volatile void *value);
+void* pointerFromBlob(const volatile void *array, u64 *length, bool inPlaceData,
+  bool disableThreadSafety);
 
 // Endianness functions and macros
 //
