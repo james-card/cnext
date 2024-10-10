@@ -3365,6 +3365,12 @@ Bytes dataToBase64(const volatile void *data, u64 dataLength) {
   printLog(TRACE, "ENTER dataToBase64(data=%p, dataLength=%llu)\n",
     data, llu(dataLength));
   
+  Bytes output = NULL;
+  if ((data == NULL) || (dataLength == 0)) {
+    // Nothing to do.
+    return output;
+  }
+  
   u64 outputLength = (dataLength << 2) / 3;
   u64 remainder = dataLength % 3;
   if (remainder == 1) {
@@ -3372,7 +3378,6 @@ Bytes dataToBase64(const volatile void *data, u64 dataLength) {
   } else if (remainder == 2) {
     outputLength += 2;
   }
-  Bytes output = NULL;
   bytesAllocate(&output, outputLength);
   bytesSetLength(output, outputLength);
   
@@ -3436,7 +3441,7 @@ Bytes base64ToBytes(const char *base64String, u64 base64StringLength) {
     base64String, llu(base64StringLength));
   
   Bytes output = NULL;
-  if ((base64StringLength * 3) % 4) {
+  if ((base64String == NULL) || (((base64StringLength * 3) % 4) > 0)) {
     printLog(ERR, "Invalid base64StringLength %llu.\n",
       llu(base64StringLength));
     printLog(TRACE,
@@ -3464,7 +3469,7 @@ Bytes base64ToBytes(const char *base64String, u64 base64StringLength) {
     outputChars += 3;
   }
   if (outputLength > 0) {
-    for (; output[outputLength - 1] == '\0'; outputLength--);
+    for (base64String--; *base64String == '='; base64String--, outputLength--);
   }
   bytesSetLength(output, outputLength);
   
