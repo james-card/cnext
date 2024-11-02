@@ -60,7 +60,7 @@ const char *weekdayToString(int weekday);
 #endif // timezone
 #endif // _MSC_VER
 
-/// @fn static inline i64 timestampToTime(const char *timestamp)
+/// @fn static inline i64 utcTimestampToTime(const char *timestamp)
 ///
 /// @brief Convert a UTC timestamp in the format "YYYY-MM-DD HH:MM:SS" to a
 /// time_t value.
@@ -68,12 +68,12 @@ const char *weekdayToString(int weekday);
 /// @param timestamp The string containing the timestamp to convert.
 ///
 /// @return Returns the time_t value of the timestamp on success, 0 on failure.
-static inline i64 timestampToTime(const char *timestamp) {
+static inline i64 utcTimestampToTime(const char *timestamp) {
   struct tm timestampStruct;
   int year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0;
   i64 returnValue = 0;
   
-  if (timestamp != NULL && *timestamp != '\0') {
+  if ((timestamp != NULL) && (*timestamp != '\0')) {
     if (sscanf(timestamp, "%d-%d-%d %d:%d:%d",
       &year, &month, &day, &hour, &minute, &second) != 6
     ) {
@@ -93,6 +93,9 @@ static inline i64 timestampToTime(const char *timestamp) {
     timestampStruct.tm_yday = 0;
     timestampStruct.tm_isdst = -1;
     
+    // mktime assumes the provided time is in the local timezone.  However, the
+    // provided timestamp is in UTC.  So, we have to account for the timezone
+    // after the conversion happens.
     tzset();
     returnValue = (i64) mktime(&timestampStruct);
     returnValue -= (i64) timezone;
@@ -102,6 +105,77 @@ static inline i64 timestampToTime(const char *timestamp) {
   }
   
   return returnValue;
+}
+
+/// @fn static inline i64 localTimestampToTime(const char *timestamp)
+///
+/// @brief Convert a UTC timestamp in the format "YYYY-MM-DD HH:MM:SS" to a
+/// time_t value.
+///
+/// @param timestamp The string containing the timestamp to convert.
+///
+/// @return Returns the time_t value of the timestamp on success, 0 on failure.
+static inline i64 localTimestampToTime(const char *timestamp) {
+  struct tm timestampStruct;
+  int year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0;
+  i64 returnValue = 0;
+  
+  if ((timestamp != NULL) && (*timestamp != '\0')) {
+    if (sscanf(timestamp, "%d-%d-%d %d:%d:%d",
+      &year, &month, &day, &hour, &minute, &second) != 6
+    ) {
+      // This isn't a timestamp.  Bail.
+      return returnValue; // 0
+    }
+    
+    timestampStruct.tm_year = year - 1900;
+    timestampStruct.tm_mon = month - 1;
+    timestampStruct.tm_mday = day;
+    timestampStruct.tm_hour = hour;
+    timestampStruct.tm_min = minute;
+    timestampStruct.tm_sec = second;
+    // These next three shouldn't be needed but valgrind will complain if they're
+    // not initialized.
+    timestampStruct.tm_wday = 0;
+    timestampStruct.tm_yday = 0;
+    timestampStruct.tm_isdst = -1;
+    
+    // mktime assumes the provided time is in the local timezone, so no need to
+    // do any special adjustments.
+    returnValue = (i64) mktime(&timestampStruct);
+  }
+  
+  return returnValue;
+}
+
+/// @fn static inline i64 getTimezoneNanosecondsFromTimestamp(const char *localTimestamp)
+///
+/// @brief Get the timezone offset, in nanoseconds, of a timestamp expressed the
+/// local time of the timestamp generator.
+///
+/// @param localTimestamp A timestamp in "YYYY-MM-DD hh:mm:ss" format.  There
+///   may be more data after the seconds of the timestamp - it will be ignored
+///   if present.
+///
+/// @return Returns the timezone of the local timestamp, in nanoseconds.
+static inline i64 getTimezoneNanosecondsFromTimestamp(
+  const char *localTimestamp
+) {
+  i64 timezoneNanoseconds = 0;
+  
+  if ((localTimestamp != NULL) && (*localTimestamp != '\0')) {
+    i64 localTime = utcTimestampToTime(localTimestamp);
+    i64 utcTime = (i64) time(NULL);
+    i64 localTimezone = utcTime - localTime;
+    // Timezones across the world are aligned in 15-minute increments.  So, any
+    // value that is not a multiple of 15 minutes (AKA 900 seconds) is not
+    // valid.  Truncate our timezone to be a multiple of 15 minutes.
+    localTimezone /= 900;
+    localTimezone *= 900;
+    timezoneNanoseconds = localTimezone * ((i64) 1000000000);
+  }
+  
+  return timezoneNanoseconds;
 }
 
 /// @fn static inline char* nanosecondsToTimestamp(i64 nanoseconds, char *timestamp)
