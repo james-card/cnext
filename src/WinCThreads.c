@@ -968,7 +968,11 @@ void call_once(once_flag* flag, void(*func)(void)) {
     LONG currentFlagValue
         = InterlockedCompareExchange(flag, ONCE_FLAG_RUNNING, ONCE_FLAG_INIT);
 
-    if (currentFlagValue == ONCE_FLAG_INIT) {
+    if (currentFlagValue == ONCE_FLAG_COMPLETE) {
+        // This is the expected case, so put it first.
+        return;
+    }
+    else if (currentFlagValue == ONCE_FLAG_INIT) {
         func();
         *flag = ONCE_FLAG_COMPLETE;
     }
@@ -1000,7 +1004,7 @@ int mtx_init(mtx_t* mtx, int type) {
 }
 
 // See if we need to atomically initialize the mutex
-static inline void ensure_mutex_initialized(mtx_t* mtx) {
+static inline void ensureMutexInitialized(mtx_t* mtx) {
     if (mtx->initialized == false) {
         // Initialize the HANDLE
         // Idea for this procedure came from Dr. Alex RE's answer to
@@ -1022,7 +1026,7 @@ static inline void ensure_mutex_initialized(mtx_t* mtx) {
 int mtx_lock(mtx_t* mtx) {
     int returnValue = thrd_success;
 
-    ensure_mutex_initialized(mtx);
+    ensureMutexInitialized(mtx);
 
     if ((mtx->attribs & mtx_timed) != 0) {
         if ((mtx->attribs & mtx_recursive) == 0) {
@@ -1062,7 +1066,7 @@ int mtx_timedlock(mtx_t* mtx, const struct timespec* ts) {
         return thrd_error;
     }
 
-    ensure_mutex_initialized(mtx);
+    ensureMutexInitialized(mtx);
 
     if (timespec_get(&now, TIME_UTC) == 0) {
         uint64_t nowns = (now.tv_sec * 1000000000) + now.tv_nsec;
@@ -1092,7 +1096,7 @@ int mtx_timedlock(mtx_t* mtx, const struct timespec* ts) {
 int mtx_trylock(mtx_t* mtx) {
     DWORD waitResult = WAIT_OBJECT_0;
     
-    ensure_mutex_initialized(mtx);
+    ensureMutexInitialized(mtx);
 
     if ((mtx->attribs & mtx_timed) != 0) {
         waitResult = WaitForSingleObject(mtx->handle, 0);
