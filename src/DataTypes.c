@@ -7019,7 +7019,9 @@ bool pointerUnitTest() { \
   u64 length = 0; \
    \
   string = typePointerNoCopy->toString(NULL); \
-  if (strcmp(string, "(nil)") != 0) { \
+  if ((strcmp(string, "(nil)") != 0) \
+    && (strcmp(string, "0000000000000000") != 0) \
+  ) { \
     printLog(ERR, "type%s->toString returned \"%s\" instead of \"%s\".\n", \
       "PointerNoCopy", string, "(nil)"); \
     string = stringDestroy(string); \
@@ -7028,8 +7030,10 @@ bool pointerUnitTest() { \
   string = stringDestroy(string); \
   string = typePointerNoCopy->toString(value1); \
   if ((strcmp(string, "0xffffffffffffffff") != 0) \
-    && (strcmp(string, "0xffffffff") != 0)) \
-  { \
+    && (strcmp(string, "0xffffffff") != 0) \
+    && (strcmp(string, "FFFFFFFFFFFFFFFF") != 0) \
+    && (strcmp(string, "FFFFFFFF") != 0) \
+  ) { \
     printLog(ERR, \
       "type%s->toString returned \"%s\" instead of \"%s\" or \"%s\".\n", \
       "PointerNoCopy", string, "0xffffffffffffffff", "0xffffffff"); \
@@ -7046,7 +7050,10 @@ bool pointerUnitTest() { \
   newValue = (char*) typeBytes->destroy(newValue); \
   string = stringDestroy(string); \
   string = typePointerNoCopy->toString(value2); \
-  if (strcmp(string, "0x1") != 0) { \
+  if ((strcmp(string, "0x1") != 0) \
+    && (strcmp(string, "0000000000000001") != 0) \
+    && (strcmp(string, "00000001") != 0) \
+  ) { \
     printLog(ERR, "type%s->toString returned \"%s\" instead of \"%s\".\n", \
       "PointerNoCopy", string, "0x1"); \
     string = stringDestroy(string); \
