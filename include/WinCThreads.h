@@ -48,6 +48,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 
 #ifdef __cplusplus
@@ -56,9 +57,10 @@ extern "C"
 #endif
 
 // Call once support.
-#define ONCE_FLAG_INIT 0
-
-typedef int once_flag;
+typedef LONG once_flag;
+#define ONCE_FLAG_INIT     0
+#define ONCE_FLAG_RUNNING  1
+#define ONCE_FLAG_COMPLETE 2
 
 void call_once(once_flag* flag, void(*func)(void));
 
@@ -68,6 +70,7 @@ typedef struct mtx_t {
     int attribs;
     HANDLE handle;
     CRITICAL_SECTION criticalSection;
+    bool initialized;
 } mtx_t;
 
 #define mtx_plain     0

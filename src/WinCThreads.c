@@ -32,7 +32,7 @@
 #include "WinCThreads.h"
 #include <stdio.h>
 
-#ifdef LOGGING_ENABLED
+#if LOGGING_ENABLED && WIN_CTHREADS_LOGGING_ENABLED
 
 #include <process.h> // for getpid() and the exec..() family
 #include <string.h>
@@ -109,7 +109,7 @@ const char *logLevelName[NUM_LOG_LEVELS] = {
 extern LogLevel logThreshold;
 extern FILE *logFile;
 
-#else // LOGGING_ENABLED not defined
+#else // LOGGING_ENABLED or WIN_CTHREADS_LOGGING_ENABLED not defined
 
 #define logFile stderr
 #define printLog(...) {}
@@ -198,17 +198,18 @@ extern FILE *logFile;
 // (a) don't align well to the POSIX/C threads model and (b) don't have any
 // mechanism for the destructors defined by POSIX/C threads.  Because of this,
 // I needed a way to keep track of thread-specific storage that would meet the
-// requirements of the standard.  The red black tree is used to achieve that.
+// requirements of the standard.  The data structures in this library are used
+// to achieve that.
 //
-// In this library, thread-specific storage is implemented as a red black tree
-// of red black trees.  In the first level trees, the keys are the tss_t values
-// and the values of the nodes are data structures containing function pointers
-// to the destructors and a pointer to a second level red black tree.  In the
-// second level trees, the keys are the thread IDs and the values are pointers
-// to the thread-specific values.
+// In this library, thread-specific storage is implemented as an array of red
+// black trees.  In the array, the indexes are the tss_t values and the values
+// of the indexes are data structures containing function pointers to the
+// destructors and a pointer to a second level red black tree.  In the second
+// level trees, the keys are the thread IDs and the values are pointers to the
+// thread-specific values.
 //
-// Access to the trees is protected by a mutex.  This mutex is a mtx_t as
-// implemented in this library.  This guarantees that the trees do not get
+// Access to the data structues is protected by a mutex.  This mutex is a mtx_t
+// as implemented in this library.  This guarantees that the trees do not get
 // corrupted by multiple threads trying to access their local storage at the
 // same time (which is actually a rare event).
 //
@@ -956,22 +957,24 @@ static int compareU32(const void* u32PointerA, const void* u32PointerB) {
         return 0;
     }
 }
-
 static void NullFunction(void* parameter) {
     (void)parameter;
     return;
 }
 
-static mtx_t callOnceMutex = { 0 };
 
 // Call once support.
 void call_once(once_flag* flag, void(*func)(void)) {
-    mtx_lock(&callOnceMutex);
-    if (*flag == 0) {
-        (*flag)++;
+    LONG currentFlagValue
+        = InterlockedCompareExchange(flag, ONCE_FLAG_RUNNING, ONCE_FLAG_INIT);
+
+    if (currentFlagValue == ONCE_FLAG_INIT) {
         func();
+        *flag = ONCE_FLAG_COMPLETE;
     }
-    mtx_unlock(&callOnceMutex);
+    else if (currentFlagValue == ONCE_FLAG_RUNNING) {
+        while (*flag == ONCE_FLAG_RUNNING);
+    }
 
     return;
 }
@@ -979,35 +982,47 @@ void call_once(once_flag* flag, void(*func)(void)) {
 
 // Mutex support.
 int mtx_init(mtx_t* mtx, int type) {
+    if (mtx == NULL) {
+        return thrd_error;
+    }
+
     mtx->attribs = type;
     // Timed mutexes need the handle.  Everything else uses only the criticalSection.
     mtx->handle = CreateMutex(
         NULL,  // default security attributes
         FALSE, // initially not owned
         NULL); // unnamed mutex
+    // Initialize the CRITICAL_SECTION
     InitializeCriticalSection(&mtx->criticalSection);
+    mtx->initialized = true;
 
     return thrd_success;
+}
+
+// See if we need to atomically initialize the mutex
+static inline void ensure_mutex_initialized(mtx_t* mtx) {
+    if (mtx->initialized == false) {
+        // Initialize the HANDLE
+        // Idea for this procedure came from Dr. Alex RE's answer to
+        // https://stackoverflow.com/questions/3555859/is-it-possible-to-do-static-initialization-of-mutexes-in-windows
+        HANDLE mtxInit = CreateMutex(NULL, FALSE, NULL);
+        if (InterlockedCompareExchangePointer((PVOID*)&mtx->handle, (PVOID)mtxInit, NULL) == NULL) {
+            // Initialize the CRITICAL_SECTION
+            InitializeCriticalSection(&mtx->criticalSection);
+            mtx->initialized = true;
+        }
+        else {
+            // mtx->handle was already initialized.  Close the mutex we just created.
+            CloseHandle(mtxInit);
+            while (!mtx->initialized);
+        }
+    }
 }
 
 int mtx_lock(mtx_t* mtx) {
     int returnValue = thrd_success;
 
-    // See if we need to atomically initialize the mutex
-    if (mtx->handle == NULL) {
-        // Initialize the HANDLE
-        // Idea for this procedure came from Dr. Alex RE's answer to
-        // https://stackoverflow.com/questions/3555859/is-it-possible-to-do-static-initialization-of-mutexes-in-windows
-        HANDLE mtxInit = CreateMutex(NULL, FALSE, NULL);
-        if (InterlockedCompareExchangePointer((PVOID*) &mtx->handle, (PVOID)mtxInit, NULL) != NULL) {
-            // mtx->handle was already initialized.  Close the mutex we just created.
-            CloseHandle(mtxInit);
-        }
-        else {
-            // Initialize the CRITICAL_SECTION
-            InitializeCriticalSection(&mtx->criticalSection);
-        }
-    }
+    ensure_mutex_initialized(mtx);
 
     if ((mtx->attribs & mtx_timed) != 0) {
         if ((mtx->attribs & mtx_recursive) == 0) {
@@ -1047,21 +1062,7 @@ int mtx_timedlock(mtx_t* mtx, const struct timespec* ts) {
         return thrd_error;
     }
 
-    // See if we need to atomically initialize the mutex
-    if (mtx->handle == NULL) {
-        // Initialize the HANDLE
-        // Idea for this procedure came from Dr. Alex RE's answer to
-        // https://stackoverflow.com/questions/3555859/is-it-possible-to-do-static-initialization-of-mutexes-in-windows
-        HANDLE mtxInit = CreateMutex(NULL, FALSE, NULL);
-        if (InterlockedCompareExchangePointer((PVOID*)&mtx->handle, (PVOID)mtxInit, NULL) != NULL) {
-            // mtx->handle was already initialized.  Close the mutex we just created.
-            CloseHandle(mtxInit);
-        }
-        else {
-            // Initialize the CRITICAL_SECTION
-            InitializeCriticalSection(&mtx->criticalSection);
-        }
-    }
+    ensure_mutex_initialized(mtx);
 
     if (timespec_get(&now, TIME_UTC) == 0) {
         uint64_t nowns = (now.tv_sec * 1000000000) + now.tv_nsec;
@@ -1091,21 +1092,7 @@ int mtx_timedlock(mtx_t* mtx, const struct timespec* ts) {
 int mtx_trylock(mtx_t* mtx) {
     DWORD waitResult = WAIT_OBJECT_0;
     
-    // See if we need to atomically initialize the mutex
-    if (mtx->handle == NULL) {
-        // Initialize the HANDLE
-        // Idea for this procedure came from Dr. Alex RE's answer to
-        // https://stackoverflow.com/questions/3555859/is-it-possible-to-do-static-initialization-of-mutexes-in-windows
-        HANDLE mtxInit = CreateMutex(NULL, FALSE, NULL);
-        if (InterlockedCompareExchangePointer((PVOID*)&mtx->handle, (PVOID)mtxInit, NULL) != NULL) {
-            // mtx->handle was already initialized.  Close the mutex we just created.
-            CloseHandle(mtxInit);
-        }
-        else {
-            // Initialize the CRITICAL_SECTION
-            InitializeCriticalSection(&mtx->criticalSection);
-        }
-    }
+    ensure_mutex_initialized(mtx);
 
     if ((mtx->attribs & mtx_timed) != 0) {
         waitResult = WaitForSingleObject(mtx->handle, 0);
@@ -1126,9 +1113,14 @@ int mtx_trylock(mtx_t* mtx) {
 int mtx_unlock(mtx_t* mtx) {
     int returnValue = thrd_success;
 
-    LeaveCriticalSection(&mtx->criticalSection);
-
-    if (((mtx->attribs & mtx_timed) != 0) && (ReleaseMutex(mtx->handle) == 0)) {
+    if (mtx->initialized == true) {
+        LeaveCriticalSection(&mtx->criticalSection);
+        
+        if (((mtx->attribs & mtx_timed) != 0) && (ReleaseMutex(mtx->handle) == 0)) {
+            returnValue = thrd_error;
+        }
+    }
+    else {
         returnValue = thrd_error;
     }
     
@@ -1136,6 +1128,7 @@ int mtx_unlock(mtx_t* mtx) {
 }
 
 void mtx_destroy(mtx_t* mtx) {
+    mtx->initialized = false;
     CloseHandle(mtx->handle);
     DeleteCriticalSection(&mtx->criticalSection);
 }
@@ -1191,81 +1184,73 @@ int cnd_wait(cnd_t* cond, mtx_t* mtx) {
 
 
 // Thread-specific storage support.
-static RedBlackTree* tssStorageByKey = NULL;
-static RedBlackTree* tssStorageByThread = NULL;
 typedef struct DataAndDestructor {
     RedBlackTree* data;
     tss_dtor_t destructor;
 } DataAndDestructor;
-uint32_t tssIndex = 1;
-mtx_t* tssStorageByKeyMutex = NULL;
-mtx_t* tssStorageByThreadMutex = NULL;
+static DataAndDestructor *tssStorageByKey = NULL;
+static RedBlackTree* tssStorageByThread = NULL;
+static uint32_t tssIndex = 1;
+static mtx_t* tssStorageByKeyMutex = NULL;
+static mtx_t* tssStorageByThreadMutex = NULL;
+static once_flag tssMetadataOnceFlag = ONCE_FLAG_INIT;
+static bool tssMetadataInitialized = false;
+
+void initializeTssMetadata(void) {
+    tssStorageByKey = calloc(1, sizeof(DataAndDestructor));
+    if (tssStorageByKey == NULL) {
+        // No tree.  Can't proceed.
+        LOG_MALLOC_FAILURE();
+        exit(1);
+    }
+    tssStorageByKeyMutex = calloc(1, sizeof(mtx_t));
+    if (tssStorageByKeyMutex == NULL) {
+        LOG_MALLOC_FAILURE();
+        exit(1);
+    }
+    if (mtx_init(tssStorageByKeyMutex, mtx_plain | mtx_recursive) != thrd_success) {
+        printLog(CRITICAL, "Could not initialize tssStorageByKeyMutex\n");
+        exit(1);
+    }
+    tssStorageByThread = rbTreeCreate(compareU32, NullFunction, NullFunction);
+    if (tssStorageByThread == NULL) {
+        // No tree.  Can't proceed.
+        LOG_MALLOC_FAILURE();
+        exit(1);
+    }
+    tssStorageByThreadMutex = calloc(1, sizeof(mtx_t));
+    if (tssStorageByThreadMutex == NULL) {
+        LOG_MALLOC_FAILURE();
+        exit(1);
+    }
+    if (mtx_init(tssStorageByThreadMutex, mtx_plain | mtx_recursive) != thrd_success) {
+        printLog(CRITICAL, "Could not initialize tssStorageByThreadMutex\n");
+        exit(1);
+    }
+    tssMetadataInitialized = true;
+}
 
 int tss_create(tss_t* key, tss_dtor_t dtor) {
-    if (tssStorageByKey == NULL) {
-        tssStorageByKey = rbTreeCreate(compareU32, free, NullFunction);
-        if (tssStorageByKey == NULL) {
-            // No tree.  Can't proceed.
-            LOG_MALLOC_FAILURE();
-            exit(-1);
-            return thrd_error;
-        }
-        tssStorageByKeyMutex = calloc(1, sizeof(mtx_t));
-        if (tssStorageByKeyMutex == NULL) {
-            LOG_MALLOC_FAILURE();
-            exit(-1);
-            return thrd_error;
-        }
-        if (mtx_init(tssStorageByKeyMutex, mtx_plain | mtx_recursive) != thrd_success) {
-            printLog(CRITICAL, "Could not initialize tssStorageByKeyMutex\n");
-            exit(-1);
-            return thrd_error;
-        }
-    }
-    if (tssStorageByThread == NULL) {
-        tssStorageByThread = rbTreeCreate(compareU32, NullFunction, NullFunction);
-        if (tssStorageByThread == NULL) {
-            // No tree.  Can't proceed.
-            LOG_MALLOC_FAILURE();
-            exit(-1);
-            return thrd_error;
-        }
-        tssStorageByThreadMutex = calloc(1, sizeof(mtx_t));
-        if (tssStorageByThreadMutex == NULL) {
-            LOG_MALLOC_FAILURE();
-            exit(-1);
-            return thrd_error;
-        }
-        if (mtx_init(tssStorageByThreadMutex, mtx_plain | mtx_recursive) != thrd_success) {
-            printLog(CRITICAL, "Could not initialize tssStorageByThreadMutex\n");
-            exit(-1);
-            return thrd_error;
-        }
-    }
+    call_once(&tssMetadataOnceFlag, initializeTssMetadata);
 
     if (dtor == NULL) {
         dtor = NullFunction;
     }
 
-    DataAndDestructor* dd = (DataAndDestructor*) malloc(sizeof(DataAndDestructor));
-    if (dd == NULL) {
-        LOG_MALLOC_FAILURE();
-        exit(-1);
-        return thrd_error;
-    }
-    dd->data = rbTreeCreate(compareU32, free, NullFunction);
-    dd->destructor = dtor;
-
-    uint32_t* thisIndex = (uint32_t*) malloc(sizeof(uint32_t));
-    if (thisIndex == NULL) {
-        LOG_MALLOC_FAILURE();
-        exit(-1);
-        return thrd_error;
-    }
-    *thisIndex = tssIndex;
     mtx_lock(tssStorageByKeyMutex);
-    rbTreeInsert(tssStorageByKey, thisIndex, dd);
+    void *check = realloc(tssStorageByKey,
+        sizeof(DataAndDestructor) * (tssIndex + 1));
+    if (check == NULL) {
+        // No memory.  Can't proceed.
+        LOG_MALLOC_FAILURE();
+        exit(-1);
+        return thrd_error;
+    }
+    tssStorageByKey = (DataAndDestructor*) check;
+    tssStorageByKey[tssIndex].data = rbTreeCreate(compareU32, free, NullFunction);
+    tssStorageByKey[tssIndex].destructor = dtor;
     mtx_unlock(tssStorageByKeyMutex);
+
     *key = tssIndex;
     tssIndex++;
 
@@ -1273,7 +1258,7 @@ int tss_create(tss_t* key, tss_dtor_t dtor) {
 }
 
 void tss_delete(tss_t key) {
-    if (tssStorageByKey == NULL) {
+    if (tssMetadataInitialized == false) {
         // Thread-specific storage has not been initialized.  Nothing to do.
         printLog(DEBUG, "Key storage not initialized.\n");
         return;
@@ -1281,20 +1266,8 @@ void tss_delete(tss_t key) {
 
     mtx_lock(tssStorageByKeyMutex);
 
-    RedBlackNode* keyData = rbTreeExactQuery(tssStorageByKey, &key);
-    if (keyData == tssStorageByKey->nil) {
-        // Storage for this key has not been set up.  Nothing to do.
-        printLog(DEBUG, "Non-existent key.\n");
-        mtx_unlock(tssStorageByKeyMutex);
-        return;
-    } else if (keyData->value == NULL) {
-        printLog(DEBUG, "No value for key.\n");
-        mtx_unlock(tssStorageByKeyMutex);
-        return;
-    }
-
     // Remove metadata for all threads for this key.
-    RedBlackTree *data = ((DataAndDestructor*) keyData->value)->data;
+    RedBlackTree *data = tssStorageByKey[key].data;
     if (data == NULL) {
         printLog(DEBUG, "No metadata for value.\n");
         mtx_unlock(tssStorageByKeyMutex);
@@ -1305,7 +1278,9 @@ void tss_delete(tss_t key) {
         next = next->next;
         rbTreeDelete(data, node);
     }
-    rbTreeDelete(tssStorageByKey, keyData);
+    free(data); data = NULL;
+    tssStorageByKey[key].data = NULL;
+    tssStorageByKey[key].destructor = NULL;
 
     mtx_unlock(tssStorageByKeyMutex);
 
@@ -1315,7 +1290,7 @@ void tss_delete(tss_t key) {
 void* tss_get(tss_t key) {
     printLog(FLOOD, "ENTER tss_get(key=%u)\n", key);
 
-    if (tssStorageByKey == NULL) {
+    if (tssMetadataInitialized == false) {
         // Thread-specific storage has not been initialized.  Nothing to do.
         printLog(DEBUG, "Key storage not initialized.\n");
         printLog(FLOOD, "EXIT tss_get(key=%u) = {NULL}\n", key);
@@ -1324,21 +1299,7 @@ void* tss_get(tss_t key) {
 
     mtx_lock(tssStorageByKeyMutex);
 
-    RedBlackNode* keyData = rbTreeExactQuery(tssStorageByKey, &key);
-    if (keyData == tssStorageByKey->nil) {
-        // Storage for this key has not been set up.  Nothing to do.
-        printLog(DEBUG, "Non-existent key.\n");
-        mtx_unlock(tssStorageByKeyMutex);
-        printLog(FLOOD, "EXIT tss_get(key=%u) = {NULL}\n", key);
-        return NULL;
-    } else if (keyData->value == NULL) {
-        printLog(DEBUG, "No value for key.\n");
-        mtx_unlock(tssStorageByKeyMutex);
-        printLog(FLOOD, "EXIT tss_get(key=%u) = {NULL}\n", key);
-        return NULL;
-    }
-
-    RedBlackTree *data = ((DataAndDestructor*) keyData->value)->data;
+    RedBlackTree *data = tssStorageByKey[key].data;
     if (data == NULL) {
         printLog(DEBUG, "No data for value.\n");
         mtx_unlock(tssStorageByKeyMutex);
@@ -1362,7 +1323,7 @@ void* tss_get(tss_t key) {
 int tss_set(tss_t key, void* val) {
     printLog(FLOOD, "ENTER tss_set(key=%u, val=%p)\n", key, val);
 
-    if (tssStorageByKey == NULL) {
+    if (tssMetadataInitialized == false) {
         // Thread-specific storage has not been initialized.  Nothing to do.
         printLog(DEBUG, "Key storage not initialized.\n");
         printLog(FLOOD, "EXIT tss_set(key=%u, val=%p) = {%d}\n",
@@ -1373,25 +1334,7 @@ int tss_set(tss_t key, void* val) {
     // Set the lookup by key.  This is what tss_get will use.
     mtx_lock(tssStorageByKeyMutex);
 
-    RedBlackNode* keyData = rbTreeExactQuery(tssStorageByKey, &key);
-    if (keyData == tssStorageByKey->nil) {
-        // Storage for this key has not been set up.  Cannot proceed because we don't
-        // know what destructor to call.
-        printLog(DEBUG, "Non-existent key.\n");
-        mtx_unlock(tssStorageByKeyMutex);
-        printLog(FLOOD, "EXIT tss_set(key=%u, val=%p) = {%d}\n",
-            key, val, thrd_error);
-        return thrd_error;
-    } else if (keyData->value == NULL) {
-        printLog(DEBUG, "No value for key.\n");
-        mtx_unlock(tssStorageByKeyMutex);
-        printLog(FLOOD, "EXIT tss_set(key=%u, val=%p) = {%d}\n",
-            key, val, thrd_error);
-        return thrd_error;
-    }
-
-    DataAndDestructor *dd = (DataAndDestructor*) keyData->value;
-    RedBlackTree *data = dd->data;
+    RedBlackTree *data = tssStorageByKey[key].data;
     if (data == NULL) {
         printLog(DEBUG, "No metadata for value.\n");
         mtx_unlock(tssStorageByKeyMutex);
@@ -1434,7 +1377,7 @@ int tss_set(tss_t key, void* val) {
         rbTreeInsert(tssStorageByThread, thisThread, keys);
     }
 
-    keyData = rbTreeExactQuery(keys, &key);
+    RedBlackNode* keyData = rbTreeExactQuery(keys, &key);
     if (keyData != keys->nil) {
         // Remove the old metadata.
         rbTreeDelete(keys, keyData);
@@ -1602,12 +1545,9 @@ void thrd_exit(int res) {
                 thrd_t* key = (thrd_t*)node->key;
                 tss_dtor_t destructor = NullFunction;
                 mtx_lock(tssStorageByKeyMutex);
-                RedBlackNode* keyNode = rbTreeExactQuery(tssStorageByKey, key);
-                if ((keyNode != tssStorageByKey->nil) && (keyNode->value != NULL)) {
-                    DataAndDestructor* dd = (DataAndDestructor*)keyNode->value;
-                    if (dd->destructor != NULL) {
-                        destructor = dd->destructor;
-                    }
+                DataAndDestructor* dd = &tssStorageByKey[*key];
+                if (dd->destructor != NULL) {
+                    destructor = dd->destructor;
                 }
                 mtx_unlock(tssStorageByKeyMutex);
                 RedBlackNode* next = node->next;
@@ -1624,10 +1564,9 @@ void thrd_exit(int res) {
     // Clean up all of the lookups.
     if (tssStorageByKey != NULL) {
         mtx_lock(tssStorageByKeyMutex);
-        RedBlackNode *nil = tssStorageByKey->nil;
         // Walk through all the keys and delete the metadata for this thread.
-        for (RedBlackNode* storage = tssStorageByKey->head; storage != nil; storage = storage->next) {
-            DataAndDestructor *dd = (DataAndDestructor*) storage->value;
+        for (uint32_t ii = 1; ii < tssIndex; ii++) {
+            DataAndDestructor *dd = &tssStorageByKey[ii];
             if ((dd != NULL) && (dd->data != NULL)) {
                 RedBlackTree *data = dd->data;
                 RedBlackNode* threadData = rbTreeExactQuery(data, &thisThread);
