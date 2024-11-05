@@ -850,9 +850,15 @@ Socket* createServerSocket(SocketProtocol socketProtocol, const char *address,
   }
   
   int sockfd = 0;
+  int optionValue = 1;
   
   if (socketProtocol == TCP) {
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (char*) &optionValue,
+      sizeof(optionValue)) < 0
+    ) {
+      printLog(WARN, "Could not set socket to allow for reusing address.\n");
+    }
   } else if (socketProtocol == UDP) {
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
   }
@@ -2258,10 +2264,15 @@ Socket* socketAccept_(Socket *serverSocket, void *buf, int len, ...) {
   if (socketProtocol == TCP) {
     while (clientSockfd == 0) {
       // Call listen to drop connections beyond the end of our connection queue.
-      listen(sockfd, SOMAXCONN);
-      clientSockfd = accept(sockfd,
-        (struct sockaddr *) &clientAddress, &clientAddressLength);
-      if (clientSockfd < 0) {
+      ZEROINIT(struct pollfd pollDescriptor);
+      pollDescriptor.fd = sockfd;
+      pollDescriptor.events = POLLRDNORM;
+      int pollReturnValue = poll(&pollDescriptor, 1, -1);
+      if (pollReturnValue == 0) {
+        break;
+      } else if (pollReturnValue < 0) {
+        clientSockfd = -1;
+        
 #ifndef _WIN32
         // On POSIX, errno is either EAGAIN or EWOULDBLOCK.
         if ((errno == EAGAIN) || (errno == EWOULDBLOCK))
@@ -2278,6 +2289,8 @@ Socket* socketAccept_(Socket *serverSocket, void *buf, int len, ...) {
           break;
         }
       }
+      clientSockfd = accept(sockfd,
+        (struct sockaddr *) &clientAddress, &clientAddressLength);
     }
     if (clientSockfd < 0) {
       printLog(ERR, "Could not accept client connection.\n");
