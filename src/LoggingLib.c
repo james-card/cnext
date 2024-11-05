@@ -1464,8 +1464,6 @@ void setThreadLogThreshold(LogLevel threadLogThreshold) {
   }
 }
 
-#if !_MSC_VER && !_WIN32
-
 // We need to wrap memory management functions for printStackTrace.  The reason
 // is that this function may be called when the system is in a degraded state
 // (i.e. there's something that is preventing memory management from working
@@ -1486,11 +1484,6 @@ void setThreadLogThreshold(LogLevel threadLogThreshold) {
 #define isStaticPointer(ptr) \
   ((((uintptr_t) ptr) >= _mallocStart) && (((uintptr_t) ptr) <= _mallocEnd))
 
-#ifndef __USE_GNU
-#define __USE_GNU
-#endif
-#include <dlfcn.h>
-
 // Function pointers to the real functions in glibc.
 static void* (*realMalloc)(size_t size) = NULL;
 static void  (*realFree)(void *ptr) = NULL;
@@ -1499,10 +1492,13 @@ static void* (*realRealloc)(void *ptr, size_t size) = NULL;
 
 /// @var _bypassRealMemorySystemCalls
 ///
-/// @brief Whether or not a call to dlsym is being made to try and resolve the
-/// calloc system call.  Defaults to 0.  Incremented when a function needs to
-/// bypass the system memory calls.  Decrements afterward.  Bypassing the system
-/// calls happens any time the value is greater than 0.
+/// @brief Whether or not the real memory calls are currently being bypassed.
+/// Initialized to 0.  When initLoggingMemoryFunctions is looking up the real
+/// memory calls, it is set to a value less than 0.  When the memory functions
+/// detect this case, they will not attempt to lock the mutex since it will not
+/// have been initialized yet.  In all other cases where the real memory calls
+/// need to be bypassed, the value is incremented when the bypass is needed and
+/// decremented the bypass is no longer needed.
 static int _bypassRealMemorySystemCalls = 0;
 
 /// @var _initLoggingMemoryFunctionsRun
@@ -1560,33 +1556,23 @@ static const uintptr_t _mallocEnd
 /// @brief Mutex to guard access to the metadata for the static bufer.
 ZEROINIT(mtx_t _staticBufferLock);
 
-/// @var _staticBufferMutexInitialized
-///
-/// @brief once_flag variable to keep track of whether or not the static buffer
-/// lock has been initialized yet.
-static once_flag _staticBufferMutexInitialized = ONCE_FLAG_INIT;
-
 #ifdef __cplusplus
 extern "C"
 {
 #endif
-
-/// @fn void initStaticBufferMutex()
-///
-/// @brief Initialize the _staticBufferLock variable for use in guarding the
-/// static buffer and its metadata.
-void initStaticBufferMutex() {
-  if (mtx_init(&_staticBufferLock, mtx_plain | mtx_recursive) != thrd_success) {
-    fputs("WARNING:  Could not initialize _staticBufferLock.\n", stderr);
-    fputs("          Possible system problem.\n", stderr);
-  }
-}
 
 /// @fn void initLoggingMemoryFunctions()
 ///
 /// @brief Initialize the pointers to the real system calls.
 ///
 /// @return This function returns no value.
+
+#if !_MSC_VER && !_WIN32
+
+#ifndef __USE_GNU
+#define __USE_GNU
+#endif
+#include <dlfcn.h>
 void initLoggingMemoryFunctions() {
   // We need to mark _bypassRealMemorySystemCalls when trying to resolve the
   // pointer for realCalloc.  Once we do this, all further calls to dlsym
@@ -1594,14 +1580,45 @@ void initLoggingMemoryFunctions() {
   // function pointer first ensures that we only need to return the
   // static buffer once, thereby avoiding the need to clear the buffer
   // each time.
-  _bypassRealMemorySystemCalls++;
+  _bypassRealMemorySystemCalls = -1;
   *((void**) &realCalloc) = dlsym(RTLD_NEXT, "calloc");
-  _bypassRealMemorySystemCalls--;
-  
   *((void**) &realMalloc) = dlsym(RTLD_NEXT, "malloc");
   *((void**) &realFree) = dlsym(RTLD_NEXT, "free");
   *((void**) &realRealloc) = dlsym(RTLD_NEXT, "realloc");
+  _bypassRealMemorySystemCalls = 0;
+  
+  if (mtx_init(&_staticBufferLock, mtx_plain | mtx_recursive) != thrd_success) {
+    fputs("WARNING:  Could not initialize _staticBufferLock.\n", stderr);
+    fputs("          Possible system problem.\n", stderr);
+  }
 }
+
+#else // _MSC_VER OR _WIN32 is defined
+
+#include <windows.h>
+void initLoggingMemoryFunctions() {
+  _bypassRealMemorySystemCalls = -1;
+  HMODULE hModule = LoadLibraryA("C:\\Windows\\system32\\msvcrt.dll");
+  if (hModule == NULL) {
+    fputs("Could not load C:\\Windows\\system32\\msvcrt.dll\n", stderr);
+    exit(1);
+  }
+
+  *((void**) &realCalloc) = GetProcAddress(hModule, "calloc");
+  *((void**) &realMalloc) = GetProcAddress(hModule, "malloc");
+  *((void**) &realFree) = GetProcAddress(hModule, "free");
+  *((void**) &realRealloc) = GetProcAddress(hModule, "realloc");
+
+  FreeLibrary(hModule);
+  _bypassRealMemorySystemCalls = 0;
+  
+  if (mtx_init(&_staticBufferLock, mtx_plain | mtx_recursive) != thrd_success) {
+    fputs("WARNING:  Could not initialize _staticBufferLock.\n", stderr);
+    fputs("          Possible system problem.\n", stderr);
+  }
+}
+
+#endif // _MSC_VER
 
 /// @fn void free(void *ptr)
 ///
@@ -1611,13 +1628,14 @@ void initLoggingMemoryFunctions() {
 ///
 /// @return This function always succeeds and returns no value.
 void free(void *ptr) {
-  call_once(&_staticBufferMutexInitialized, initStaticBufferMutex);
   call_once(&_initLoggingMemoryFunctionsRun, initLoggingMemoryFunctions);
   
   char *charPointer = (char*) ptr;
   
-  if ((_bypassRealMemorySystemCalls > 0) || (isStaticPointer(ptr))) {
-    mtx_lock(&_staticBufferLock);
+  if ((_bypassRealMemorySystemCalls != 0) || (isStaticPointer(ptr))) {
+    if (_bypassRealMemorySystemCalls > 0) {
+      mtx_lock(&_staticBufferLock);
+    } // else we're initializing and the mutex isn't setup yet
     if (isStaticPointer(ptr)) {
       // This is static memory that was previously allocated from one of our
       // wrappers while the system calls were being bypassed.  Do *NOT* attempt
@@ -1645,7 +1663,9 @@ void free(void *ptr) {
             _mallocNext = &_mallocStaticBuffer[0];
           }
         }
-        mtx_unlock(&_staticBufferLock);
+        if (_bypassRealMemorySystemCalls > 0) {
+          mtx_unlock(&_staticBufferLock);
+        } // else we're initializing and the mutex isn't setup yet
       }
       return;
     }
@@ -1675,18 +1695,22 @@ void* realloc(void *ptr, size_t size) {
   char *charPointer = (char*) ptr;
   char *returnValue = NULL;
   
-  call_once(&_staticBufferMutexInitialized, initStaticBufferMutex);
+  call_once(&_initLoggingMemoryFunctionsRun, initLoggingMemoryFunctions);
   
   // We have to check the value of _bypassRealMemorySystemCalls first to avoid
   // infinitely recursing into initLoggingMemoryFunctions.
-  if (_bypassRealMemorySystemCalls > 0) {
-    mtx_lock(&_staticBufferLock);
+  if (_bypassRealMemorySystemCalls != 0) {
+    if (_bypassRealMemorySystemCalls > 0) {
+      mtx_lock(&_staticBufferLock);
+    }
     do {
       if (size == 0) {
         // In this case, there's no point in going through any path below.  Just
         // free it, return NULL, and be done with it.
         localFree(ptr);
-        mtx_unlock(&_staticBufferLock);
+        if (_bypassRealMemorySystemCalls > 0) {
+          mtx_unlock(&_staticBufferLock);
+        }
         return NULL;
       }
       
@@ -1696,7 +1720,9 @@ void* realloc(void *ptr, size_t size) {
           // We're fitting into a block that's larger than or equal to the size
           // being requested.  *DO NOT* update the size in this case.  Just
           // return the current pointer.
-          mtx_unlock(&_staticBufferLock);
+          if (_bypassRealMemorySystemCalls > 0) {
+            mtx_unlock(&_staticBufferLock);
+          }
           return ptr;
         } else if ((charPointer + sizeOfMemory(ptr)) == _mallocNext) {
           // The pointer we're reallocating is the last one allocated.  We have
@@ -1706,11 +1732,15 @@ void* realloc(void *ptr, size_t size) {
             // Update the size before returning the pointer.
             charPointer -= sizeof(size_t);
             *((size_t*) charPointer) = size;
-            mtx_unlock(&_staticBufferLock);
+            if (_bypassRealMemorySystemCalls > 0) {
+              mtx_unlock(&_staticBufferLock);
+            }
             return ptr;
           } else {
             // Out of memory.  Fail the request.
-            mtx_unlock(&_staticBufferLock);
+            if (_bypassRealMemorySystemCalls > 0) {
+              mtx_unlock(&_staticBufferLock);
+            }
             return NULL;
           }
         }
@@ -1718,7 +1748,9 @@ void* realloc(void *ptr, size_t size) {
       } else if (ptr != NULL) {
         // We shouldn't reallocate system dynamic memory with this algorithm
         // Wait for the system allocator to come back online.
-        mtx_unlock(&_staticBufferLock);
+        if (_bypassRealMemorySystemCalls > 0) {
+          mtx_unlock(&_staticBufferLock);
+        }
         while (_bypassRealMemorySystemCalls > 0) {
           msleep(1);
         }
@@ -1732,7 +1764,9 @@ void* realloc(void *ptr, size_t size) {
         _mallocNext += size + sizeof(size_t);
         _mallocNumAllocations++;
       }
-      mtx_unlock(&_staticBufferLock);
+      if (_bypassRealMemorySystemCalls > 0) {
+        mtx_unlock(&_staticBufferLock);
+      }
       
       if (returnValue != NULL) {
         // Store the size of the allocation at the start of the allocation
@@ -1841,11 +1875,6 @@ void* (*localCalloc)(size_t nmemb, size_t size) = calloc;
 /// the printStackTrace function.
 #define MAX_FRAMES 64
 
-#include <execinfo.h>
-#ifdef __cplusplus
-#include <cxxabi.h>
-#endif
-
 /// @fn void printStackTrace(LogLevel logLevel)
 ///
 /// @brief Print the current call stack of the calling function.
@@ -1857,6 +1886,13 @@ void* (*localCalloc)(size_t nmemb, size_t size) = calloc;
 ///   less-than or equal to the log level.)
 ///
 /// @return This function returns no value.
+
+#if !_MSC_VER && !_WIN32
+
+#include <execinfo.h>
+#ifdef __cplusplus
+#include <cxxabi.h>
+#endif
 void printStackTrace(LogLevel logLevel) {
   if ((logLevel == NEVER) || (logLevel < logThreshold)
     || (logThreshold == NONE)
@@ -1865,8 +1901,7 @@ void printStackTrace(LogLevel logLevel) {
   }
   
   // Bypass all real memory allocation calls for the duration of this function.
-  // Do a spin lock until the value becomes free.
-  call_once(&_staticBufferMutexInitialized, initStaticBufferMutex);
+  call_once(&_initLoggingMemoryFunctionsRun, initLoggingMemoryFunctions);
   mtx_lock(&_staticBufferLock);
   _bypassRealMemorySystemCalls++;
   
@@ -1970,48 +2005,41 @@ void printStackTrace(LogLevel logLevel) {
           functionName = demangledFunctionName;
         }
         if (status == 0) {
-          if (logLevel >= logThreshold) {
-            fputs("  ", outputFile);
-            fputs(symbolList[i], outputFile);
-            fputs(": ", outputFile);
-            fputs(functionName, outputFile);
-            fputs("+", outputFile);
-            fputs(startOfOffset, outputFile);
-            fputs("\n", outputFile);
-          }
+          fputs("  ", outputFile);
+          fputs(symbolList[i], outputFile);
+          fputs(": ", outputFile);
+          fputs(functionName, outputFile);
+          fputs("+", outputFile);
+          fputs(startOfOffset, outputFile);
+          fputs("\n", outputFile);
         } else {
           // Demangling failed. Output function name as a C function.
-          if (logLevel >= logThreshold) {
-            // This print must work if at all possible.  Print to outputFile.
-            fputs("  ", outputFile);
-            fputs(symbolList[i], outputFile);
-            fputs(": ", outputFile);
-            fputs(startOfName, outputFile);
-            fputs("()+", outputFile);
-            fputs(startOfOffset, outputFile);
-            fputs("\n", outputFile);
-          }
+          // This print must work if at all possible.  Print to outputFile.
+          fputs("  ", outputFile);
+          fputs(symbolList[i], outputFile);
+          fputs(": ", outputFile);
+          fputs(startOfName, outputFile);
+          fputs("()+", outputFile);
+          fputs(startOfOffset, outputFile);
+          fputs("\n", outputFile);
         }
 #else
         (void) functionNameSize; // Avoid compiler warnings when compiled for C.
-        if (logLevel >= logThreshold) {
-          // This print must work if at all possible.  Print to outputFile.
-            fputs("  ", outputFile);
-            fputs(symbolList[i], outputFile);
-            fputs(": ", outputFile);
-            fputs(startOfName, outputFile);
-            fputs("()+", outputFile);
-            fputs(startOfOffset, outputFile);
-            fputs("\n", outputFile);
-        }
+        // This print must work if at all possible.  Print to outputFile.
+        fputs("  ", outputFile);
+        fputs(symbolList[i], outputFile);
+        fputs(": ", outputFile);
+        fputs(startOfName, outputFile);
+        fputs("()+", outputFile);
+        fputs(startOfOffset, outputFile);
+        fputs("\n", outputFile);
 #endif
       } else {
         // We couldn't parse the line.  Print the whole line.
-        if (logLevel >= logThreshold) {
-          // This print must work if at all possible.  Print to stderr.
-          fputs(symbolList[i], stderr);
-          fputs("\n", stderr);
-        }
+        // This print must work if at all possible.  Print to stderr.
+        fputs("  ", outputFile);
+        fputs(symbolList[i], stderr);
+        fputs("\n", stderr);
       }
     }
     
@@ -2030,10 +2058,179 @@ void printStackTrace(LogLevel logLevel) {
   return;
 }
 
-#else // _MSC_VER OR _WIN32 IS DEFINED!!!
+#else // _MSC_VER OR _WIN32 is defined
 
+static inline char* u64ToHex(u64 number, char *buffer) {
+  if (buffer == NULL) {
+    return buffer;
+  }
+  
+  int numBits = 0;
+  u64 numberCopy = number;
+  for (; numberCopy; numBits++, numberCopy >>= 1);
+  int numBytes = (numBits >> 2) + 1;
+  if ((numBits & (numBits - 1)) == 0) {
+    // numBits is an even power of 2.  We've overallocated.
+    numBytes--;
+  }
+  
+  buffer[0]  = '0';
+  buffer[1]  = 'x';
+  buffer[2]  = '0';
+  buffer[3]  = '0';
+  buffer[4]  = '0';
+  buffer[5]  = '0';
+  buffer[6]  = '0';
+  buffer[7]  = '0';
+  buffer[8]  = '0';
+  buffer[9]  = '0';
+  buffer[10] = '0';
+  buffer[11] = '0';
+  buffer[12] = '0';
+  buffer[13] = '0';
+  buffer[14] = '0';
+  buffer[15] = '0';
+  buffer[16] = '0';
+  buffer[17] = '0';
+  
+  u64 digitVal = 0;
+  for (int ii = numBytes + 1; number; ii--, number >>= 4) {
+    digitVal = number & ((u64) 0xf);
+    if (digitVal < 10) {
+      buffer[ii] = '0' + digitVal;
+    } else {
+      buffer[ii] = 'a' + (digitVal - 10);
+    }
+  }
+  buffer[numBytes + 2]  = '\0';
+  
+  return buffer;
+}
+
+#include <dbghelp.h>
 void printStackTrace(LogLevel logLevel) {
-  printLog(logLevel, "Stack trace not available in Windows.\n");
+  if ((logLevel == NEVER) || (logLevel < logThreshold)
+    || (logThreshold == NONE)
+  ) {
+    return;
+  }
+  
+  // Bypass all real memory allocation calls for the duration of this function.
+  call_once(&_initLoggingMemoryFunctionsRun, initLoggingMemoryFunctions);
+  mtx_lock(&_staticBufferLock);
+  _bypassRealMemorySystemCalls++;
+  
+  HANDLE process = GetCurrentProcess();
+  HANDLE thread = GetCurrentThread();
+  CONTEXT context;
+  ZEROINIT(STACKFRAME frame);
+  DWORD machineType;
+  ZEROINIT(char symbolBuffer[sizeof(SYMBOL_INFO) + MAX_SYM_NAME]);
+  PSYMBOL_INFO symbol = (PSYMBOL_INFO) symbolBuffer;
+  symbol->MaxNameLen = MAX_SYM_NAME;
+  symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+  
+  RtlCaptureContext(&context);
+  
+#ifdef _M_IX86
+  machineType = IMAGE_FILE_MACHINE_I386;
+  frame.AddrPC.Offset = context.Eip;
+  frame.AddrPC.Mode = AddrModeFlat;
+  frame.AddrFrame.Offset = context.Ebp;
+  frame.AddrFrame.Mode = AddrModeFlat;
+  frame.AddrStack.Offset = context.Esp;
+  frame.AddrStack.Mode = AddrModeFlat;
+#elif _M_X64
+  machineType = IMAGE_FILE_MACHINE_AMD64;
+  frame.AddrPC.Offset = context.Rip;
+  frame.AddrPC.Mode = AddrModeFlat;
+  frame.AddrFrame.Offset = context.Rsp;
+  frame.AddrFrame.Mode = AddrModeFlat;
+  frame.AddrStack.Offset = context.Rsp;
+  frame.AddrStack.Mode = AddrModeFlat;
+#else
+  #error "Unsupported platform"
+#endif
+  
+  DWORD options = SymGetOptions();
+  SymSetOptions(options | SYMOPT_LOAD_LINES | SYMOPT_DEBUG);
+  SymInitialize(process, NULL, TRUE);
+  
+  // FILEs that we're going to be printing to.
+  FILE *outputFiles[] = {
+    stderr,
+    logFile
+  };
+  int startIndex = 1;
+  int endIndex = numElements(outputFiles);
+  if (logLevel >= CRITICAL) {
+    startIndex = 0;
+  }
+  if (startIndex == 0) {
+    if ((logFile == NULL) || (logFile == stderr) || (logFile == stdout)) {
+      endIndex = 1;
+    }
+  }
+  
+  ZEROINIT(char hexBuffer[19]);
+  DWORD64 address = 0;
+  for (int ii = startIndex; ii < endIndex; ii++) {
+    FILE *outputFile = outputFiles[ii];
+    fputs("Stack trace:\n", outputFile);
+    
+    // The top of the stack is the printStackTrace function itself, which we
+    // don't want to print.  Make sure we can do the first call, then enter the
+    // main loop.
+    if ((!StackWalk(
+      machineType,
+      process,
+      thread,
+      &frame,
+      &context,
+      NULL,
+      SymFunctionTableAccess,
+      SymGetModuleBase,
+      NULL)) || (frame.AddrPC.Offset == 0)
+    ) {
+      break;
+    }
+    while (StackWalk(
+      machineType,
+      process,
+      thread,
+      &frame,
+      &context,
+      NULL,
+      SymFunctionTableAccess,
+      SymGetModuleBase,
+      NULL)
+    ) {
+      address = frame.AddrPC.Offset;
+      if (address == 0) {
+        break;
+      }
+      
+      DWORD64 displacement = 0;
+      const char *functionName = "<UNKNOWN>";
+      if (SymFromAddr(process, address, &displacement, symbol)) {
+        functionName = symbol->Name;
+      }
+      fputs("  ", outputFile);
+      fputs(u64ToHex(address, hexBuffer), outputFile);
+      fputs(": ", outputFile);
+      fputs(functionName, outputFile);
+      fputs("()+", outputFile);
+      fputs(u64ToHex(displacement, hexBuffer), outputFile);
+      fputs("\n", outputFile);
+    }
+  }
+  
+  SymCleanup(process);
+  SymSetOptions(options);
+  
+  // Resume regular memory allocation calls.
+  _bypassRealMemorySystemCalls--;
+  mtx_unlock(&_staticBufferLock);
   return;
 }
 
