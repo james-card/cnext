@@ -237,40 +237,40 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *******************************************************************************/
 
-typedef struct RedBlackNode {
+typedef struct WinCThreadsRedBlackNode {
     void* key;
     void* value;
     int red; // if red = 0 then the node is black
-    struct RedBlackNode* left;
-    struct RedBlackNode* right;
-    struct RedBlackNode* parent;
-    struct RedBlackNode* next;
-    struct RedBlackNode* prev;
-} RedBlackNode;
+    struct WinCThreadsRedBlackNode* left;
+    struct WinCThreadsRedBlackNode* right;
+    struct WinCThreadsRedBlackNode* parent;
+    struct WinCThreadsRedBlackNode* next;
+    struct WinCThreadsRedBlackNode* prev;
+} WinCThreadsRedBlackNode;
 
 /* Compare(a,b) should return 1 if *a > *b, -1 if *a < *b, and 0 otherwise */
 /* Destroy(a) takes a pointer to whatever key might be and frees it accordingly */
-typedef struct RedBlackTree {
+typedef struct WinCThreadsRedBlackTree {
     int (*compare)(const void* a, const void* b);
     void (*destroyKey)(void* a);
     void (*destroyValue)(void* a);
     /*  A sentinel is used for root and for nil.  These sentinels are */
-    /*  created when rbTreeCreate is caled.  root->left should always */
+    /*  created when winCThreadsRbTreeCreate is caled.  root->left should always */
     /*  point to the node which is the root of the tree.  nil points to a */
     /*  node which should always be black but has aribtrary children and */
     /*  parent and no key or info.  The point of using these sentinels is so */
     /*  that the root and nil nodes do not require special cases in the code */
-    RedBlackNode* root;
-    RedBlackNode* nil;
-    RedBlackNode* head;
-    RedBlackNode* tail;
-} RedBlackTree;
+    WinCThreadsRedBlackNode* root;
+    WinCThreadsRedBlackNode* nil;
+    WinCThreadsRedBlackNode* head;
+    WinCThreadsRedBlackNode* tail;
+} WinCThreadsRedBlackTree;
 
-static RedBlackNode* rbTreeSuccessor(RedBlackTree* tree, RedBlackNode* x);
-static RedBlackNode* rbTreePredecessor(RedBlackTree* tree, RedBlackNode* x);
+static WinCThreadsRedBlackNode* winCThreadsRbTreeSuccessor(WinCThreadsRedBlackTree* tree, WinCThreadsRedBlackNode* x);
+static WinCThreadsRedBlackNode* winCThreadsRbTreePredecessor(WinCThreadsRedBlackTree* tree, WinCThreadsRedBlackNode* x);
 
 /***********************************************************************/
-/*  FUNCTION:  rbTreeSafeMalloc */
+/*  FUNCTION:  winCThreadsRbTreeSafeMalloc */
 /**/
 /*    INPUTS:  size is the size to malloc */
 /**/
@@ -283,7 +283,7 @@ static RedBlackNode* rbTreePredecessor(RedBlackTree* tree, RedBlackNode* x);
 /**/
 /***********************************************************************/
 
-static void* rbTreeSafeMalloc(size_t size) {
+static void* winCThreadsRbTreeSafeMalloc(size_t size) {
     void* result;
 
     if ((result = calloc(1, size))) { /* assignment intentional */
@@ -291,14 +291,14 @@ static void* rbTreeSafeMalloc(size_t size) {
     }
     else {
         LOG_MALLOC_FAILURE();
-        exit(-1);
+        exit(1);
         return NULL;
     }
 }
 
 
 /***********************************************************************/
-/*  FUNCTION:  rbTreeCreate */
+/*  FUNCTION:  winCThreadsRbTreeCreate */
 /**/
 /*  INPUTS:  All the inputs are names of functions.  CompFunc takes to */
 /*  void pointers to keys and returns > 0 if the first arguement is */
@@ -313,24 +313,24 @@ static void* rbTreeSafeMalloc(size_t size) {
 /*  Modifies Input: none */
 /***********************************************************************/
 
-static RedBlackTree* rbTreeCreate(int (*CompFunc) (const void*, const void*),
+static WinCThreadsRedBlackTree* winCThreadsRbTreeCreate(int (*CompFunc) (const void*, const void*),
     void (*DestFunc) (void*),
     void (*InfoDestFunc) (void*)) {
-    RedBlackTree* newTree;
-    RedBlackNode* temp;
+    WinCThreadsRedBlackTree* newTree;
+    WinCThreadsRedBlackNode* temp;
 
-    newTree = (RedBlackTree*)rbTreeSafeMalloc(sizeof(RedBlackTree));
+    newTree = (WinCThreadsRedBlackTree*)winCThreadsRbTreeSafeMalloc(sizeof(WinCThreadsRedBlackTree));
     newTree->compare = CompFunc;
     newTree->destroyKey = DestFunc;
     newTree->destroyValue = InfoDestFunc;
 
-    /*  see the comment in the RedBlackTree structure in red_black_tree.h */
+    /*  see the comment in the WinCThreadsRedBlackTree structure in red_black_tree.h */
     /*  for information on nil and root */
-    temp = newTree->nil = (RedBlackNode*)rbTreeSafeMalloc(sizeof(RedBlackNode));
+    temp = newTree->nil = (WinCThreadsRedBlackNode*)winCThreadsRbTreeSafeMalloc(sizeof(WinCThreadsRedBlackNode));
     temp->parent = temp->left = temp->right = temp;
     temp->red = 0;
     temp->key = 0;
-    temp = newTree->root = (RedBlackNode*)rbTreeSafeMalloc(sizeof(RedBlackNode));
+    temp = newTree->root = (WinCThreadsRedBlackNode*)winCThreadsRbTreeSafeMalloc(sizeof(WinCThreadsRedBlackNode));
     temp->parent = temp->left = temp->right = newTree->nil;
     temp->key = 0;
     temp->red = 0;
@@ -339,7 +339,7 @@ static RedBlackTree* rbTreeCreate(int (*CompFunc) (const void*, const void*),
 }
 
 /***********************************************************************/
-/*  FUNCTION:  rbTreeLeftRotate */
+/*  FUNCTION:  winCThreadsRbTreeLeftRotate */
 /**/
 /*  INPUTS:  This takes a tree so that it can access the appropriate */
 /*           root and nil pointers, and the node to rotate on. */
@@ -355,18 +355,18 @@ static RedBlackTree* rbTreeCreate(int (*CompFunc) (const void*, const void*),
 /*            accordingly. */
 /***********************************************************************/
 
-static void rbTreeLeftRotate(RedBlackTree* tree, RedBlackNode* x) {
-    RedBlackNode* y;
-    RedBlackNode* nil = tree->nil;
+static void winCThreadsRbTreeLeftRotate(WinCThreadsRedBlackTree* tree, WinCThreadsRedBlackNode* x) {
+    WinCThreadsRedBlackNode* y;
+    WinCThreadsRedBlackNode* nil = tree->nil;
 
     /*  I originally wrote this function to use the sentinel for */
     /*  nil to avoid checking for nil.  However this introduces a */
     /*  very subtle bug because sometimes this function modifies */
     /*  the parent pointer of nil.  This can be a problem if a */
-    /*  function which calls rbTreeLeftRotate also uses the nil sentinel */
+    /*  function which calls winCThreadsRbTreeLeftRotate also uses the nil sentinel */
     /*  and expects the nil sentinel's parent pointer to be unchanged */
-    /*  after calling this function.  For example, when rbTreeDeleteFixUP */
-    /*  calls rbTreeLeftRotate it expects the parent pointer of nil to be */
+    /*  after calling this function.  For example, when winCThreadsRbTreeDeleteFixUP */
+    /*  calls winCThreadsRbTreeLeftRotate it expects the parent pointer of nil to be */
     /*  unchanged. */
 
     y = x->right;
@@ -389,13 +389,13 @@ static void rbTreeLeftRotate(RedBlackTree* tree, RedBlackNode* x) {
     x->parent = y;
 
 #ifdef DEBUG_ASSERT
-    Assert(!tree->nil->red, "nil not red in rbTreeLeftRotate");
+    Assert(!tree->nil->red, "nil not red in winCThreadsRbTreeLeftRotate");
 #endif
 }
 
 
 /***********************************************************************/
-/*  FUNCTION:  rbTreeRightRotate */
+/*  FUNCTION:  winCThreadsRbTreeRightRotate */
 /**/
 /*  INPUTS:  This takes a tree so that it can access the appropriate */
 /*           root and nil pointers, and the node to rotate on. */
@@ -411,18 +411,18 @@ static void rbTreeLeftRotate(RedBlackTree* tree, RedBlackNode* x) {
 /*            accordingly. */
 /***********************************************************************/
 
-static void rbTreeRightRotate(RedBlackTree* tree, RedBlackNode* y) {
-    RedBlackNode* x;
-    RedBlackNode* nil = tree->nil;
+static void winCThreadsRbTreeRightRotate(WinCThreadsRedBlackTree* tree, WinCThreadsRedBlackNode* y) {
+    WinCThreadsRedBlackNode* x;
+    WinCThreadsRedBlackNode* nil = tree->nil;
 
     /*  I originally wrote this function to use the sentinel for */
     /*  nil to avoid checking for nil.  However this introduces a */
     /*  very subtle bug because sometimes this function modifies */
     /*  the parent pointer of nil.  This can be a problem if a */
-    /*  function which calls rbTreeLeftRotate also uses the nil sentinel */
+    /*  function which calls winCThreadsRbTreeLeftRotate also uses the nil sentinel */
     /*  and expects the nil sentinel's parent pointer to be unchanged */
-    /*  after calling this function.  For example, when rbTreeDeleteFixUP */
-    /*  calls rbTreeLeftRotate it expects the parent pointer of nil to be */
+    /*  after calling this function.  For example, when winCThreadsRbTreeDeleteFixUP */
+    /*  calls winCThreadsRbTreeLeftRotate it expects the parent pointer of nil to be */
     /*  unchanged. */
 
     x = y->left;
@@ -444,12 +444,12 @@ static void rbTreeRightRotate(RedBlackTree* tree, RedBlackNode* y) {
     y->parent = x;
 
 #ifdef DEBUG_ASSERT
-    Assert(!tree->nil->red, "nil not red in rbTreeRightRotate");
+    Assert(!tree->nil->red, "nil not red in winCThreadsRbTreeRightRotate");
 #endif
 }
 
 /***********************************************************************/
-/*  FUNCTION:  rbTreeInsertHelp  */
+/*  FUNCTION:  winCThreadsRbTreeInsertHelp  */
 /**/
 /*  INPUTS:  tree is the tree to insert into and z is the node to insert */
 /**/
@@ -460,14 +460,14 @@ static void rbTreeRightRotate(RedBlackTree* tree, RedBlackNode* y) {
 /*  EFFECTS:  Inserts z into the tree as if it were a regular binary tree */
 /*            using the algorithm described in _Introduction_To_Algorithms_ */
 /*            by Cormen et al.  This funciton is only intended to be called */
-/*            by the rbTreeInsert function and not by the user */
+/*            by the winCThreadsRbTreeInsert function and not by the user */
 /***********************************************************************/
 
-static void rbTreeInsertHelp(RedBlackTree* tree, RedBlackNode* z) {
+static void winCThreadsRbTreeInsertHelp(WinCThreadsRedBlackTree* tree, WinCThreadsRedBlackNode* z) {
     /*  This function should only be called by InsertRBTree (see above) */
-    RedBlackNode* x;
-    RedBlackNode* y;
-    RedBlackNode* nil = tree->nil;
+    WinCThreadsRedBlackNode* x;
+    WinCThreadsRedBlackNode* y;
+    WinCThreadsRedBlackNode* nil = tree->nil;
 
     z->left = z->right = nil;
     y = tree->root;
@@ -491,14 +491,14 @@ static void rbTreeInsertHelp(RedBlackTree* tree, RedBlackNode* z) {
     }
 
 #ifdef DEBUG_ASSERT
-    Assert(!tree->nil->red, "nil not red in rbTreeInsertHelp");
+    Assert(!tree->nil->red, "nil not red in winCThreadsRbTreeInsertHelp");
 #endif
 }
 
 /*  Before calling Insert RBTree the node x should have its key set */
 
 /***********************************************************************/
-/*  FUNCTION:  rbTreeInsert */
+/*  FUNCTION:  winCThreadsRbTreeInsert */
 /**/
 /*  INPUTS:  tree is the red-black tree to insert a node which has a key */
 /*           pointed to by key and info pointed to by info.  */
@@ -515,16 +515,16 @@ static void rbTreeInsertHelp(RedBlackTree* tree, RedBlackNode* z) {
 /*            info pointers and inserts it into the tree. */
 /***********************************************************************/
 
-static RedBlackNode* rbTreeInsert(RedBlackTree* tree, void* key, void* info) {
-    RedBlackNode* y;
-    RedBlackNode* x;
-    RedBlackNode* newNode;
+static WinCThreadsRedBlackNode* winCThreadsRbTreeInsert(WinCThreadsRedBlackTree* tree, void* key, void* info) {
+    WinCThreadsRedBlackNode* y;
+    WinCThreadsRedBlackNode* x;
+    WinCThreadsRedBlackNode* newNode;
 
-    x = (RedBlackNode*)rbTreeSafeMalloc(sizeof(RedBlackNode));
+    x = (WinCThreadsRedBlackNode*)winCThreadsRbTreeSafeMalloc(sizeof(WinCThreadsRedBlackNode));
     x->key = key;
     x->value = info;
 
-    rbTreeInsertHelp(tree, x);
+    winCThreadsRbTreeInsertHelp(tree, x);
     newNode = x;
     x->red = 1;
     while (x->parent->red) { /* use sentinel instead of checking for root */
@@ -539,11 +539,11 @@ static RedBlackNode* rbTreeInsert(RedBlackTree* tree, void* key, void* info) {
             else {
                 if (x == x->parent->right) {
                     x = x->parent;
-                    rbTreeLeftRotate(tree, x);
+                    winCThreadsRbTreeLeftRotate(tree, x);
                 }
                 x->parent->red = 0;
                 x->parent->parent->red = 1;
-                rbTreeRightRotate(tree, x->parent->parent);
+                winCThreadsRbTreeRightRotate(tree, x->parent->parent);
             }
         }
         else { /* case for x->parent == x->parent->parent->right */
@@ -557,22 +557,22 @@ static RedBlackNode* rbTreeInsert(RedBlackTree* tree, void* key, void* info) {
             else {
                 if (x == x->parent->left) {
                     x = x->parent;
-                    rbTreeRightRotate(tree, x);
+                    winCThreadsRbTreeRightRotate(tree, x);
                 }
                 x->parent->red = 0;
                 x->parent->parent->red = 1;
-                rbTreeLeftRotate(tree, x->parent->parent);
+                winCThreadsRbTreeLeftRotate(tree, x->parent->parent);
             }
         }
     }
     tree->root->left->red = 0;
 
-    RedBlackNode* neighbor = rbTreePredecessor(tree, newNode);
+    WinCThreadsRedBlackNode* neighbor = winCThreadsRbTreePredecessor(tree, newNode);
     if (neighbor != tree->nil) {
         neighbor->next = newNode;
     }
     newNode->prev = neighbor;
-    neighbor = rbTreeSuccessor(tree, newNode);
+    neighbor = winCThreadsRbTreeSuccessor(tree, newNode);
     if (neighbor != tree->nil) {
         neighbor->prev = newNode;
     }
@@ -589,13 +589,13 @@ static RedBlackNode* rbTreeInsert(RedBlackTree* tree, void* key, void* info) {
     return(newNode);
 
 #ifdef DEBUG_ASSERT
-    Assert(!tree->nil->red, "nil not red in rbTreeInsert");
-    Assert(!tree->root->red, "root not red in rbTreeInsert");
+    Assert(!tree->nil->red, "nil not red in winCThreadsRbTreeInsert");
+    Assert(!tree->root->red, "root not red in winCThreadsRbTreeInsert");
 #endif
 }
 
 /***********************************************************************/
-/*  FUNCTION:  rbTreeSuccessor  */
+/*  FUNCTION:  winCThreadsRbTreeSuccessor  */
 /**/
 /*    INPUTS:  tree is the tree in question, and x is the node we want the */
 /*             the successor of. */
@@ -608,10 +608,10 @@ static RedBlackNode* rbTreeInsert(RedBlackTree* tree, void* key, void* info) {
 /*    Note:  uses the algorithm in _Introduction_To_Algorithms_ */
 /***********************************************************************/
   
-static RedBlackNode* rbTreeSuccessor(RedBlackTree* tree, RedBlackNode* x) {
-    RedBlackNode* y;
-    RedBlackNode* nil = tree->nil;
-    RedBlackNode* root = tree->root;
+static WinCThreadsRedBlackNode* winCThreadsRbTreeSuccessor(WinCThreadsRedBlackTree* tree, WinCThreadsRedBlackNode* x) {
+    WinCThreadsRedBlackNode* y;
+    WinCThreadsRedBlackNode* nil = tree->nil;
+    WinCThreadsRedBlackNode* root = tree->root;
 
     if (nil != (y = x->right)) { /* assignment to y is intentional */
         while (y->left != nil) { /* returns the minium of the right subtree of x */
@@ -631,7 +631,7 @@ static RedBlackNode* rbTreeSuccessor(RedBlackTree* tree, RedBlackNode* x) {
 }
 
 /***********************************************************************/
-/*  FUNCTION:  rbTreePredecessor  */
+/*  FUNCTION:  winCThreadsRbTreePredecessor  */
 /**/
 /*    INPUTS:  tree is the tree in question, and x is the node we want the */
 /*             the predecessor of. */
@@ -644,10 +644,10 @@ static RedBlackNode* rbTreeSuccessor(RedBlackTree* tree, RedBlackNode* x) {
 /*    Note:  uses the algorithm in _Introduction_To_Algorithms_ */
 /***********************************************************************/
 
-static RedBlackNode* rbTreePredecessor(RedBlackTree* tree, RedBlackNode* x) {
-    RedBlackNode* y;
-    RedBlackNode* nil = tree->nil;
-    RedBlackNode* root = tree->root;
+static WinCThreadsRedBlackNode* winCThreadsRbTreePredecessor(WinCThreadsRedBlackTree* tree, WinCThreadsRedBlackNode* x) {
+    WinCThreadsRedBlackNode* y;
+    WinCThreadsRedBlackNode* nil = tree->nil;
+    WinCThreadsRedBlackNode* root = tree->root;
 
     if (nil != (y = x->left)) { /* assignment to y is intentional */
         while (y->right != nil) { /* returns the maximum of the left subtree of x */
@@ -668,7 +668,7 @@ static RedBlackNode* rbTreePredecessor(RedBlackTree* tree, RedBlackNode* x) {
 
 
 /***********************************************************************/
-/*  FUNCTION:  rbTreeDestroyHelper */
+/*  FUNCTION:  winCThreadsRbTreeDestroyHelper */
 /**/
 /*    INPUTS:  tree is the tree to destroy and x is the current node */
 /**/
@@ -679,46 +679,45 @@ static RedBlackNode* rbTreePredecessor(RedBlackTree* tree, RedBlackNode* x) {
 /**/
 /*    Modifies Input: tree, x */
 /**/
-/*    Note:    This function should only be called by rbTreeDestroy */
+/*    Note:    This function should only be called by winCThreadsRbTreeDestroy */
 /***********************************************************************/
 
-//// TODO:  Re-enable this when used!!!
-//// static void rbTreeDestroyHelper(RedBlackTree* tree, RedBlackNode* x) {
-////     RedBlackNode* nil = tree->nil;
-////     if (x != nil) {
-////         rbTreeDestroyHelper(tree, x->left);
-////         rbTreeDestroyHelper(tree, x->right);
-////         tree->destroyKey(x->key);
-////         tree->destroyValue(x->value);
-////         free(x);
-////     }
-//// }
+static void winCThreadsRbTreeDestroyHelper(WinCThreadsRedBlackTree* tree, WinCThreadsRedBlackNode* x) {
+    WinCThreadsRedBlackNode* nil = tree->nil;
+    if (x != nil) {
+        winCThreadsRbTreeDestroyHelper(tree, x->left);
+        winCThreadsRbTreeDestroyHelper(tree, x->right);
+        tree->destroyKey(x->key);
+        tree->destroyValue(x->value);
+        free(x);
+    }
+}
 
 
 /***********************************************************************/
-/*  FUNCTION:  rbTreeDestroy */
+/*  FUNCTION:  winCThreadsRbTreeDestroy */
 /**/
 /*    INPUTS:  tree is the tree to destroy */
 /**/
-/*    OUTPUT:  none */
+/*    OUTPUT:  NULL */
 /**/
-/*    EFFECT:  Destroys the key and frees memory */
+/*    EFFECT:  Frees all memory held by the tree */
 /**/
 /*    Modifies Input: tree */
 /**/
 /***********************************************************************/
 
-//// TODO:  Re-enable this when used!!!
-//// static void rbTreeDestroy(RedBlackTree* tree) {
-////     rbTreeDestroyHelper(tree, tree->root->left);
-////     free(tree->root);
-////     free(tree->nil);
-////     free(tree);
-//// }
+static WinCThreadsRedBlackTree* winCThreadsRbTreeDestroy(WinCThreadsRedBlackTree* tree) {
+    winCThreadsRbTreeDestroyHelper(tree, tree->root->left);
+    free(tree->root);
+    free(tree->nil);
+    free(tree);
+    return NULL;
+}
 
 
 /***********************************************************************/
-/*  FUNCTION:  rbTreeExactQuery */
+/*  FUNCTION:  winCThreadsRbTreeExactQuery */
 /**/
 /*    INPUTS:  tree is the tree to print and q is a pointer to the key */
 /*             we are searching for */
@@ -731,9 +730,9 @@ static RedBlackNode* rbTreePredecessor(RedBlackTree* tree, RedBlackNode* x) {
 /**/
 /***********************************************************************/
   
-static RedBlackNode* rbTreeExactQuery(RedBlackTree* tree, void* q) {
-    RedBlackNode* x = tree->root->left;
-    RedBlackNode* nil = tree->nil;
+static WinCThreadsRedBlackNode* winCThreadsRbTreeExactQuery(WinCThreadsRedBlackTree* tree, void* q) {
+    WinCThreadsRedBlackNode* x = tree->root->left;
+    WinCThreadsRedBlackNode* nil = tree->nil;
     int compVal;
     if (x == nil) return(nil);
     compVal = tree->compare(x->key, (int*)q);
@@ -752,10 +751,10 @@ static RedBlackNode* rbTreeExactQuery(RedBlackTree* tree, void* q) {
 
 
 /***********************************************************************/
-/*  FUNCTION:  rbTreeDeleteFixUp */
+/*  FUNCTION:  winCThreadsRbTreeDeleteFixUp */
 /**/
 /*    INPUTS:  tree is the tree to fix and x is the child of the spliced */
-/*             out node in rbTreeDelete. */
+/*             out node in winCThreadsRbTreeDelete. */
 /**/
 /*    OUTPUT:  none */
 /**/
@@ -767,9 +766,9 @@ static RedBlackNode* rbTreeExactQuery(RedBlackTree* tree, void* q) {
 /*    The algorithm from this function is from _Introduction_To_Algorithms_ */
 /***********************************************************************/
 
-static void rbTreeDeleteFixUp(RedBlackTree* tree, RedBlackNode* x) {
-    RedBlackNode* root = tree->root->left;
-    RedBlackNode* w;
+static void winCThreadsRbTreeDeleteFixUp(WinCThreadsRedBlackTree* tree, WinCThreadsRedBlackNode* x) {
+    WinCThreadsRedBlackNode* root = tree->root->left;
+    WinCThreadsRedBlackNode* w;
 
     while ((!x->red) && (root != x)) {
         if (x == x->parent->left) {
@@ -777,7 +776,7 @@ static void rbTreeDeleteFixUp(RedBlackTree* tree, RedBlackNode* x) {
             if (w->red) {
                 w->red = 0;
                 x->parent->red = 1;
-                rbTreeLeftRotate(tree, x->parent);
+                winCThreadsRbTreeLeftRotate(tree, x->parent);
                 w = x->parent->right;
             }
             if ((!w->right->red) && (!w->left->red)) {
@@ -788,13 +787,13 @@ static void rbTreeDeleteFixUp(RedBlackTree* tree, RedBlackNode* x) {
                 if (!w->right->red) {
                     w->left->red = 0;
                     w->red = 1;
-                    rbTreeRightRotate(tree, w);
+                    winCThreadsRbTreeRightRotate(tree, w);
                     w = x->parent->right;
                 }
                 w->red = x->parent->red;
                 x->parent->red = 0;
                 w->right->red = 0;
-                rbTreeLeftRotate(tree, x->parent);
+                winCThreadsRbTreeLeftRotate(tree, x->parent);
                 x = root; /* this is to exit while loop */
             }
         }
@@ -803,7 +802,7 @@ static void rbTreeDeleteFixUp(RedBlackTree* tree, RedBlackNode* x) {
             if (w->red) {
                 w->red = 0;
                 x->parent->red = 1;
-                rbTreeRightRotate(tree, x->parent);
+                winCThreadsRbTreeRightRotate(tree, x->parent);
                 w = x->parent->left;
             }
             if ((!w->right->red) && (!w->left->red)) {
@@ -814,13 +813,13 @@ static void rbTreeDeleteFixUp(RedBlackTree* tree, RedBlackNode* x) {
                 if (!w->left->red) {
                     w->right->red = 0;
                     w->red = 1;
-                    rbTreeLeftRotate(tree, w);
+                    winCThreadsRbTreeLeftRotate(tree, w);
                     w = x->parent->left;
                 }
                 w->red = x->parent->red;
                 x->parent->red = 0;
                 w->left->red = 0;
-                rbTreeRightRotate(tree, x->parent);
+                winCThreadsRbTreeRightRotate(tree, x->parent);
                 x = root; /* this is to exit while loop */
             }
         }
@@ -828,13 +827,13 @@ static void rbTreeDeleteFixUp(RedBlackTree* tree, RedBlackNode* x) {
     x->red = 0;
 
 #ifdef DEBUG_ASSERT
-    Assert(!tree->nil->red, "nil not black in rbTreeDeleteFixUp");
+    Assert(!tree->nil->red, "nil not black in winCThreadsRbTreeDeleteFixUp");
 #endif
 }
 
 
 /***********************************************************************/
-/*  FUNCTION:  rbTreeDelete */
+/*  FUNCTION:  winCThreadsRbTreeDelete */
 /**/
 /*    INPUTS:  tree is the tree to delete node z from */
 /**/
@@ -842,18 +841,18 @@ static void rbTreeDeleteFixUp(RedBlackTree* tree, RedBlackNode* x) {
 /**/
 /*    EFFECT:  Deletes z from tree and frees the key and info of z */
 /*             using DestoryKey and DestoryInfo.  Then calls */
-/*             rbTreeDeleteFixUp to restore red-black properties */
+/*             winCThreadsRbTreeDeleteFixUp to restore red-black properties */
 /**/
 /*    Modifies Input: tree, z */
 /**/
 /*    The algorithm from this function is from _Introduction_To_Algorithms_ */
 /***********************************************************************/
 
-static void rbTreeDelete(RedBlackTree* tree, RedBlackNode* z) {
-    RedBlackNode* y;
-    RedBlackNode* x;
-    RedBlackNode* nil = tree->nil;
-    RedBlackNode* root = tree->root;
+static void winCThreadsRbTreeDelete(WinCThreadsRedBlackTree* tree, WinCThreadsRedBlackNode* z) {
+    WinCThreadsRedBlackNode* y;
+    WinCThreadsRedBlackNode* x;
+    WinCThreadsRedBlackNode* nil = tree->nil;
+    WinCThreadsRedBlackNode* root = tree->root;
 
     if ((z->prev != NULL) && (z->prev != nil)) {
         z->prev->next = z->next;
@@ -862,7 +861,7 @@ static void rbTreeDelete(RedBlackTree* tree, RedBlackNode* z) {
         z->next->prev = z->prev;
     }
 
-    y = ((z->left == nil) || (z->right == nil)) ? z : rbTreeSuccessor(tree, z);
+    y = ((z->left == nil) || (z->right == nil)) ? z : winCThreadsRbTreeSuccessor(tree, z);
     x = (y->left == nil) ? y->right : y->left;
     if (root == (x->parent = y->parent)) { /* assignment of y->p to x->p is intentional */
         root->left = x;
@@ -878,11 +877,11 @@ static void rbTreeDelete(RedBlackTree* tree, RedBlackNode* z) {
     if (y != z) { /* y should not be nil in this case */
 
 #ifdef DEBUG_ASSERT
-        Assert((y != tree->nil), "y is nil in rbTreeDelete\n");
+        Assert((y != tree->nil), "y is nil in winCThreadsRbTreeDelete\n");
 #endif
         /* y is the node to splice out and x is its child */
 
-        if (!(y->red)) rbTreeDeleteFixUp(tree, x);
+        if (!(y->red)) winCThreadsRbTreeDeleteFixUp(tree, x);
 
         // Fix the linked-list portions.
         if (tree->head == z) {
@@ -931,19 +930,19 @@ static void rbTreeDelete(RedBlackTree* tree, RedBlackNode* z) {
 
         tree->destroyKey(y->key);
         tree->destroyValue(y->value);
-        if (!(y->red)) rbTreeDeleteFixUp(tree, x);
+        if (!(y->red)) winCThreadsRbTreeDeleteFixUp(tree, x);
         free(y);
     }
 
 #ifdef DEBUG_ASSERT
-    Assert(!tree->nil->red, "nil not black in rbTreeDelete");
+    Assert(!tree->nil->red, "nil not black in winCThreadsRbTreeDelete");
 #endif
 }
 
 
 /******************** End Support Data Structure Code *************************/
 
-static int compareU32(const void* u32PointerA, const void* u32PointerB) {
+static int winCThreadsCompareU32(const void* u32PointerA, const void* u32PointerB) {
     uint32_t u32A = *((uint32_t*)u32PointerA);
     uint32_t u32B = *((uint32_t*)u32PointerB);
 
@@ -957,7 +956,7 @@ static int compareU32(const void* u32PointerA, const void* u32PointerB) {
         return 0;
     }
 }
-static void NullFunction(void* parameter) {
+static void winCThreadsNullFunction(void* parameter) {
     (void)parameter;
     return;
 }
@@ -1189,11 +1188,11 @@ int cnd_wait(cnd_t* cond, mtx_t* mtx) {
 
 // Thread-specific storage support.
 typedef struct DataAndDestructor {
-    RedBlackTree* data;
+    WinCThreadsRedBlackTree* data;
     tss_dtor_t destructor;
 } DataAndDestructor;
 static DataAndDestructor *tssStorageByKey = NULL;
-static RedBlackTree* tssStorageByThread = NULL;
+static WinCThreadsRedBlackTree* tssStorageByThread = NULL;
 static uint32_t tssIndex = 1;
 static mtx_t* tssStorageByKeyMutex = NULL;
 static mtx_t* tssStorageByThreadMutex = NULL;
@@ -1216,7 +1215,7 @@ void initializeTssMetadata(void) {
         printLog(CRITICAL, "Could not initialize tssStorageByKeyMutex\n");
         exit(1);
     }
-    tssStorageByThread = rbTreeCreate(compareU32, NullFunction, NullFunction);
+    tssStorageByThread = winCThreadsRbTreeCreate(winCThreadsCompareU32, winCThreadsNullFunction, winCThreadsNullFunction);
     if (tssStorageByThread == NULL) {
         // No tree.  Can't proceed.
         LOG_MALLOC_FAILURE();
@@ -1238,7 +1237,7 @@ int tss_create(tss_t* key, tss_dtor_t dtor) {
     call_once(&tssMetadataOnceFlag, initializeTssMetadata);
 
     if (dtor == NULL) {
-        dtor = NullFunction;
+        dtor = winCThreadsNullFunction;
     }
 
     mtx_lock(tssStorageByKeyMutex);
@@ -1247,11 +1246,11 @@ int tss_create(tss_t* key, tss_dtor_t dtor) {
     if (check == NULL) {
         // No memory.  Can't proceed.
         LOG_MALLOC_FAILURE();
-        exit(-1);
+        exit(1);
         return thrd_error;
     }
     tssStorageByKey = (DataAndDestructor*) check;
-    tssStorageByKey[tssIndex].data = rbTreeCreate(compareU32, free, NullFunction);
+    tssStorageByKey[tssIndex].data = winCThreadsRbTreeCreate(winCThreadsCompareU32, free, winCThreadsNullFunction);
     tssStorageByKey[tssIndex].destructor = dtor;
     mtx_unlock(tssStorageByKeyMutex);
 
@@ -1271,19 +1270,13 @@ void tss_delete(tss_t key) {
     mtx_lock(tssStorageByKeyMutex);
 
     // Remove metadata for all threads for this key.
-    RedBlackTree *data = tssStorageByKey[key].data;
+    WinCThreadsRedBlackTree *data = tssStorageByKey[key].data;
     if (data == NULL) {
         printLog(DEBUG, "No metadata for value.\n");
         mtx_unlock(tssStorageByKeyMutex);
         return;
     }
-    for (RedBlackNode* next = data->head; next != data->nil;) {
-        RedBlackNode* node = next;
-        next = next->next;
-        rbTreeDelete(data, node);
-    }
-    free(data); data = NULL;
-    tssStorageByKey[key].data = NULL;
+    tssStorageByKey[key].data = winCThreadsRbTreeDestroy(data);
     tssStorageByKey[key].destructor = NULL;
 
     mtx_unlock(tssStorageByKeyMutex);
@@ -1301,9 +1294,10 @@ void* tss_get(tss_t key) {
         return NULL;
     }
 
+    thrd_t thisThread = thrd_current();
     mtx_lock(tssStorageByKeyMutex);
 
-    RedBlackTree *data = tssStorageByKey[key].data;
+    WinCThreadsRedBlackTree *data = tssStorageByKey[key].data;
     if (data == NULL) {
         printLog(DEBUG, "No data for value.\n");
         mtx_unlock(tssStorageByKeyMutex);
@@ -1311,8 +1305,7 @@ void* tss_get(tss_t key) {
         return NULL;
     }
 
-    thrd_t thisThread = thrd_current();
-    RedBlackNode* threadData = rbTreeExactQuery(data, &thisThread);
+    WinCThreadsRedBlackNode* threadData = winCThreadsRbTreeExactQuery(data, &thisThread);
     if (threadData == data->nil) {
         mtx_unlock(tssStorageByKeyMutex);
         printLog(FLOOD, "EXIT tss_get(key=%u) = {NULL}\n", key);
@@ -1335,10 +1328,20 @@ int tss_set(tss_t key, void* val) {
         return thrd_error;
     }
 
+    thrd_t *thisThread = (thrd_t*) malloc(sizeof(thrd_t));
+    if (thisThread == NULL) {
+        LOG_MALLOC_FAILURE();
+        exit(1);
+        printLog(FLOOD, "EXIT tss_set(key=%u, val=%p) = {%d}\n",
+            key, val, thrd_error);
+        return thrd_error;
+    }
+    *thisThread = thrd_current();
+
     // Set the lookup by key.  This is what tss_get will use.
     mtx_lock(tssStorageByKeyMutex);
 
-    RedBlackTree *data = tssStorageByKey[key].data;
+    WinCThreadsRedBlackTree *data = tssStorageByKey[key].data;
     if (data == NULL) {
         printLog(DEBUG, "No metadata for value.\n");
         mtx_unlock(tssStorageByKeyMutex);
@@ -1347,48 +1350,37 @@ int tss_set(tss_t key, void* val) {
         return thrd_error;
     }
 
-    thrd_t *thisThread = (thrd_t*) malloc(sizeof(thrd_t));
-    if (thisThread == NULL) {
-        LOG_MALLOC_FAILURE();
-        mtx_unlock(tssStorageByKeyMutex);
-        exit(-1);
-        printLog(FLOOD, "EXIT tss_set(key=%u, val=%p) = {%d}\n",
-            key, val, thrd_error);
-        return thrd_error;
-    }
-
-    *thisThread = thrd_current();
-    RedBlackNode* prevData = rbTreeExactQuery(data, thisThread);
+    WinCThreadsRedBlackNode* prevData = winCThreadsRbTreeExactQuery(data, thisThread);
     if (prevData != data->nil) {
         // We have old metadata to remove.
-        rbTreeDelete(data, prevData);
+        winCThreadsRbTreeDelete(data, prevData);
     }
-    rbTreeInsert(data, thisThread, val);
+    winCThreadsRbTreeInsert(data, thisThread, val);
 
     mtx_unlock(tssStorageByKeyMutex);
 
     // Set the lookup by thread.  This is what thrd_exit will use.
     mtx_lock(tssStorageByThreadMutex);
 
-    RedBlackNode* threadData = rbTreeExactQuery(tssStorageByThread, thisThread);
-    RedBlackTree* keys = NULL;
+    WinCThreadsRedBlackNode* threadData = winCThreadsRbTreeExactQuery(tssStorageByThread, thisThread);
+    WinCThreadsRedBlackTree* keys = NULL;
     if (threadData != tssStorageByThread->nil) {
-        keys = (RedBlackTree*) threadData->value;
+        keys = (WinCThreadsRedBlackTree*) threadData->value;
     } else {
         // No reverse lookup has been set yet.  This is the first time this key
         // has been set.  Allocate the tree.
-        keys = rbTreeCreate(compareU32, free, NullFunction);
-        rbTreeInsert(tssStorageByThread, thisThread, keys);
+        keys = winCThreadsRbTreeCreate(winCThreadsCompareU32, free, winCThreadsNullFunction);
+        winCThreadsRbTreeInsert(tssStorageByThread, thisThread, keys);
     }
 
-    RedBlackNode* keyData = rbTreeExactQuery(keys, &key);
+    WinCThreadsRedBlackNode* keyData = winCThreadsRbTreeExactQuery(keys, &key);
     if (keyData != keys->nil) {
         // Remove the old metadata.
-        rbTreeDelete(keys, keyData);
+        winCThreadsRbTreeDelete(keys, keyData);
     }
     tss_t *keyCopy = (tss_t*) malloc(sizeof(tss_t));
     *keyCopy = key;
-    rbTreeInsert(keys, keyCopy, val);
+    winCThreadsRbTreeInsert(keys, keyCopy, val);
 
     mtx_unlock(tssStorageByThreadMutex);
 
@@ -1399,7 +1391,7 @@ int tss_set(tss_t key, void* val) {
 
 
 // Thread support.
-static RedBlackTree* attachedThreads = NULL;
+static WinCThreadsRedBlackTree* attachedThreads = NULL;
 mtx_t *attachedThreadsMutex = NULL;
 
 typedef struct WindowsCreateWrapperArgs {
@@ -1435,7 +1427,7 @@ int thrd_create(thrd_t* thr, thrd_start_t func, void* arg) {
     if (wrapper_args == NULL) {
         // Can't allocate enough memory to start the thread.
         LOG_MALLOC_FAILURE();
-        exit(-1);
+        exit(1);
         printLog(TRACE, "EXIT thrd_create(thr=%p, func=%p, arg=%p) = {%d}\n",
             thr, func, arg, thrd_error);
         return thrd_error;
@@ -1457,23 +1449,23 @@ int thrd_create(thrd_t* thr, thrd_start_t func, void* arg) {
 
     if (threadHandle != NULL) {
         if (attachedThreads == NULL) {
-            attachedThreads = rbTreeCreate(compareU32, free, NullFunction);
+            attachedThreads = winCThreadsRbTreeCreate(winCThreadsCompareU32, free, winCThreadsNullFunction);
             if (attachedThreads == NULL) {
                 LOG_MALLOC_FAILURE();
-                exit(-1);
+                exit(1);
                 return thrd_error;
             }
             attachedThreadsMutex = calloc(1, sizeof(mtx_t));
             if (attachedThreadsMutex == NULL) {
                 LOG_MALLOC_FAILURE();
-                exit(-1);
+                exit(1);
                 return thrd_error;
             }
             if (mtx_init(attachedThreadsMutex, mtx_plain) != thrd_success) {
                 printLog(CRITICAL, "Could not initialize attachedThreadsMutex.\n");
                 printLog(TRACE, "EXIT thrd_create(thr=%p, func=%p, arg=%p) = {%d}\n",
                     thr, func, arg, thrd_error);
-                exit(-1);
+                exit(1);
                 return thrd_error;
             }
         }
@@ -1481,12 +1473,12 @@ int thrd_create(thrd_t* thr, thrd_start_t func, void* arg) {
             uint32_t* threadId = (uint32_t*) malloc(sizeof(uint32_t));
             if (threadId == NULL) {
                 LOG_MALLOC_FAILURE();
-                exit(-1);
+                exit(1);
                 return thrd_error;
             }
             *threadId = *thr;
             mtx_lock(attachedThreadsMutex);
-            rbTreeInsert(attachedThreads, threadId, threadHandle);
+            winCThreadsRbTreeInsert(attachedThreads, threadId, threadHandle);
             mtx_unlock(attachedThreadsMutex);
         }
         else {
@@ -1511,13 +1503,13 @@ int thrd_detach(thrd_t thr) {
     HANDLE threadHandle = NULL;
     mtx_lock(attachedThreadsMutex);
 
-    RedBlackNode* node = rbTreeExactQuery(attachedThreads, &thr);
+    WinCThreadsRedBlackNode* node = winCThreadsRbTreeExactQuery(attachedThreads, &thr);
     if (node != attachedThreads->nil) {
         threadHandle = (HANDLE) node->value;
     }
     if (threadHandle != NULL) {
         CloseHandle(threadHandle);
-        rbTreeDelete(attachedThreads, node);
+        winCThreadsRbTreeDelete(attachedThreads, node);
     }
     else {
         returnValue = thrd_error;
@@ -1539,28 +1531,28 @@ void thrd_exit(int res) {
     // Destroy all the thread local storage.
     if (tssStorageByThread != NULL) {
         mtx_lock(tssStorageByThreadMutex);
-        RedBlackNode *threadData = rbTreeExactQuery(tssStorageByThread, &thisThread);
+        WinCThreadsRedBlackNode *threadData = winCThreadsRbTreeExactQuery(tssStorageByThread, &thisThread);
         if ((threadData != tssStorageByThread->nil) && (threadData->value != NULL)) {
-            RedBlackTree *data = (RedBlackTree*) threadData->value;
-            RedBlackNode *nil = data->nil;
+            WinCThreadsRedBlackTree *data = (WinCThreadsRedBlackTree*) threadData->value;
+            WinCThreadsRedBlackNode *nil = data->nil;
             // Walk through all the keys this thread has used and delete the
             // thread's local copy.
-            for (RedBlackNode *node = data->head; node != nil;) {
+            for (WinCThreadsRedBlackNode *node = data->head; node != nil;) {
                 thrd_t* key = (thrd_t*)node->key;
-                tss_dtor_t destructor = NullFunction;
+                tss_dtor_t destructor = winCThreadsNullFunction;
                 mtx_lock(tssStorageByKeyMutex);
                 DataAndDestructor* dd = &tssStorageByKey[*key];
                 if (dd->destructor != NULL) {
                     destructor = dd->destructor;
                 }
                 mtx_unlock(tssStorageByKeyMutex);
-                RedBlackNode* next = node->next;
+                WinCThreadsRedBlackNode* next = node->next;
                 // This will call the destructor for the node's value but not its key.
                 destructor(node->value);
-                rbTreeDelete(data, node);
+                winCThreadsRbTreeDelete(data, node);
                 node = next;
             }
-            rbTreeDelete(tssStorageByThread, threadData);
+            winCThreadsRbTreeDelete(tssStorageByThread, threadData);
         }
         mtx_unlock(tssStorageByThreadMutex);
     }
@@ -1572,11 +1564,11 @@ void thrd_exit(int res) {
         for (uint32_t ii = 1; ii < tssIndex; ii++) {
             DataAndDestructor *dd = &tssStorageByKey[ii];
             if ((dd != NULL) && (dd->data != NULL)) {
-                RedBlackTree *data = dd->data;
-                RedBlackNode* threadData = rbTreeExactQuery(data, &thisThread);
+                WinCThreadsRedBlackTree *data = dd->data;
+                WinCThreadsRedBlackNode* threadData = winCThreadsRbTreeExactQuery(data, &thisThread);
                 if (threadData != data->nil) {
                     // This will call the destructor for the node's key but not its value.
-                    rbTreeDelete(data, threadData);
+                    winCThreadsRbTreeDelete(data, threadData);
                 }
             }
         }
@@ -1592,7 +1584,7 @@ int thrd_join(thrd_t thr, int* res) {
     HANDLE threadHandle = NULL;
     mtx_lock(attachedThreadsMutex);
 
-    RedBlackNode* node = rbTreeExactQuery(attachedThreads, &thr);
+    WinCThreadsRedBlackNode* node = winCThreadsRbTreeExactQuery(attachedThreads, &thr);
     if (node != attachedThreads->nil) {
         threadHandle = (HANDLE)node->value;
     }
@@ -1616,7 +1608,7 @@ int thrd_join(thrd_t thr, int* res) {
             }
         }
         mtx_lock(attachedThreadsMutex);
-        rbTreeDelete(attachedThreads, node);
+        winCThreadsRbTreeDelete(attachedThreads, node);
         mtx_unlock(attachedThreadsMutex);
         CloseHandle(threadHandle);
     }
@@ -1653,7 +1645,7 @@ int thrd_terminate(thrd_t thr) {
     HANDLE threadHandle = NULL;
     mtx_lock(attachedThreadsMutex);
 
-    RedBlackNode* node = rbTreeExactQuery(attachedThreads, &thr);
+    WinCThreadsRedBlackNode* node = winCThreadsRbTreeExactQuery(attachedThreads, &thr);
     if (node != attachedThreads->nil) {
         threadHandle = (HANDLE)node->value;
     }
@@ -1686,18 +1678,18 @@ int thrd_terminate(thrd_t thr) {
 ///
 /// @note This only produces a time value down to 1/10th of a microsecond.
 int timespec_get(struct timespec* spec, int base) {
-  __int64 wintime = 0;
-  FILETIME filetime = { 0, 0 };
+    __int64 wintime = 0;
+    FILETIME filetime = { 0, 0 };
 
-  GetSystemTimeAsFileTime(&filetime);
-  wintime = (((__int64) filetime.dwHighDateTime) << 32)
-    | ((__int64) filetime.dwLowDateTime);
+    GetSystemTimeAsFileTime(&filetime);
+    wintime = (((__int64) filetime.dwHighDateTime) << 32)
+        | ((__int64) filetime.dwLowDateTime);
 
-  wintime -= 116444736000000000LL;       // 1-Jan-1601 to 1-Jan-1970
-  spec->tv_sec = wintime / 10000000LL;       // seconds
-  spec->tv_nsec = wintime % 10000000LL * 100; // nano-seconds
+    wintime -= 116444736000000000LL;       // 1-Jan-1601 to 1-Jan-1970
+    spec->tv_sec = wintime / 10000000LL;       // seconds
+    spec->tv_nsec = wintime % 10000000LL * 100; // nano-seconds
 
-  return base;
+    return base;
 }
 
 #endif // _WIN32
