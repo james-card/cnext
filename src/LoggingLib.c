@@ -1697,8 +1697,6 @@ void* realloc(void *ptr, size_t size) {
   
   call_once(&_initLoggingMemoryFunctionsRun, initLoggingMemoryFunctions);
   
-  // We have to check the value of _bypassRealMemorySystemCalls first to avoid
-  // infinitely recursing into initLoggingMemoryFunctions.
   if (_bypassRealMemorySystemCalls != 0) {
     if (_bypassRealMemorySystemCalls > 0) {
       mtx_lock(&_staticBufferLock);
@@ -1751,7 +1749,7 @@ void* realloc(void *ptr, size_t size) {
         if (_bypassRealMemorySystemCalls > 0) {
           mtx_unlock(&_staticBufferLock);
         }
-        while (_bypassRealMemorySystemCalls > 0) {
+        while (_bypassRealMemorySystemCalls != 0) {
           msleep(1);
         }
         
@@ -1797,13 +1795,11 @@ void* realloc(void *ptr, size_t size) {
       *((size_t*) returnValue) = size;
       returnValue += sizeof(size_t);
       memcpy(returnValue, ptr, sizeOfMemory(ptr));
-      localFree(ptr);
     }
+    localFree(ptr);
     
     return returnValue;
   }
-  
-  call_once(&_initLoggingMemoryFunctionsRun, initLoggingMemoryFunctions);
   
   // Call the real function.
   if (charPointer != NULL) {
