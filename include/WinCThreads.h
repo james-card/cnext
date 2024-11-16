@@ -122,7 +122,9 @@ int thrd_terminate(thrd_t thr);
 #define TSS_DTOR_ITERATIONS 4
 
 typedef void (*tss_dtor_t)(void*);
-typedef uint32_t tss_t; // a complete object type that holds an identifier for a thread-specific storage pointer
+// A tss_t value is a complete object type that holds an identifier for a
+// thread-specific storage pointer.
+typedef uint16_t tss_t; 
 
 int tss_create(tss_t* key, tss_dtor_t dtor);
 void tss_delete(tss_t key);
