@@ -91,7 +91,7 @@ typedef enum LogLevel {
     NUM_LOG_LEVELS
 } LogLevel;
 
-const char *logLevelName[NUM_LOG_LEVELS] = {
+static const char *logLevelName[NUM_LOG_LEVELS] = {
     "NEVER",
     "FLOOD",
     "TRACE",
@@ -176,7 +176,7 @@ extern FILE *logFile;
     } while (0)
 
 
-// A note about why the red black tree support data structure is here:
+// A note about why the radix tree support data structure is here:
 //
 // When the C standard incorporated threading in C11, they based their model
 // on pthreads.  The 'p' in "pthreads" stands for "POSIX", which means that the
@@ -201,763 +201,513 @@ extern FILE *logFile;
 // requirements of the standard.  The data structures in this library are used
 // to achieve that.
 //
-// In this library, thread-specific storage is implemented as an array of red
-// black trees.  In the array, the indexes are the tss_t values and the values
-// of the indexes are data structures containing function pointers to the
-// destructors and a pointer to a second level red black tree.  In the second
-// level trees, the keys are the thread IDs and the values are pointers to the
-// thread-specific values.
+// In this library, thread-specific storage is implemented as two lookups: One
+// that is an array by key and then a radix tree by thread ID (this is where the
+// actual storage is) and one that is a radix tree by thread ID and then a radix
+// tree key (which holds a reference to the values in the first trees).
 //
-// Access to the data structues is protected by a mutex.  This mutex is a mtx_t
-// as implemented in this library.  This guarantees that the trees do not get
-// corrupted by multiple threads trying to access their local storage at the
-// same time (which is actually a rare event).
+// The reason for the second lookup is that all of a thread's storage has to be
+// deleted when the thread exits.  So, when a thread exits, its second level
+// tree under its thread ID is deleted, which deletes all the elements in the
+// first tree as it is destroyed.
+//
+// The trees are implemented in a thread-safe, lock-free way that makes use of
+// atomic exchange functions to ensure that freed pointers aren't accidentally
+// used by other threads as something is being deleted from a tree.  Mutexes are
+// *NOT* used by thread-specific storage to keep the access time as low as
+// possible.
 //
 // The destructors provided in tss_create are called when a thread directly
 // calls thrd_exit or when it returns from its main function, which is wrapped
-// by a fucntion that invokes thrd_exit upon the functions's return.
+// by a fucntion that invokes thrd_exit upon the functions's return.  The
+// destructors are also called in the event that the thread-specific storage is
+// deleted by a call to tss_delete.
 
-/****************** Begin Support Data Structure Code **************************
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that neither the name of Emin
-Martinian nor the names of any contributors are be used to endorse or
-promote products derived from this software without specific prior
-written permission.
+/****************** Begin Support Data Structure Code *************************/
 
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*******************************************************************************/
+#define RADIX_TREE_KEY_ELEMENT uint8_t
+#define RADIX_TREE_KEY_ELEMENT_BIT_WIDTH (sizeof(RADIX_TREE_KEY_ELEMENT) * 8)
+#define RADIX_TREE_NUM_KEYS_BIT_SHIFT 0
+#define RADIX_TREE_ARRAY_SIZE (1 << RADIX_TREE_KEY_ELEMENT_BIT_WIDTH)
+#define TSS_T_BIT_WIDTH (sizeof(tss_t) * 8)
+#define ARRAY_OF_RADIX_TREES_SIZE (1 << TSS_T_BIT_WIDTH)
 
-typedef struct WinCThreadsRedBlackNode {
-    void* key;
-    void* value;
-    int red; // if red = 0 then the node is black
-    struct WinCThreadsRedBlackNode* left;
-    struct WinCThreadsRedBlackNode* right;
-    struct WinCThreadsRedBlackNode* parent;
-    struct WinCThreadsRedBlackNode* next;
-    struct WinCThreadsRedBlackNode* prev;
-} WinCThreadsRedBlackNode;
+/// @def RADIX_TREE_FIND_NODE
+///
+/// @brief Use the local variables 'numKeys', 'node', 'currentKeyIndex', 'key',
+/// and 'radixTreeNodes' to find the target node of the key.  This is the search
+/// algorithm used in windowsRadixTreeNodeGetValue and
+/// windowsRadixTreeNodeDeleteValue.  windowsRadixTreeNodeSetValue has special
+/// logic.
+///
+/// @details
+/// There are two ways we can go about this search:  We can start from the
+/// beginning of the key and go to the end or we can start from the end of it
+/// and go to the beginning.  It is more space efficient to start with the end
+/// that is most likely to have data that's common to the keys because that will
+/// result in the fewest branches.  (The number of leaves remains unchanged
+/// either way.)  Because we're searching on integer values, this means that
+/// it's most optimal to start from the end that is more likely to have zeros
+/// in it, i.e. the most-significant bytes.  This means that we need to take
+/// endianness into account here.  If I was interested in supporting big-endian
+/// systems then I would put in some code here that would optimize this search
+/// depending on the system.  However, as of the time of this comment, I have no
+/// plans to support big-endian systems.  So, I am therefore only providing the
+/// optimization for little-endian systems.
+///
+/// One additional note on this:  It is also marginally more performant to do
+/// this optimization.
+///
+/// JBC 2024-11-15
+#define RADIX_TREE_FIND_NODE() \
+    do { \
+        while ((numKeys > 0) && (node != NULL)) { \
+            currentKeyIndex = key[numKeys - 1]; \
+            radixTreeNodes = node->radixTreeNodes; \
+            node = radixTreeNodes[currentKeyIndex]; \
+            numKeys--; \
+        } \
+    } while (0)
 
-/* Compare(a,b) should return 1 if *a > *b, -1 if *a < *b, and 0 otherwise */
-/* Destroy(a) takes a pointer to whatever key might be and frees it accordingly */
-typedef struct WinCThreadsRedBlackTree {
-    int (*compare)(const void* a, const void* b);
-    void (*destroyKey)(void* a);
-    void (*destroyValue)(void* a);
-    /*  A sentinel is used for root and for nil.  These sentinels are */
-    /*  created when winCThreadsRbTreeCreate is caled.  root->left should always */
-    /*  point to the node which is the root of the tree.  nil points to a */
-    /*  node which should always be black but has aribtrary children and */
-    /*  parent and no key or info.  The point of using these sentinels is so */
-    /*  that the root and nil nodes do not require special cases in the code */
-    WinCThreadsRedBlackNode* root;
-    WinCThreadsRedBlackNode* nil;
-    WinCThreadsRedBlackNode* head;
-    WinCThreadsRedBlackNode* tail;
-} WinCThreadsRedBlackTree;
+/// @struct WindowsRadixTreeNode
+///
+/// @brief Individual node within the radix tree.
+///
+/// @var value A pointer to the value that exactly matches the key.
+/// @var radixTreeNodes The array of WindowsRadixTreeNodes subordinate to this
+///   node.
+/// @var radixTreeNodesBitmap The bitmap of allocated nodes within
+///   radixTreeNodes.
+typedef struct WindowsRadixTreeNode {
+    volatile void *value;
+    struct WindowsRadixTreeNode *radixTreeNodes[RADIX_TREE_ARRAY_SIZE];
+} WindowsRadixTreeNode;
 
-static WinCThreadsRedBlackNode* winCThreadsRbTreeSuccessor(WinCThreadsRedBlackTree* tree, WinCThreadsRedBlackNode* x);
-static WinCThreadsRedBlackNode* winCThreadsRbTreePredecessor(WinCThreadsRedBlackTree* tree, WinCThreadsRedBlackNode* x);
+/// @struct WindowsRadixTree
+///
+/// @brief Container for the radix tree.
+///
+/// @var root A pointer to the top WindowsRadixTreeNode tree;
+/// @var destructor A tss_dtor_t function used to free the values of the tree.
+typedef struct WindowsRadixTree {
+    WindowsRadixTreeNode *root;
+    tss_dtor_t destructor;
+} WindowsRadixTree;
 
-/***********************************************************************/
-/*  FUNCTION:  winCThreadsRbTreeSafeMalloc */
-/**/
-/*    INPUTS:  size is the size to malloc */
-/**/
-/*    OUTPUT:  returns pointer to allocated memory if succesful */
-/**/
-/*    EFFECT:  mallocs new memory.  If malloc fails, prints error message */
-/*             and exits the program. */
-/**/
-/*    Modifies Input: none */
-/**/
-/***********************************************************************/
-
-static void* winCThreadsRbTreeSafeMalloc(size_t size) {
-    void* result;
-
-    if ((result = calloc(1, size))) { /* assignment intentional */
-        return result;
-    }
-    else {
+/// @fn WindowsRadixTree* windowsRadixTreeCreate(tss_dtor_t destructor)
+///
+/// @brief Create a radix tree to be used with the thread-specific storage
+/// calls.
+///
+/// @param destructor The destructor to call on the values in the tree when one
+/// of them is deleted or the tree is destroyed.
+///
+/// @return Returns a pointer to a newly-allocated WindowsRadixTree on success,
+/// NULL on failure.
+static inline WindowsRadixTree* windowsRadixTreeCreate(tss_dtor_t destructor) {
+    WindowsRadixTree *tree
+        = (WindowsRadixTree*) malloc(sizeof(WindowsRadixTree));
+    if (tree == NULL) {
         LOG_MALLOC_FAILURE();
-        exit(1);
         return NULL;
     }
+
+    tree->root
+        = (WindowsRadixTreeNode*) calloc(1, sizeof(WindowsRadixTreeNode));
+    if (tree->root == NULL) {
+        LOG_MALLOC_FAILURE();
+        free(tree); tree = NULL;
+        return NULL;
+    }
+
+    tree->destructor = destructor;
+
+    return tree;
 }
 
+/// @fn WindowsRadixTreeNode* windowsRadixTreeDestroyNode(
+///         WindowsRadixTreeNode *node, tss_dtor_t destructor)
+///
+/// @brief Detroy a WindowsRadixTreeNode, its value, and all its sub-nodes.
+///
+/// @param node A pointer to a previously-allocated WindowsRadixTreeNode.
+/// @param destructor A tss_dtor_t that can be used to destroy the value held by
+///   the node.
+///
+/// @return This function always returns NULL.
+static inline WindowsRadixTreeNode* windowsRadixTreeDestroyNode(
+    WindowsRadixTreeNode *node, tss_dtor_t destructor
+) {
+    if (node != NULL) {
+        // destructor is guaranteed to be non-NULL by the thread-specific
+        // storage functions.
+        destructor(InterlockedExchangePointer(
+            (void * volatile*) &node->value, NULL));
 
-/***********************************************************************/
-/*  FUNCTION:  winCThreadsRbTreeCreate */
-/**/
-/*  INPUTS:  All the inputs are names of functions.  CompFunc takes to */
-/*  void pointers to keys and returns > 0 if the first arguement is */
-/*  "greater than" the second.   DestFunc takes a pointer to a key and */
-/*  destroys it in the appropriate manner when the node containing that */
-/*  key is deleted.  InfoDestFunc is similiar to DestFunc except it */
-/*  recieves a pointer to the info of a node and destroys it. */
-/**/
-/*  OUTPUT:  This function returns a pointer to the newly created */
-/*  red-black tree. */
-/**/
-/*  Modifies Input: none */
-/***********************************************************************/
-
-static WinCThreadsRedBlackTree* winCThreadsRbTreeCreate(int (*CompFunc) (const void*, const void*),
-    void (*DestFunc) (void*),
-    void (*InfoDestFunc) (void*)) {
-    WinCThreadsRedBlackTree* newTree;
-    WinCThreadsRedBlackNode* temp;
-
-    newTree = (WinCThreadsRedBlackTree*)winCThreadsRbTreeSafeMalloc(sizeof(WinCThreadsRedBlackTree));
-    newTree->compare = CompFunc;
-    newTree->destroyKey = DestFunc;
-    newTree->destroyValue = InfoDestFunc;
-
-    /*  see the comment in the WinCThreadsRedBlackTree structure in red_black_tree.h */
-    /*  for information on nil and root */
-    temp = newTree->nil = (WinCThreadsRedBlackNode*)winCThreadsRbTreeSafeMalloc(sizeof(WinCThreadsRedBlackNode));
-    temp->parent = temp->left = temp->right = temp;
-    temp->red = 0;
-    temp->key = 0;
-    temp = newTree->root = (WinCThreadsRedBlackNode*)winCThreadsRbTreeSafeMalloc(sizeof(WinCThreadsRedBlackNode));
-    temp->parent = temp->left = temp->right = newTree->nil;
-    temp->key = 0;
-    temp->red = 0;
-    newTree->head = newTree->tail = newTree->nil;
-    return(newTree);
-}
-
-/***********************************************************************/
-/*  FUNCTION:  winCThreadsRbTreeLeftRotate */
-/**/
-/*  INPUTS:  This takes a tree so that it can access the appropriate */
-/*           root and nil pointers, and the node to rotate on. */
-/**/
-/*  OUTPUT:  None */
-/**/
-/*  Modifies Input: tree, x */
-/**/
-/*  EFFECTS:  Rotates as described in _Introduction_To_Algorithms by */
-/*            Cormen, Leiserson, Rivest (Chapter 14).  Basically this */
-/*            makes the parent of x be to the left of x, x the parent of */
-/*            its parent before the rotation and fixes other pointers */
-/*            accordingly. */
-/***********************************************************************/
-
-static void winCThreadsRbTreeLeftRotate(WinCThreadsRedBlackTree* tree, WinCThreadsRedBlackNode* x) {
-    WinCThreadsRedBlackNode* y;
-    WinCThreadsRedBlackNode* nil = tree->nil;
-
-    /*  I originally wrote this function to use the sentinel for */
-    /*  nil to avoid checking for nil.  However this introduces a */
-    /*  very subtle bug because sometimes this function modifies */
-    /*  the parent pointer of nil.  This can be a problem if a */
-    /*  function which calls winCThreadsRbTreeLeftRotate also uses the nil sentinel */
-    /*  and expects the nil sentinel's parent pointer to be unchanged */
-    /*  after calling this function.  For example, when winCThreadsRbTreeDeleteFixUP */
-    /*  calls winCThreadsRbTreeLeftRotate it expects the parent pointer of nil to be */
-    /*  unchanged. */
-
-    y = x->right;
-    x->right = y->left;
-
-    if (y->left != nil) y->left->parent = x; /* used to use sentinel here */
-    /* and do an unconditional assignment instead of testing for nil */
-
-    y->parent = x->parent;
-
-    /* instead of checking if x->parent is the root as in the book, we */
-    /* count on the root sentinel to implicitly take care of this case */
-    if (x == x->parent->left) {
-        x->parent->left = y;
-    }
-    else {
-        x->parent->right = y;
-    }
-    y->left = x;
-    x->parent = y;
-
-#ifdef DEBUG_ASSERT
-    Assert(!tree->nil->red, "nil not red in winCThreadsRbTreeLeftRotate");
-#endif
-}
-
-
-/***********************************************************************/
-/*  FUNCTION:  winCThreadsRbTreeRightRotate */
-/**/
-/*  INPUTS:  This takes a tree so that it can access the appropriate */
-/*           root and nil pointers, and the node to rotate on. */
-/**/
-/*  OUTPUT:  None */
-/**/
-/*  Modifies Input?: tree, y */
-/**/
-/*  EFFECTS:  Rotates as described in _Introduction_To_Algorithms by */
-/*            Cormen, Leiserson, Rivest (Chapter 14).  Basically this */
-/*            makes the parent of x be to the left of x, x the parent of */
-/*            its parent before the rotation and fixes other pointers */
-/*            accordingly. */
-/***********************************************************************/
-
-static void winCThreadsRbTreeRightRotate(WinCThreadsRedBlackTree* tree, WinCThreadsRedBlackNode* y) {
-    WinCThreadsRedBlackNode* x;
-    WinCThreadsRedBlackNode* nil = tree->nil;
-
-    /*  I originally wrote this function to use the sentinel for */
-    /*  nil to avoid checking for nil.  However this introduces a */
-    /*  very subtle bug because sometimes this function modifies */
-    /*  the parent pointer of nil.  This can be a problem if a */
-    /*  function which calls winCThreadsRbTreeLeftRotate also uses the nil sentinel */
-    /*  and expects the nil sentinel's parent pointer to be unchanged */
-    /*  after calling this function.  For example, when winCThreadsRbTreeDeleteFixUP */
-    /*  calls winCThreadsRbTreeLeftRotate it expects the parent pointer of nil to be */
-    /*  unchanged. */
-
-    x = y->left;
-    y->left = x->right;
-
-    if (nil != x->right)  x->right->parent = y; /*used to use sentinel here */
-    /* and do an unconditional assignment instead of testing for nil */
-
-    /* instead of checking if x->parent is the root as in the book, we */
-    /* count on the root sentinel to implicitly take care of this case */
-    x->parent = y->parent;
-    if (y == y->parent->left) {
-        y->parent->left = x;
-    }
-    else {
-        y->parent->right = x;
-    }
-    x->right = y;
-    y->parent = x;
-
-#ifdef DEBUG_ASSERT
-    Assert(!tree->nil->red, "nil not red in winCThreadsRbTreeRightRotate");
-#endif
-}
-
-/***********************************************************************/
-/*  FUNCTION:  winCThreadsRbTreeInsertHelp  */
-/**/
-/*  INPUTS:  tree is the tree to insert into and z is the node to insert */
-/**/
-/*  OUTPUT:  none */
-/**/
-/*  Modifies Input:  tree, z */
-/**/
-/*  EFFECTS:  Inserts z into the tree as if it were a regular binary tree */
-/*            using the algorithm described in _Introduction_To_Algorithms_ */
-/*            by Cormen et al.  This funciton is only intended to be called */
-/*            by the winCThreadsRbTreeInsert function and not by the user */
-/***********************************************************************/
-
-static void winCThreadsRbTreeInsertHelp(WinCThreadsRedBlackTree* tree, WinCThreadsRedBlackNode* z) {
-    /*  This function should only be called by InsertRBTree (see above) */
-    WinCThreadsRedBlackNode* x;
-    WinCThreadsRedBlackNode* y;
-    WinCThreadsRedBlackNode* nil = tree->nil;
-
-    z->left = z->right = nil;
-    y = tree->root;
-    x = tree->root->left;
-    while (x != nil) {
-        y = x;
-        if (0 < tree->compare(x->key, z->key)) { /* x.key > z.key */
-            x = x->left;
-        }
-        else { /* x,key <= z.key */
-            x = x->right;
-        }
-    }
-    z->parent = y;
-    if ((y == tree->root) ||
-        (0 < tree->compare(y->key, z->key))) { /* y.key > z.key */
-        y->left = z;
-    }
-    else {
-        y->right = z;
-    }
-
-#ifdef DEBUG_ASSERT
-    Assert(!tree->nil->red, "nil not red in winCThreadsRbTreeInsertHelp");
-#endif
-}
-
-/*  Before calling Insert RBTree the node x should have its key set */
-
-/***********************************************************************/
-/*  FUNCTION:  winCThreadsRbTreeInsert */
-/**/
-/*  INPUTS:  tree is the red-black tree to insert a node which has a key */
-/*           pointed to by key and info pointed to by info.  */
-/**/
-/*  OUTPUT:  This function returns a pointer to the newly inserted node */
-/*           which is guarunteed to be valid until this node is deleted. */
-/*           What this means is if another data structure stores this */
-/*           pointer then the tree does not need to be searched when this */
-/*           is to be deleted. */
-/**/
-/*  Modifies Input: tree */
-/**/
-/*  EFFECTS:  Creates a node node which contains the appropriate key and */
-/*            info pointers and inserts it into the tree. */
-/***********************************************************************/
-
-static WinCThreadsRedBlackNode* winCThreadsRbTreeInsert(WinCThreadsRedBlackTree* tree, void* key, void* info) {
-    WinCThreadsRedBlackNode* y;
-    WinCThreadsRedBlackNode* x;
-    WinCThreadsRedBlackNode* newNode;
-
-    x = (WinCThreadsRedBlackNode*)winCThreadsRbTreeSafeMalloc(sizeof(WinCThreadsRedBlackNode));
-    x->key = key;
-    x->value = info;
-
-    winCThreadsRbTreeInsertHelp(tree, x);
-    newNode = x;
-    x->red = 1;
-    while (x->parent->red) { /* use sentinel instead of checking for root */
-        if (x->parent == x->parent->parent->left) {
-            y = x->parent->parent->right;
-            if (y->red) {
-                x->parent->red = 0;
-                y->red = 0;
-                x->parent->parent->red = 1;
-                x = x->parent->parent;
-            }
-            else {
-                if (x == x->parent->right) {
-                    x = x->parent;
-                    winCThreadsRbTreeLeftRotate(tree, x);
-                }
-                x->parent->red = 0;
-                x->parent->parent->red = 1;
-                winCThreadsRbTreeRightRotate(tree, x->parent->parent);
+        WindowsRadixTreeNode** radixTreeNodes = node->radixTreeNodes;
+        // Recursively destroy any sub-nodes.
+        for (uint32_t ii = 0; ii < RADIX_TREE_ARRAY_SIZE; ii++) {
+            if (radixTreeNodes[ii] != NULL) {
+                windowsRadixTreeDestroyNode(
+                    InterlockedExchangePointer(
+                        (void * volatile*) &radixTreeNodes[ii], NULL),
+                    destructor);
             }
         }
-        else { /* case for x->parent == x->parent->parent->right */
-            y = x->parent->parent->left;
-            if (y->red) {
-                x->parent->red = 0;
-                y->red = 0;
-                x->parent->parent->red = 1;
-                x = x->parent->parent;
-            }
-            else {
-                if (x == x->parent->left) {
-                    x = x->parent;
-                    winCThreadsRbTreeRightRotate(tree, x);
-                }
-                x->parent->red = 0;
-                x->parent->parent->red = 1;
-                winCThreadsRbTreeLeftRotate(tree, x->parent->parent);
-            }
-        }
-    }
-    tree->root->left->red = 0;
-
-    WinCThreadsRedBlackNode* neighbor = winCThreadsRbTreePredecessor(tree, newNode);
-    if (neighbor != tree->nil) {
-        neighbor->next = newNode;
-    }
-    newNode->prev = neighbor;
-    neighbor = winCThreadsRbTreeSuccessor(tree, newNode);
-    if (neighbor != tree->nil) {
-        neighbor->prev = newNode;
-    }
-    newNode->next = neighbor;
-    if (newNode->prev == tree->nil) {
-        // First node in the tree
-        tree->head = newNode;
-    }
-    if (newNode->next == tree->nil) {
-        // Last node in the tree
-        tree->tail = newNode;
+        free(node); node = NULL;
     }
 
-    return(newNode);
-
-#ifdef DEBUG_ASSERT
-    Assert(!tree->nil->red, "nil not red in winCThreadsRbTreeInsert");
-    Assert(!tree->root->red, "root not red in winCThreadsRbTreeInsert");
-#endif
+    return node;
 }
 
-/***********************************************************************/
-/*  FUNCTION:  winCThreadsRbTreeSuccessor  */
-/**/
-/*    INPUTS:  tree is the tree in question, and x is the node we want the */
-/*             the successor of. */
-/**/
-/*    OUTPUT:  This function returns the successor of x or tree->nil if no */
-/*             successor exists. */
-/**/
-/*    Modifies Input: none */
-/**/
-/*    Note:  uses the algorithm in _Introduction_To_Algorithms_ */
-/***********************************************************************/
-  
-static WinCThreadsRedBlackNode* winCThreadsRbTreeSuccessor(WinCThreadsRedBlackTree* tree, WinCThreadsRedBlackNode* x) {
-    WinCThreadsRedBlackNode* y;
-    WinCThreadsRedBlackNode* nil = tree->nil;
-    WinCThreadsRedBlackNode* root = tree->root;
-
-    if (nil != (y = x->right)) { /* assignment to y is intentional */
-        while (y->left != nil) { /* returns the minium of the right subtree of x */
-            y = y->left;
-        }
-        return(y);
+/// @fn WindowsRadixTree* windowsRadixTreeDestroy(WindowsRadixTree *tree)
+///
+/// @brief Destroy a WindowsRadixTree.
+///
+/// @note We can't make this a static inline function because we need to pass
+/// it as the tss_dtor_t pointer to windowsRadixTreeCreate for the first-level
+/// trees.
+///
+/// @param tree A pointer to a previously-allocated WindowsRadixTree.
+///
+/// @return This function always returns NULL.
+WindowsRadixTree* windowsRadixTreeDestroy(WindowsRadixTree *tree) {
+    if (tree != NULL) {
+        windowsRadixTreeDestroyNode(
+            InterlockedExchangePointer((void * volatile*) &tree->root, NULL),
+            tree->destructor);
+        free(tree); tree = NULL;
     }
-    else {
-        y = x->parent;
-        while (x == y->right) { /* sentinel used instead of checking for nil */
-            x = y;
-            y = y->parent;
-        }
-        if (y == root) return(nil);
-        return(y);
-    }
+    return tree;
 }
 
-/***********************************************************************/
-/*  FUNCTION:  winCThreadsRbTreePredecessor  */
-/**/
-/*    INPUTS:  tree is the tree in question, and x is the node we want the */
-/*             the predecessor of. */
-/**/
-/*    OUTPUT:  This function returns the predecessor of x or tree->nil if no */
-/*             predecessor exists. */
-/**/
-/*    Modifies Input: none */
-/**/
-/*    Note:  uses the algorithm in _Introduction_To_Algorithms_ */
-/***********************************************************************/
+/// @fn void* windowsRadixTreeNodeGetValue(WindowsRadixTreeNode *node,
+///         const volatile RADIX_TREE_KEY_ELEMENT *key, size_t numKeys)
+///
+/// @brief Get a previously-set value from a WindowsRadixTreeNode.
+///
+/// @param node A pointer to a previously-allocated WindowsRadixTreeNode or
+///   NULL.
+/// @param key A pointer to key element values.
+/// @param numKeys The number of keys pointed to by the key.
+///
+/// @return Returns the value in the tree if it exists, NULL if not.
+static inline void* windowsRadixTreeNodeGetValue(WindowsRadixTreeNode *node,
+    const volatile RADIX_TREE_KEY_ELEMENT *key, size_t numKeys
+) {
+    const volatile void *returnValue = NULL;
+    WindowsRadixTreeNode** radixTreeNodes = NULL;
+    RADIX_TREE_KEY_ELEMENT currentKeyIndex = 0;
 
-static WinCThreadsRedBlackNode* winCThreadsRbTreePredecessor(WinCThreadsRedBlackTree* tree, WinCThreadsRedBlackNode* x) {
-    WinCThreadsRedBlackNode* y;
-    WinCThreadsRedBlackNode* nil = tree->nil;
-    WinCThreadsRedBlackNode* root = tree->root;
+    RADIX_TREE_FIND_NODE();
 
-    if (nil != (y = x->left)) { /* assignment to y is intentional */
-        while (y->right != nil) { /* returns the maximum of the left subtree of x */
-            y = y->right;
-        }
-        return(y);
+    if (node != NULL) {
+        returnValue = node->value;
     }
-    else {
-        y = x->parent;
-        while (x == y->left) {
-            if (y == root) return(nil);
-            x = y;
-            y = y->parent;
-        }
-        return(y);
-    }
+
+    return (void*) returnValue;
 }
 
-
-/***********************************************************************/
-/*  FUNCTION:  winCThreadsRbTreeDestroyHelper */
-/**/
-/*    INPUTS:  tree is the tree to destroy and x is the current node */
-/**/
-/*    OUTPUT:  none  */
-/**/
-/*    EFFECTS:  This function recursively destroys the nodes of the tree */
-/*              postorder using the destroyKey and destroyValue functions. */
-/**/
-/*    Modifies Input: tree, x */
-/**/
-/*    Note:    This function should only be called by winCThreadsRbTreeDestroy */
-/***********************************************************************/
-
-static void winCThreadsRbTreeDestroyHelper(WinCThreadsRedBlackTree* tree, WinCThreadsRedBlackNode* x) {
-    WinCThreadsRedBlackNode* nil = tree->nil;
-    if (x != nil) {
-        winCThreadsRbTreeDestroyHelper(tree, x->left);
-        winCThreadsRbTreeDestroyHelper(tree, x->right);
-        tree->destroyKey(x->key);
-        tree->destroyValue(x->value);
-        free(x);
+/// @fn void* windowsRadixTreeGetValue(WindowsRadixTree *tree,
+///         const volatile void *key, size_t keySize)
+///
+/// @brief Get a value from a WindowsRadixTree.
+///
+/// @param tree A pointer to a previously-allocated WindowsRadixTree.
+/// @param key A pointer to the key to look for.
+/// @param keySize The number of bytes in the key.
+///
+/// @return Returns the value found on success, NULL if not found or on error.
+static inline void* windowsRadixTreeGetValue(WindowsRadixTree *tree,
+    const volatile void *key, size_t keySize
+) {
+    void *returnValue = NULL;
+    if ((tree == NULL) || ((key == NULL) && (keySize != 0))) {
+        return returnValue;
     }
+
+    returnValue = windowsRadixTreeNodeGetValue(
+        tree->root,
+       (RADIX_TREE_KEY_ELEMENT*) key,
+       (keySize >> RADIX_TREE_NUM_KEYS_BIT_SHIFT)
+    );
+
+    return returnValue;
 }
 
-
-/***********************************************************************/
-/*  FUNCTION:  winCThreadsRbTreeDestroy */
-/**/
-/*    INPUTS:  tree is the tree to destroy */
-/**/
-/*    OUTPUT:  NULL */
-/**/
-/*    EFFECT:  Frees all memory held by the tree */
-/**/
-/*    Modifies Input: tree */
-/**/
-/***********************************************************************/
-
-static WinCThreadsRedBlackTree* winCThreadsRbTreeDestroy(WinCThreadsRedBlackTree* tree) {
-    winCThreadsRbTreeDestroyHelper(tree, tree->root->left);
-    free(tree->root);
-    free(tree->nil);
-    free(tree);
-    return NULL;
-}
-
-
-/***********************************************************************/
-/*  FUNCTION:  winCThreadsRbTreeExactQuery */
-/**/
-/*    INPUTS:  tree is the tree to print and q is a pointer to the key */
-/*             we are searching for */
-/**/
-/*    OUTPUT:  returns the a node with key equal to q.  If there are */
-/*             multiple nodes with key equal to q this function returns */
-/*             the one highest in the tree */
-/**/
-/*    Modifies Input: none */
-/**/
-/***********************************************************************/
-  
-static WinCThreadsRedBlackNode* winCThreadsRbTreeExactQuery(WinCThreadsRedBlackTree* tree, void* q) {
-    WinCThreadsRedBlackNode* x = tree->root->left;
-    WinCThreadsRedBlackNode* nil = tree->nil;
-    int compVal;
-    if (x == nil) return(nil);
-    compVal = tree->compare(x->key, (int*)q);
-    while (0 != compVal) {/*assignemnt*/
-        if (0 < compVal) { /* x->key > q */
-            x = x->left;
-        }
-        else {
-            x = x->right;
-        }
-        if (x == nil) return(nil);
-        compVal = tree->compare(x->key, (int*)q);
+/// @fn void* windowsRadixTreeGetValue2(WindowsRadixTree *tree1,
+///         const volatile void *key1, size_t keySize1,
+///         const volatile void *key2, size_t keySize2)
+///
+/// @brief Get a value from a second-level WindowsRadixTree.
+///
+/// @param tree1 A pointer to the top-level WindowsRadixTree.
+/// @param key1 A pointer to the key of the second-level tree.
+/// @param keySize1 The number of bytes in key1.
+/// @param key1 A pointer to the key of value in the second-level tree.
+/// @param keySize1 The number of bytes in key2.
+///
+/// @return Returns the found element on success, NULL on failure.
+static inline void* windowsRadixTreeGetValue2(WindowsRadixTree *tree1,
+    const volatile void *key1, size_t keySize1,
+    const volatile void *key2, size_t keySize2
+) {
+    void *returnValue = NULL;
+    if ((tree1 == NULL)
+        || ((key1 == NULL) && (keySize1 != 0))
+        || ((key2 == NULL) && (keySize2 != 0))
+    ) {
+        return returnValue; // NULL
     }
-    return(x);
+
+    WindowsRadixTree *tree2
+        = (WindowsRadixTree*) windowsRadixTreeGetValue(tree1, key1, keySize1);
+    if (tree2 != NULL) {
+        returnValue = windowsRadixTreeGetValue(tree2, key2, keySize2);
+    }
+
+    return returnValue;
 }
 
-
-/***********************************************************************/
-/*  FUNCTION:  winCThreadsRbTreeDeleteFixUp */
-/**/
-/*    INPUTS:  tree is the tree to fix and x is the child of the spliced */
-/*             out node in winCThreadsRbTreeDelete. */
-/**/
-/*    OUTPUT:  none */
-/**/
-/*    EFFECT:  Performs rotations and changes colors to restore red-black */
-/*             properties after a node is deleted */
-/**/
-/*    Modifies Input: tree, x */
-/**/
-/*    The algorithm from this function is from _Introduction_To_Algorithms_ */
-/***********************************************************************/
-
-static void winCThreadsRbTreeDeleteFixUp(WinCThreadsRedBlackTree* tree, WinCThreadsRedBlackNode* x) {
-    WinCThreadsRedBlackNode* root = tree->root->left;
-    WinCThreadsRedBlackNode* w;
-
-    while ((!x->red) && (root != x)) {
-        if (x == x->parent->left) {
-            w = x->parent->right;
-            if (w->red) {
-                w->red = 0;
-                x->parent->red = 1;
-                winCThreadsRbTreeLeftRotate(tree, x->parent);
-                w = x->parent->right;
-            }
-            if ((!w->right->red) && (!w->left->red)) {
-                w->red = 1;
-                x = x->parent;
-            }
-            else {
-                if (!w->right->red) {
-                    w->left->red = 0;
-                    w->red = 1;
-                    winCThreadsRbTreeRightRotate(tree, w);
-                    w = x->parent->right;
-                }
-                w->red = x->parent->red;
-                x->parent->red = 0;
-                w->right->red = 0;
-                winCThreadsRbTreeLeftRotate(tree, x->parent);
-                x = root; /* this is to exit while loop */
+/// @fn int windowsRadixTreeNodeSetValue(WindowsRadixTreeNode *node,
+///         const volatile RADIX_TREE_KEY_ELEMENT *key, size_t numKeys,
+///         volatile void *value)
+///
+/// @brief Set a value in the radix tree.  Allocate any intermediate nodes if
+/// they don't exist.
+///
+/// @param node A pointer to a WindowsRadixTreeNode in the tree.
+/// @param key An array of key elements.
+/// @param numKeys The number of keys in the keys array.
+/// @param value A pointer to the value to set in the tree.
+///
+/// @return Returns 0 if the value replaces an existing value in the tree, 1 if
+/// the value is a new value in the tree.
+static inline int windowsRadixTreeNodeSetValue(WindowsRadixTreeNode *node,
+    const volatile RADIX_TREE_KEY_ELEMENT *key, size_t numKeys,
+    volatile void *value
+) {
+    int returnValue = 0;
+    RADIX_TREE_KEY_ELEMENT currentKeyIndex = 0;
+    WindowsRadixTreeNode** radixTreeNodes = NULL;
+    while (numKeys > 0) {
+        currentKeyIndex = key[numKeys - 1];
+        radixTreeNodes = node->radixTreeNodes;
+        if (radixTreeNodes[currentKeyIndex] == NULL) {
+            WindowsRadixTreeNode *radixTreeNode = (WindowsRadixTreeNode*)
+                calloc(1, sizeof(WindowsRadixTreeNode));
+            if (InterlockedCompareExchangePointer(
+                (PVOID*) &radixTreeNodes[currentKeyIndex],
+                (PVOID) radixTreeNode,
+                NULL) != NULL
+            ) {
+                free(radixTreeNode); radixTreeNode = NULL;
             }
         }
-        else { /* the code below is has left and right switched from above */
-            w = x->parent->left;
-            if (w->red) {
-                w->red = 0;
-                x->parent->red = 1;
-                winCThreadsRbTreeRightRotate(tree, x->parent);
-                w = x->parent->left;
-            }
-            if ((!w->right->red) && (!w->left->red)) {
-                w->red = 1;
-                x = x->parent;
-            }
-            else {
-                if (!w->left->red) {
-                    w->right->red = 0;
-                    w->red = 1;
-                    winCThreadsRbTreeLeftRotate(tree, w);
-                    w = x->parent->left;
-                }
-                w->red = x->parent->red;
-                x->parent->red = 0;
-                w->left->red = 0;
-                winCThreadsRbTreeRightRotate(tree, x->parent);
-                x = root; /* this is to exit while loop */
-            }
-        }
-    }
-    x->red = 0;
 
-#ifdef DEBUG_ASSERT
-    Assert(!tree->nil->red, "nil not black in winCThreadsRbTreeDeleteFixUp");
-#endif
+        node = radixTreeNodes[currentKeyIndex];
+        numKeys--;
+    }
+
+    if (node->value == NULL) {
+        returnValue = 1;
+    }
+    node->value = value;
+
+    return returnValue;
 }
 
-
-/***********************************************************************/
-/*  FUNCTION:  winCThreadsRbTreeDelete */
-/**/
-/*    INPUTS:  tree is the tree to delete node z from */
-/**/
-/*    OUTPUT:  none */
-/**/
-/*    EFFECT:  Deletes z from tree and frees the key and info of z */
-/*             using DestoryKey and DestoryInfo.  Then calls */
-/*             winCThreadsRbTreeDeleteFixUp to restore red-black properties */
-/**/
-/*    Modifies Input: tree, z */
-/**/
-/*    The algorithm from this function is from _Introduction_To_Algorithms_ */
-/***********************************************************************/
-
-static void winCThreadsRbTreeDelete(WinCThreadsRedBlackTree* tree, WinCThreadsRedBlackNode* z) {
-    WinCThreadsRedBlackNode* y;
-    WinCThreadsRedBlackNode* x;
-    WinCThreadsRedBlackNode* nil = tree->nil;
-    WinCThreadsRedBlackNode* root = tree->root;
-
-    if ((z->prev != NULL) && (z->prev != nil)) {
-        z->prev->next = z->next;
-    }
-    if ((z->next != NULL) && (z->next != nil)) {
-        z->next->prev = z->prev;
+/// @fn int windowsRadixTreeSetValue(WindowsRadixTree *tree,
+///         const volatile void *key, size_t keySize,
+///         volatile void *value)
+///
+/// @brief Set a value in the radix tree.
+///
+/// @param tree A pointer to a previously-allocated WindowsRadixTree.
+/// @param key A pointer to a key value.
+/// @param keySize The number of bytes of the key.
+/// @param value A pointer to the value to set.
+///
+/// @return Returns the number of new elements added on success, -1 on error.
+static inline int windowsRadixTreeSetValue(WindowsRadixTree *tree,
+    const volatile void *key, size_t keySize, volatile void *value
+) {
+    int returnValue = -1;
+    if ((tree == NULL) || ((key == NULL) && (keySize != 0))) {
+        return returnValue; // -1
     }
 
-    y = ((z->left == nil) || (z->right == nil)) ? z : winCThreadsRbTreeSuccessor(tree, z);
-    x = (y->left == nil) ? y->right : y->left;
-    if (root == (x->parent = y->parent)) { /* assignment of y->p to x->p is intentional */
-        root->left = x;
-    }
-    else {
-        if (y == y->parent->left) {
-            y->parent->left = x;
-        }
-        else {
-            y->parent->right = x;
-        }
-    }
-    if (y != z) { /* y should not be nil in this case */
+    returnValue = windowsRadixTreeNodeSetValue(
+        tree->root,
+        (RADIX_TREE_KEY_ELEMENT*) key,
+        (keySize >> RADIX_TREE_NUM_KEYS_BIT_SHIFT),
+        value
+    );
 
-#ifdef DEBUG_ASSERT
-        Assert((y != tree->nil), "y is nil in winCThreadsRbTreeDelete\n");
-#endif
-        /* y is the node to splice out and x is its child */
-
-        if (!(y->red)) winCThreadsRbTreeDeleteFixUp(tree, x);
-
-        // Fix the linked-list portions.
-        if (tree->head == z) {
-            tree->head = z->next;
-        }
-        if (tree->tail == z) {
-            tree->tail = z->prev;
-        }
-        if (z->prev != tree->nil) {
-            z->prev->next = z->next;
-        }
-        if (z->next != tree->nil) {
-            z->next->prev = z->prev;
-        }
-
-        tree->destroyKey(z->key);
-        tree->destroyValue(z->value);
-        y->left = z->left;
-        y->right = z->right;
-        y->parent = z->parent;
-        y->red = z->red;
-        z->left->parent = z->right->parent = y;
-        if (z == z->parent->left) {
-            z->parent->left = y;
-        }
-        else {
-            z->parent->right = y;
-        }
-        free(z);
-    }
-    else {
-        // We're removing y in this case.
-        // Fix the linked-list portions.
-        if (tree->head == y) {
-            tree->head = y->next;
-        }
-        if (tree->tail == y) {
-            tree->tail = y->prev;
-        }
-        if (y->prev != tree->nil) {
-            y->prev->next = y->next;
-        }
-        if (y->next != tree->nil) {
-            y->next->prev = y->prev;
-        }
-
-        tree->destroyKey(y->key);
-        tree->destroyValue(y->value);
-        if (!(y->red)) winCThreadsRbTreeDeleteFixUp(tree, x);
-        free(y);
-    }
-
-#ifdef DEBUG_ASSERT
-    Assert(!tree->nil->red, "nil not black in winCThreadsRbTreeDelete");
-#endif
+    return returnValue;
 }
 
+/// @fn int windowsRadixTreeSetValue2(WindowsRadixTree *tree1,
+///         const volatile void *key1, size_t keySize1,
+///         const volatile void *key2, size_t keySize2,
+///         volatile void *value, tss_dtor_t destructor2)
+///
+/// @brief Set a value in a second-level WindowsRadixTree.
+///
+/// @param tree1 A pointer to the top-level WindowsRadixTree.
+/// @param key1 A pointer to the key of the second-level tree.
+/// @param keySize1 The number of bytes in key1.
+/// @param key1 A pointer to the key of value in the second-level tree.
+/// @param keySize1 The number of bytes in key2.
+/// @param destructor2 The tss_dtor_t for the second-level tree if a second-
+///    level tree doesn't already exist for key1.
+///
+/// @return Returns the number of new elements added on success, -1 on error.
+static inline int windowsRadixTreeSetValue2(WindowsRadixTree *tree1,
+    const volatile void *key1, size_t keySize1,
+    const volatile void *key2, size_t keySize2,
+    volatile void *value, tss_dtor_t destructor2
+) {
+    int returnValue = -1;
+    if ((tree1 == NULL)
+        || ((key1 == NULL) && (keySize1 != 0))
+        || ((key2 == NULL) && (keySize2 != 0))
+    ) {
+        return returnValue; // -1
+    }
+
+    WindowsRadixTree *tree2
+        = (WindowsRadixTree*) windowsRadixTreeGetValue(tree1, key1, keySize1);
+    if ((tree2 == NULL) && (destructor2 != NULL)) {
+        WindowsRadixTree *newTree = windowsRadixTreeCreate(destructor2);
+        windowsRadixTreeSetValue(tree1, key1, keySize1, newTree);
+        tree2 = (WindowsRadixTree*) windowsRadixTreeGetValue(
+            tree1, key1, keySize1);
+        if (tree2 != newTree) {
+            // We were in a race condition and something else overwrote our
+            // tree.  Delete the one we created.
+            newTree = windowsRadixTreeDestroy(newTree);
+            // Get it again just to be sure.
+            tree2 = (WindowsRadixTree*) windowsRadixTreeGetValue(
+                tree1, key1, keySize1);
+        }
+    }
+    
+    if (tree2 == NULL) {
+        // There's no tree and we have nothing to construct the missing tree
+        // with.  We can't work like this.  Fail.
+        return returnValue; // -1
+    }
+
+    returnValue = windowsRadixTreeSetValue(tree2, key2, keySize2, value);
+
+    return returnValue;
+}
+
+/// @fn int windowsRadixTreeNodeDeleteValue(WindowsRadixTreeNode *node,
+///         const volatile RADIX_TREE_KEY_ELEMENT *key, size_t numKeys,
+///         tss_tdor_t destructor)
+///
+/// @brief Delete a previously-set value from a WindowsRadixTreeNode.
+///
+/// @param node A pointer to a previously-allocated WindowsRadixTreeNode or
+///   NULL.
+/// @param key A pointer to key element values.
+/// @param numKeys The number of keys pointed to by the key.
+/// @param destructor The destructor to call on the value, if found.
+///
+/// @return Returns the number of elements found and deleted (0 or 1).
+static inline int windowsRadixTreeNodeDeleteValue(WindowsRadixTreeNode *node,
+    const volatile RADIX_TREE_KEY_ELEMENT *key, size_t numKeys,
+    tss_dtor_t destructor
+) {
+    int returnValue = 0;
+    RADIX_TREE_KEY_ELEMENT currentKeyIndex = 0;
+    WindowsRadixTreeNode** radixTreeNodes = NULL;
+
+    RADIX_TREE_FIND_NODE();
+
+    if (node != NULL) {
+        // destructor is guaranteed to be non-NULL by the thread-specific
+        // storage functions.
+        destructor(InterlockedExchangePointer(
+            (void * volatile*) &node->value, NULL)
+        );
+        returnValue = 1;
+    }
+
+    return returnValue;
+}
+
+/// @fn int windowsRadixTreeDeleteValue(WindowsRadixTree *tree,
+///         const volatile void *key, size_t keySize)
+///
+/// @brief Delete a value from a WindowsRadixTree.
+///
+/// @param tree A pointer to a previously-allocated WindowsRadixTree.
+/// @param key A pointer to the key to look for.
+/// @param keySize The number of bytes in the key.
+///
+/// @return Returns the number of elements found and deleted on success, -1 on
+/// error.
+static inline int windowsRadixTreeDeleteValue(WindowsRadixTree *tree,
+    const volatile void *key, size_t keySize
+) {
+    int returnValue = -1;
+    if ((tree == NULL) || ((key == NULL) && (keySize != 0))) {
+        return returnValue; // -1
+    }
+
+    returnValue = windowsRadixTreeNodeDeleteValue(
+        tree->root,
+        (RADIX_TREE_KEY_ELEMENT*) key,
+        (keySize >> RADIX_TREE_NUM_KEYS_BIT_SHIFT),
+        tree->destructor
+    );
+
+    return returnValue;
+}
+
+/// @fn int windowsRadixTreeDeleteValue2(WindowsRadixTree *tree1,
+///         const volatile void *key1, size_t keySize1,
+///         const volatile void *key2, size_t keySize2)
+///
+/// @brief Delete a value from a second-level WindowsRadixTree.
+///
+/// @param tree1 A pointer to the top-level WindowsRadixTree.
+/// @param key1 A pointer to the key of the second-level tree.
+/// @param keySize1 The number of bytes in key1.
+/// @param key1 A pointer to the key of value in the second-level tree.
+/// @param keySize1 The number of bytes in key2.
+///
+/// @return Returns the number of elements found and deleted on success, -1 on
+/// error.
+static inline int windowsRadixTreeDeleteValue2(WindowsRadixTree *tree1,
+    const volatile void *key1, size_t keySize1,
+    const volatile void *key2, size_t keySize2
+) {
+    int returnValue = -1;
+    if ((tree1 == NULL)
+        || ((key1 == NULL) && (keySize1 != 0))
+        || ((key2 == NULL) && (keySize2 != 0))
+    ) {
+        return returnValue; // -1
+    }
+
+    WindowsRadixTree *tree2
+        = (WindowsRadixTree*) windowsRadixTreeGetValue(tree1, key1, keySize1);
+    if (tree2 != NULL) {
+        returnValue = windowsRadixTreeDeleteValue(tree2, key2, keySize2);
+    }
+
+    return returnValue;
+}
 
 /******************** End Support Data Structure Code *************************/
 
-static int winCThreadsCompareU32(const void* u32PointerA, const void* u32PointerB) {
-    uint32_t u32A = *((uint32_t*)u32PointerA);
-    uint32_t u32B = *((uint32_t*)u32PointerB);
-
-    if (u32A < u32B) {
-        return -1;
-    }
-    else if (u32A > u32B) {
-        return 1;
-    }
-    else { // u32A == u32B
-        return 0;
-    }
-}
-static void winCThreadsNullFunction(void* parameter) {
-    (void)parameter;
+// Support tss_dtor_t function that does nothing.
+static void winCThreadsNullFunction(void *parameter) {
+    (void) parameter;
     return;
 }
 
@@ -1187,72 +937,58 @@ int cnd_wait(cnd_t* cond, mtx_t* mtx) {
 
 
 // Thread-specific storage support.
-typedef struct DataAndDestructor {
-    WinCThreadsRedBlackTree* data;
-    tss_dtor_t destructor;
-} DataAndDestructor;
-static DataAndDestructor *tssStorageByKey = NULL;
-static WinCThreadsRedBlackTree* tssStorageByThread = NULL;
-static uint32_t tssIndex = 1;
-static mtx_t* tssStorageByKeyMutex = NULL;
-static mtx_t* tssStorageByThreadMutex = NULL;
+typedef struct TssId {
+    thrd_t thread;
+    tss_t key;
+} TssId;
+
+static WindowsRadixTree **tssStorageByKey = NULL;
+static WindowsRadixTree * tssStorageByThread = NULL;
+static tss_t tssIndex = 1;
 static once_flag tssMetadataOnceFlag = ONCE_FLAG_INIT;
 static bool tssMetadataInitialized = false;
 
+void tssIdDestroy(TssId *tssId) {
+    if (tssId != NULL) {
+        windowsRadixTreeDeleteValue(
+            tssStorageByKey[tssId->key], &tssId->thread, sizeof(tssId->thread));
+        free(tssId); tssId = NULL;
+    }
+}
+
 void initializeTssMetadata(void) {
-    tssStorageByKey = calloc(1, sizeof(DataAndDestructor));
+    tssStorageByKey = (WindowsRadixTree**) calloc(
+        1, ARRAY_OF_RADIX_TREES_SIZE * sizeof(WindowsRadixTree*));
     if (tssStorageByKey == NULL) {
         // No tree.  Can't proceed.
         LOG_MALLOC_FAILURE();
         exit(1);
     }
-    tssStorageByKeyMutex = calloc(1, sizeof(mtx_t));
-    if (tssStorageByKeyMutex == NULL) {
-        LOG_MALLOC_FAILURE();
-        exit(1);
-    }
-    if (mtx_init(tssStorageByKeyMutex, mtx_plain | mtx_recursive) != thrd_success) {
-        printLog(CRITICAL, "Could not initialize tssStorageByKeyMutex\n");
-        exit(1);
-    }
-    tssStorageByThread = winCThreadsRbTreeCreate(winCThreadsCompareU32, winCThreadsNullFunction, winCThreadsNullFunction);
+
+    tssStorageByThread = windowsRadixTreeCreate(
+        (tss_dtor_t) ((void*) windowsRadixTreeDestroy));
     if (tssStorageByThread == NULL) {
         // No tree.  Can't proceed.
         LOG_MALLOC_FAILURE();
         exit(1);
     }
-    tssStorageByThreadMutex = calloc(1, sizeof(mtx_t));
-    if (tssStorageByThreadMutex == NULL) {
-        LOG_MALLOC_FAILURE();
-        exit(1);
-    }
-    if (mtx_init(tssStorageByThreadMutex, mtx_plain | mtx_recursive) != thrd_success) {
-        printLog(CRITICAL, "Could not initialize tssStorageByThreadMutex\n");
-        exit(1);
-    }
+
     tssMetadataInitialized = true;
 }
 
 int tss_create(tss_t* key, tss_dtor_t dtor) {
     call_once(&tssMetadataOnceFlag, initializeTssMetadata);
 
+    if (tssIndex == 0) {
+        // We've created all the thread-specific storage we can.  Fail.
+        return thrd_error;
+    }
+
     if (dtor == NULL) {
         dtor = winCThreadsNullFunction;
     }
 
-    mtx_lock(tssStorageByKeyMutex);
-    void *check = realloc(tssStorageByKey,
-        sizeof(DataAndDestructor) * (tssIndex + 1));
-    if (check == NULL) {
-        // No memory.  Can't proceed.
-        LOG_MALLOC_FAILURE();
-        exit(1);
-        return thrd_error;
-    }
-    tssStorageByKey = (DataAndDestructor*) check;
-    tssStorageByKey[tssIndex].data = winCThreadsRbTreeCreate(winCThreadsCompareU32, free, winCThreadsNullFunction);
-    tssStorageByKey[tssIndex].destructor = dtor;
-    mtx_unlock(tssStorageByKeyMutex);
+    tssStorageByKey[tssIndex] = windowsRadixTreeCreate(dtor);
 
     *key = tssIndex;
     tssIndex++;
@@ -1267,132 +1003,75 @@ void tss_delete(tss_t key) {
         return;
     }
 
-    mtx_lock(tssStorageByKeyMutex);
-
-    // Remove metadata for all threads for this key.
-    WinCThreadsRedBlackTree *data = tssStorageByKey[key].data;
-    if (data == NULL) {
-        printLog(DEBUG, "No metadata for value.\n");
-        mtx_unlock(tssStorageByKeyMutex);
-        return;
-    }
-    tssStorageByKey[key].data = winCThreadsRbTreeDestroy(data);
-    tssStorageByKey[key].destructor = NULL;
-
-    mtx_unlock(tssStorageByKeyMutex);
+    tssStorageByKey[key]
+        = windowsRadixTreeDestroy(tssStorageByKey[key]);
 
     return;
 }
 
 void* tss_get(tss_t key) {
-    printLog(FLOOD, "ENTER tss_get(key=%u)\n", key);
-
     if (tssMetadataInitialized == false) {
         // Thread-specific storage has not been initialized.  Nothing to do.
         printLog(DEBUG, "Key storage not initialized.\n");
-        printLog(FLOOD, "EXIT tss_get(key=%u) = {NULL}\n", key);
         return NULL;
     }
 
     thrd_t thisThread = thrd_current();
-    mtx_lock(tssStorageByKeyMutex);
+    void *returnValue = windowsRadixTreeGetValue(
+        tssStorageByKey[key], &thisThread, sizeof(thisThread));
 
-    WinCThreadsRedBlackTree *data = tssStorageByKey[key].data;
-    if (data == NULL) {
-        printLog(DEBUG, "No data for value.\n");
-        mtx_unlock(tssStorageByKeyMutex);
-        printLog(FLOOD, "EXIT tss_get(key=%u) = {NULL}\n", key);
-        return NULL;
-    }
-
-    WinCThreadsRedBlackNode* threadData = winCThreadsRbTreeExactQuery(data, &thisThread);
-    if (threadData == data->nil) {
-        mtx_unlock(tssStorageByKeyMutex);
-        printLog(FLOOD, "EXIT tss_get(key=%u) = {NULL}\n", key);
-        return NULL;
-    }
-
-    mtx_unlock(tssStorageByKeyMutex);
-    printLog(FLOOD, "EXIT tss_get(key=%u) = {%p}\n", key, threadData->value);
-    return threadData->value;
+    return returnValue;
 }
 
 int tss_set(tss_t key, void* val) {
-    printLog(FLOOD, "ENTER tss_set(key=%u, val=%p)\n", key, val);
-
+    int returnValue = thrd_error;
     if (tssMetadataInitialized == false) {
         // Thread-specific storage has not been initialized.  Nothing to do.
         printLog(DEBUG, "Key storage not initialized.\n");
-        printLog(FLOOD, "EXIT tss_set(key=%u, val=%p) = {%d}\n",
-            key, val, thrd_error);
-        return thrd_error;
+        return returnValue; // thrd_error
     }
 
-    thrd_t *thisThread = (thrd_t*) malloc(sizeof(thrd_t));
-    if (thisThread == NULL) {
-        LOG_MALLOC_FAILURE();
-        exit(1);
-        printLog(FLOOD, "EXIT tss_set(key=%u, val=%p) = {%d}\n",
-            key, val, thrd_error);
-        return thrd_error;
-    }
-    *thisThread = thrd_current();
+    thrd_t thisThread = thrd_current();
+    do {
+        if (windowsRadixTreeSetValue(
+            tssStorageByKey[key], &thisThread, sizeof(thisThread), val) < 0
+        ) {
+            // returnValue is thrd_error
+            break;
+        }
 
-    // Set the lookup by key.  This is what tss_get will use.
-    mtx_lock(tssStorageByKeyMutex);
+        TssId *tssId = (TssId*) windowsRadixTreeGetValue2(tssStorageByThread,
+            &thisThread, sizeof(thisThread), &key, sizeof(key));
+        if (tssId == NULL) {
+            TssId *newTssId = (TssId*) malloc(sizeof(TssId));
+            if (windowsRadixTreeSetValue2(tssStorageByThread,
+                &thisThread, sizeof(thisThread), &key, sizeof(key),
+                newTssId, (tss_dtor_t) ((void*) tssIdDestroy)) < 0
+            ) {
+                // This should be impossible.  Bail.
+                // returnValue is thrd_error
+                break;
+            }
+            tssId = (TssId*) windowsRadixTreeGetValue2(tssStorageByThread,
+                &thisThread, sizeof(thisThread), &key, sizeof(key));
+            if (tssId == NULL) {
+                // Something is very wrong.  Fail.
+                // returnValue is thrd_error
+                break;
+            }
 
-    WinCThreadsRedBlackTree *data = tssStorageByKey[key].data;
-    if (data == NULL) {
-        printLog(DEBUG, "No metadata for value.\n");
-        mtx_unlock(tssStorageByKeyMutex);
-        printLog(FLOOD, "EXIT tss_set(key=%u, val=%p) = {%d}\n",
-            key, val, thrd_error);
-        return thrd_error;
-    }
+            tssId->thread = thisThread;
+            tssId->key = key;
+        }
+        returnValue = thrd_success;
+    } while (0);
 
-    WinCThreadsRedBlackNode* prevData = winCThreadsRbTreeExactQuery(data, thisThread);
-    if (prevData != data->nil) {
-        // We have old metadata to remove.
-        winCThreadsRbTreeDelete(data, prevData);
-    }
-    winCThreadsRbTreeInsert(data, thisThread, val);
-
-    mtx_unlock(tssStorageByKeyMutex);
-
-    // Set the lookup by thread.  This is what thrd_exit will use.
-    mtx_lock(tssStorageByThreadMutex);
-
-    WinCThreadsRedBlackNode* threadData = winCThreadsRbTreeExactQuery(tssStorageByThread, thisThread);
-    WinCThreadsRedBlackTree* keys = NULL;
-    if (threadData != tssStorageByThread->nil) {
-        keys = (WinCThreadsRedBlackTree*) threadData->value;
-    } else {
-        // No reverse lookup has been set yet.  This is the first time this key
-        // has been set.  Allocate the tree.
-        keys = winCThreadsRbTreeCreate(winCThreadsCompareU32, free, winCThreadsNullFunction);
-        winCThreadsRbTreeInsert(tssStorageByThread, thisThread, keys);
-    }
-
-    WinCThreadsRedBlackNode* keyData = winCThreadsRbTreeExactQuery(keys, &key);
-    if (keyData != keys->nil) {
-        // Remove the old metadata.
-        winCThreadsRbTreeDelete(keys, keyData);
-    }
-    tss_t *keyCopy = (tss_t*) malloc(sizeof(tss_t));
-    *keyCopy = key;
-    winCThreadsRbTreeInsert(keys, keyCopy, val);
-
-    mtx_unlock(tssStorageByThreadMutex);
-
-    printLog(FLOOD, "EXIT tss_set(key=%u, val=%p) = {%d}\n",
-        key, val, thrd_success);
-    return thrd_success;
+    return returnValue;
 }
 
 
 // Thread support.
-static WinCThreadsRedBlackTree* attachedThreads = NULL;
-mtx_t *attachedThreadsMutex = NULL;
+static WindowsRadixTree* attachedThreads = NULL;
 
 typedef struct WindowsCreateWrapperArgs {
   thrd_start_t func;
@@ -1420,6 +1099,12 @@ DWORD __stdcall windows_create_wrapper(LPVOID wrapper_args) {
 int thrd_create(thrd_t* thr, thrd_start_t func, void* arg) {
     printLog(TRACE, "ENTER thrd_create(thr=%p, func=%p, arg=%p)\n",
         thr, func, arg);
+
+    if (thr == NULL) {
+      printLog(TRACE, "EXIT thrd_create(thr=%p, func=%p, arg=%p) = {%d}\n",
+        thr, func, arg, thrd_error);
+      return thrd_error;
+    }
 
     int returnValue = thrd_success;
     WindowsCreateWrapperArgs *wrapper_args
@@ -1449,42 +1134,17 @@ int thrd_create(thrd_t* thr, thrd_start_t func, void* arg) {
 
     if (threadHandle != NULL) {
         if (attachedThreads == NULL) {
-            attachedThreads = winCThreadsRbTreeCreate(winCThreadsCompareU32, free, winCThreadsNullFunction);
+            attachedThreads
+                = windowsRadixTreeCreate(winCThreadsNullFunction);
             if (attachedThreads == NULL) {
                 LOG_MALLOC_FAILURE();
                 exit(1);
                 return thrd_error;
             }
-            attachedThreadsMutex = calloc(1, sizeof(mtx_t));
-            if (attachedThreadsMutex == NULL) {
-                LOG_MALLOC_FAILURE();
-                exit(1);
-                return thrd_error;
-            }
-            if (mtx_init(attachedThreadsMutex, mtx_plain) != thrd_success) {
-                printLog(CRITICAL, "Could not initialize attachedThreadsMutex.\n");
-                printLog(TRACE, "EXIT thrd_create(thr=%p, func=%p, arg=%p) = {%d}\n",
-                    thr, func, arg, thrd_error);
-                exit(1);
-                return thrd_error;
-            }
         }
-        if (thr != NULL) {
-            uint32_t* threadId = (uint32_t*) malloc(sizeof(uint32_t));
-            if (threadId == NULL) {
-                LOG_MALLOC_FAILURE();
-                exit(1);
-                return thrd_error;
-            }
-            *threadId = *thr;
-            mtx_lock(attachedThreadsMutex);
-            winCThreadsRbTreeInsert(attachedThreads, threadId, threadHandle);
-            mtx_unlock(attachedThreadsMutex);
-        }
-        else {
-            // Can't store the thread ID anywhere.  Detach.
-            CloseHandle(threadHandle);
-        }
+
+        windowsRadixTreeSetValue(
+            attachedThreads, thr, sizeof(*thr), threadHandle);
     } else {
         returnValue = thrd_error;
     }
@@ -1501,21 +1161,17 @@ thrd_t thrd_current(void) {
 int thrd_detach(thrd_t thr) {
     int returnValue = thrd_success;
     HANDLE threadHandle = NULL;
-    mtx_lock(attachedThreadsMutex);
 
-    WinCThreadsRedBlackNode* node = winCThreadsRbTreeExactQuery(attachedThreads, &thr);
-    if (node != attachedThreads->nil) {
-        threadHandle = (HANDLE) node->value;
-    }
+    threadHandle = (HANDLE) windowsRadixTreeGetValue(
+        attachedThreads, &thr, sizeof(thr));
     if (threadHandle != NULL) {
         CloseHandle(threadHandle);
-        winCThreadsRbTreeDelete(attachedThreads, node);
+        windowsRadixTreeDeleteValue(attachedThreads, &thr, sizeof(thr));
     }
     else {
         returnValue = thrd_error;
     }
 
-    mtx_unlock(attachedThreadsMutex);
     return returnValue;
 }
 
@@ -1526,53 +1182,11 @@ int thrd_equal(thrd_t thr0, thrd_t thr1) {
 void thrd_exit(int res) {
     printLog(TRACE, "ENTER thrd_exit(res=%d)\n", res);
 
-    thrd_t thisThread = thrd_current();
-
     // Destroy all the thread local storage.
-    if (tssStorageByThread != NULL) {
-        mtx_lock(tssStorageByThreadMutex);
-        WinCThreadsRedBlackNode *threadData = winCThreadsRbTreeExactQuery(tssStorageByThread, &thisThread);
-        if ((threadData != tssStorageByThread->nil) && (threadData->value != NULL)) {
-            WinCThreadsRedBlackTree *data = (WinCThreadsRedBlackTree*) threadData->value;
-            WinCThreadsRedBlackNode *nil = data->nil;
-            // Walk through all the keys this thread has used and delete the
-            // thread's local copy.
-            for (WinCThreadsRedBlackNode *node = data->head; node != nil;) {
-                thrd_t* key = (thrd_t*)node->key;
-                tss_dtor_t destructor = winCThreadsNullFunction;
-                mtx_lock(tssStorageByKeyMutex);
-                DataAndDestructor* dd = &tssStorageByKey[*key];
-                if (dd->destructor != NULL) {
-                    destructor = dd->destructor;
-                }
-                mtx_unlock(tssStorageByKeyMutex);
-                WinCThreadsRedBlackNode* next = node->next;
-                // This will call the destructor for the node's value but not its key.
-                destructor(node->value);
-                winCThreadsRbTreeDelete(data, node);
-                node = next;
-            }
-            winCThreadsRbTreeDelete(tssStorageByThread, threadData);
-        }
-        mtx_unlock(tssStorageByThreadMutex);
-    }
-
-    // Clean up all of the lookups.
-    if (tssStorageByKey != NULL) {
-        mtx_lock(tssStorageByKeyMutex);
-        // Walk through all the keys and delete the metadata for this thread.
-        for (uint32_t ii = 1; ii < tssIndex; ii++) {
-            DataAndDestructor *dd = &tssStorageByKey[ii];
-            if ((dd != NULL) && (dd->data != NULL)) {
-                WinCThreadsRedBlackTree *data = dd->data;
-                WinCThreadsRedBlackNode* threadData = winCThreadsRbTreeExactQuery(data, &thisThread);
-                if (threadData != data->nil) {
-                    // This will call the destructor for the node's key but not its value.
-                    winCThreadsRbTreeDelete(data, threadData);
-                }
-            }
-        }
-        mtx_unlock(tssStorageByKeyMutex);
+    if (tssMetadataInitialized == true) {
+        thrd_t thisThread = thrd_current();
+        windowsRadixTreeDeleteValue(
+            tssStorageByThread, &thisThread, sizeof(thisThread));
     }
 
     printLog(TRACE, "EXIT thrd_exit(res=%d) = {}\n", res);
@@ -1581,35 +1195,29 @@ void thrd_exit(int res) {
 
 int thrd_join(thrd_t thr, int* res) {
     int returnValue = thrd_success;
-    HANDLE threadHandle = NULL;
-    mtx_lock(attachedThreadsMutex);
-
-    WinCThreadsRedBlackNode* node = winCThreadsRbTreeExactQuery(attachedThreads, &thr);
-    if (node != attachedThreads->nil) {
-        threadHandle = (HANDLE)node->value;
-    }
-    mtx_unlock(attachedThreadsMutex);
+    HANDLE threadHandle = (HANDLE) windowsRadixTreeGetValue(
+        attachedThreads, &thr, sizeof(thr));
 
     if (threadHandle != NULL) {
         DWORD waitResult = WaitForSingleObject(
             threadHandle,  // handle to thread
             INFINITE);     // no time-out interval
-        if (waitResult != WAIT_OBJECT_0) {
-            returnValue = thrd_error;
-        }
-        else {
+        if (waitResult == WAIT_OBJECT_0) {
             if (res != NULL) {
                 DWORD dwres = 0;
                 if (GetExitCodeThread(threadHandle, &dwres) == TRUE) {
-                    *res = (int) dwres;
-                } else {
+                    *res = (int)dwres;
+                }
+                else {
                     returnValue = thrd_error;
                 }
             }
         }
-        mtx_lock(attachedThreadsMutex);
-        winCThreadsRbTreeDelete(attachedThreads, node);
-        mtx_unlock(attachedThreadsMutex);
+        else {
+            returnValue = thrd_error;
+        }
+
+        windowsRadixTreeDeleteValue(attachedThreads, &thr, sizeof(thr));
         CloseHandle(threadHandle);
     }
     else {
@@ -1642,14 +1250,8 @@ void thrd_yield(void) {
 
 int thrd_terminate(thrd_t thr) {
     int returnValue = thrd_success;
-    HANDLE threadHandle = NULL;
-    mtx_lock(attachedThreadsMutex);
-
-    WinCThreadsRedBlackNode* node = winCThreadsRbTreeExactQuery(attachedThreads, &thr);
-    if (node != attachedThreads->nil) {
-        threadHandle = (HANDLE)node->value;
-    }
-    mtx_unlock(attachedThreadsMutex);
+    HANDLE threadHandle = (HANDLE) windowsRadixTreeGetValue(
+      attachedThreads, &thr, sizeof(thr));
 
     if (threadHandle != NULL) {
         BOOL success = TerminateThread(threadHandle, thrd_terminated);
