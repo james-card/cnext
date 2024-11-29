@@ -33,6 +33,8 @@ OBJ_FILES := \
     $(OBJ_DIR)/WinProcesses.o \
     $(OBJ_DIR)/ZipLib.o \
     $(OBJ_DIR)/miniz.o \
+    $(OBJ_DIR)/RadixTree.o \
+    $(OBJ_DIR)/CThreadsMessages.o \
 
 INCLUDES := \
     -Iinclude \
