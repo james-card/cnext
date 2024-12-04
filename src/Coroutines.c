@@ -186,6 +186,27 @@ static Coroutine* _globalIdle = NULL;
 /// @brief The size of each coroutine's stack in bytes.
 static int _globalStackSize = COROUTINE_DEFAULT_STACK_SIZE;
 
+/// @fn int64_t coroutinesGetNanoseconds(const struct timespec *ts)
+///
+/// @brief Convert the time in a timespec to a raw number of nanoseconds.
+///
+/// @param ts A pointer to the struct timespec to convert.  If this value is
+///   NULL, the current time will be used.
+///
+/// @return Returns the number of nanoseconds since midnight, Jan 1, 1970
+/// represented by the timespec.
+int64_t coroutinesGetNanoseconds(const struct timespec *ts) {
+  struct timespec timespecStorage = { 0, 0 };
+
+  if (ts == NULL) {
+    timespec_get(&timespecStorage, TIME_UTC);
+    ts = &timespecStorage;
+  }
+
+  return (((int64_t) ts->tv_sec) * ((int64_t) 1000000000))
+         + ((int64_t) ts->tv_nsec);
+}
+
 /// @fn void coroutineGlobalPush(Coroutine **list, Coroutine *coroutine)
 ///
 /// @brief Add a coroutine to a global list and get the previous head of the
@@ -1089,6 +1110,10 @@ int coroutineConfig(Coroutine *first, int stackSize) {
 #endif // THREAD_SAFE_COROUTINES
   if (first != NULL) {
     memset(first, 0, sizeof(Coroutine));
+    // This function is called from what will become the main coroutine (pointed
+    // to by the first pointer), so by definition, it's running.  Mark it as
+    // such.
+    first->state = COROUTINE_STATE_RUNNING;
     _globalFirst = first;
     _globalRunning = first;
   } else if (_globalFirst == NULL) {
@@ -1230,6 +1255,8 @@ int comutexTimedLock(Comutex *mtx, const struct timespec *ts) {
     // Cannot honor the request.
     return coroutineError;
   }
+  int64_t now = coroutinesGetNanoseconds(NULL);
+  int64_t delayTime = now + coroutinesGetNanoseconds(ts);
 
   // Clear the lastYieldValue before we do anything else.
   mtx->lastYieldValue = NULL;
@@ -1241,22 +1268,12 @@ int comutexTimedLock(Comutex *mtx, const struct timespec *ts) {
 
   int returnValue = comutexTryLock(mtx);
   while (returnValue != coroutineSuccess) {
-    struct timespec now;
-    if (timespec_get(&now, TIME_UTC) == 0) {
-      uint64_t nowns = (now.tv_sec * 1000000000) + now.tv_nsec;
-      uint64_t tsns = (ts->tv_sec * 1000000000) + ts->tv_nsec;
-      if (nowns > tsns) {
-        returnValue = coroutineTimedout;
-        break;
-      }
-      mtx->lastYieldValue = coroutineYield(COROUTINE_BLOCKED);
-      returnValue = comutexTryLock(mtx);
-    } else {
-      // timespec_get returned an error.  We have no valid time to wait.  We've
-      // already tried to lock once and that's the best we can do.
-      returnValue = coroutineError;
+    if (coroutinesGetNanoseconds(NULL) > delayTime) {
+      returnValue = coroutineTimedout;
       break;
     }
+    mtx->lastYieldValue = coroutineYield(COROUTINE_BLOCKED);
+    returnValue = comutexTryLock(mtx);
   }
 
   return returnValue;
@@ -1431,6 +1448,8 @@ int coconditionTimedWait(Cocondition *cond, Comutex *mtx,
     // Cannot honor the request.
     return coroutineError;
   }
+  int64_t now = coroutinesGetNanoseconds(NULL);
+  int64_t delayTime = now + coroutinesGetNanoseconds(ts);
 
   // Clear the lastYieldValue before we do anything else.
   cond->lastYieldValue = NULL;
@@ -1468,18 +1487,10 @@ int coconditionTimedWait(Cocondition *cond, Comutex *mtx,
   while ((cond->numSignals == 0) || (cond->head != running)) {
     cond->lastYieldValue = coroutineYield(COROUTINE_BLOCKED);
 
-    struct timespec now;
-    if (timespec_get(&now, TIME_UTC) == 0) {
-      uint64_t nowns = (now.tv_sec * 1000000000) + now.tv_nsec;
-      uint64_t tsns = (ts->tv_sec * 1000000000) + ts->tv_nsec;
-      if (nowns > tsns) {
-        returnValue = coroutineTimedout;
-        break;
-      }
-    } else if (cond->numSignals == 0) {
-      // timespec_get returned an error.  We have no valid time to wait.  We've
-      // already tried to wait once and that's the best we can do.
-      returnValue = coroutineError;
+    if (((cond->numSignals == 0) || (cond->head != running))
+      && (coroutinesGetNanoseconds(NULL) > delayTime)
+    ) {
+      returnValue = coroutineTimedout;
       break;
     }
   }
@@ -1943,7 +1954,6 @@ int comessageStartUse(Comessage *comessage) {
           // comessage->configured remains false
         }
       }
-      // Don't touch comessage->dynamically_allocated;
     } // Else this message is already setup
   } else {
     returnValue = coroutineError;
@@ -2041,7 +2051,7 @@ int comessageInit(
   comessage->waiting = waiting;
   comessage->done = false;
   // No need to set comessage->inUse since we called comessageStartUse above.
-  comessage->from = getRunningCoroutine();
+  // Don't touch comessage->from in case this message is being reused.
   returnValue = coroutineSuccess;
 
   return returnValue;
@@ -2127,19 +2137,22 @@ int comessageSetDone(Comessage *comessage) {
     if (comessage->waiting == true) {
       // Something is waiting.  Signal the waiters.  It will be up to them to
       // destroy this message again later.
-      coconditionBroadcast(&comessage->condition);
+      if (coconditionBroadcast(&comessage->condition) == coroutineSuccess) {
+        returnValue = coroutineSuccess;
+      } // else, returnValue remains coroutineError.
+    } else {
+      returnValue = coroutineSuccess;
     }
     comutexUnlock(&comessage->lock);
   } else {
     // Nothing we can do but set the done flag.
     comessage->done = true;
+    returnValue = coroutineSuccess;
   }
   // Don't touch comessage->from.
   // Don't touch comessage->condition.
   // Don't touch comessage->lock.
   // Don't touch comessage->configured.
-  // Don't touch comessage->dynamically_allocated.
-  returnValue = coroutineSuccess;
 
   return returnValue;
 }
@@ -2244,22 +2257,25 @@ Comessage* comessageWaitForReplyWithType_(
   if (sent == NULL) {
     // Invalid.
     return reply; // NULL
-  } else if (comessageWaitForDone(sent, ts) != coroutineSuccess) {
+  }
+
+  // We need to grab the original recipient of the message that was sent before
+  // we wait for done in case the recipient reuses this message as the reply.
+  // message.
+  Coroutine *recipient = sent->to;
+
+  if (comessageWaitForDone(sent, ts) != coroutineSuccess) {
     // Invalid state of the message.  Fail.
     return reply; // NULL
   }
 
-  // Recipient has processed the message.  We now need to wait for their reply.
-  // Any message is valid as long as its from the recipient of the original
-  // message.
-  Coroutine *recipient = sent->to;
   if (releaseAfterDone == true) {
     // We're done with the message that was originally sent and the caller has
     // indicated that it is to be released now.
     comessageRelease(sent);
   }
 
-  // Enter our main wait loop.
+  // Recipient has processed the message.  We now need to wait for their reply.
   int lockStatus = coroutineSuccess;
   if (ts == NULL) {
     lockStatus = comutexLock(&coroutine->messageLock);
@@ -2282,6 +2298,8 @@ Comessage* comessageWaitForReplyWithType_(
     // of the loop below.
     searchType = *type;
   }
+
+  // Enter our main wait loop.
   int waitStatus = coroutineSuccess;
   while (reply == NULL) {
     while ((cur != NULL)
