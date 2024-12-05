@@ -252,6 +252,10 @@ C11 finally introduced standard support for most threading operations, however t
 
 CThreads.h includes the correct header based on the compiler, either PosixCTheads.h or WinCThreads.h.  The corresponding C libraries have the standard C functions for threading.  The libraries ensure functionality that conforms to the C specification.  I have also added thrd_terminate to the supported functions in these libraries.  Even though it is not a best practice to terminate a thread, there are situations where it is necessary and the language should not constrain programmers from necessary operations.  Without a cross-platform way to do this, developers would still have to rely on OS-specific mechanisms for the times that this is necesary.
 
+### CThreadsMessages
+
+In working with threads, I realized that there was nothing for message passing defined in C.  I consider that to be a gap in the C specification.  So, I wrote an extension to the threads support for message passing.  This allows generic messages to be passed from one thread to another.  The implementation is a radix tree of message queues where keys in the radix tree are thrd_t thread IDs.  The radix tree implementation is lock free, so it's relatively performant.  A message queue for a thread is created by the thread wrapper in one of the C threads implementations and destroyed by the thrd_exit function.
+
 ### Coroutines
 
 It's not clear to me why support for coroutines was never added to the C specification considering their use in cooperative multitasking operating systems.  To fill this void, I have created a pure C coroutines library that works by subdividing the main stack.  This approach removes the need for dynamic memory of any kind and is well-suited to embedded environments, which is the primary audience of C.
