@@ -3,7 +3,7 @@
 /// @author            James Card
 /// @date              11.22.2024
 ///
-/// @file              RadixTree.h
+/// @file              Trie.h
 ///
 /// @brief             This library contains the function and structure
 ///                    definitions that make up the radix tree data structure.
@@ -51,48 +51,49 @@ extern "C"
 #define RADIX_TREE_KEY_ELEMENT_BIT_WIDTH (sizeof(RADIX_TREE_KEY_ELEMENT) * 8)
 #define RADIX_TREE_NUM_KEYS_BIT_SHIFT 0
 #define RADIX_TREE_ARRAY_SIZE (1 << RADIX_TREE_KEY_ELEMENT_BIT_WIDTH)
+#define RADIX_TREE_STRING_KEY ((size_t) -1)
 
-/// @struct RadixTreeNode
+/// @struct TrieNode
 ///
 /// @brief Individual node within the radix tree.
 ///
 /// @var value A pointer to the value that exactly matches the key.
-/// @var radixTreeNodes The array of RadixTreeNodes subordinate to this
+/// @var trieNodes The array of TrieNodes subordinate to this
 ///   node.
-/// @var radixTreeNodesBitmap The bitmap of allocated nodes within
-///   radixTreeNodes.
-typedef struct RadixTreeNode {
+/// @var trieNodesBitmap The bitmap of allocated nodes within
+///   trieNodes.
+typedef struct TrieNode {
   volatile void *value;
-  struct RadixTreeNode *radixTreeNodes[RADIX_TREE_ARRAY_SIZE];
-} RadixTreeNode;
+  struct TrieNode *trieNodes[RADIX_TREE_ARRAY_SIZE];
+} TrieNode;
 
-/// @struct RadixTree
+/// @struct Trie
 ///
 /// @brief Container for the radix tree.
 ///
-/// @var root A pointer to the top RadixTreeNode tree;
+/// @var root A pointer to the top TrieNode tree;
 /// @var destructor A tss_dtor_t function used to free the values of the tree.
-typedef struct RadixTree {
-  RadixTreeNode *root;
+typedef struct Trie {
+  TrieNode *root;
   tss_dtor_t destructor;
-} RadixTree;
+} Trie;
 
-RadixTree* radixTreeCreate(tss_dtor_t destructor);
-RadixTree* radixTreeDestroy(RadixTree *tree);
-void* radixTreeGetValue(RadixTree *tree,
+Trie* trieCreate(tss_dtor_t destructor);
+Trie* trieDestroy(Trie *tree);
+void* trieGetValue(Trie *tree,
   const volatile void *key, size_t keySize);
-void* radixTreeGetValue2(RadixTree *tree1,
+void* trieGetValue2(Trie *tree1,
   const volatile void *key1, size_t keySize1,
   const volatile void *key2, size_t keySize2);
-void* radixTreeSetValue(RadixTree *tree,
+void* trieSetValue(Trie *tree,
   const volatile void *key, size_t keySize, volatile void *value);
-void* radixTreeSetValue2(RadixTree *tree1,
+void* trieSetValue2(Trie *tree1,
   const volatile void *key1, size_t keySize1,
   const volatile void *key2, size_t keySize2,
   volatile void *value, tss_dtor_t destructor2);
-int radixTreeDeleteValue(RadixTree *tree,
+int trieDeleteValue(Trie *tree,
   const volatile void *key, size_t keySize);
-int radixTreeDeleteValue2(RadixTree *tree1,
+int trieDeleteValue2(Trie *tree1,
   const volatile void *key1, size_t keySize1,
   const volatile void *key2, size_t keySize2);
 

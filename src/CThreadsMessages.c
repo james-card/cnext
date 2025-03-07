@@ -29,7 +29,7 @@
 /// @file
 
 #include "CThreadsMessages.h"
-#include "RadixTree.h"
+#include "Trie.h"
 
 #if LOGGING_ENABLED && CTHREADS_LOGGING_ENABLED
 #include "LoggingLib.h"
@@ -84,7 +84,7 @@ once_flag thrd_msg_q_storage_initialized = ONCE_FLAG_INIT;
 /// are thrd_msg_q_t values.  There is one thrd_msg_q_t in the tree for ever thread that
 /// is currently running.  Queues are created when a thread starts and destroyed
 /// when it exits.
-static RadixTree *message_queues = NULL;
+static Trie *message_queues = NULL;
 
 // Message queue functions
 
@@ -97,7 +97,7 @@ static RadixTree *message_queues = NULL;
 /// system.
 static inline thrd_msg_q_t* get_thread_thrd_msg_q(void) {
   thrd_t thr = thrd_current();
-  return (thrd_msg_q_t*) radixTreeGetValue(message_queues, &thr, sizeof(thr));
+  return (thrd_msg_q_t*) trieGetValue(message_queues, &thr, sizeof(thr));
 }
 
 /// @fn void thrd_msg_q_storage_init(void)
@@ -107,7 +107,7 @@ static inline thrd_msg_q_t* get_thread_thrd_msg_q(void) {
 ///
 /// @return This function returns no value.
 void thrd_msg_q_storage_init(void) {
-  message_queues = radixTreeCreate(NULL);
+  message_queues = trieCreate(NULL);
   if (message_queues == NULL) {
     // No tree.  Can't proceed.
     LOG_MALLOC_FAILURE();
@@ -155,7 +155,7 @@ int thrd_msg_q_create(void) {
   }
   
   old_queue =
-    (thrd_msg_q_t*) radixTreeSetValue(message_queues, &thr, sizeof(thr), new_queue);
+    (thrd_msg_q_t*) trieSetValue(message_queues, &thr, sizeof(thr), new_queue);
   if (old_queue != NULL) {
     // This shouldn't be possible, but we have to destroy the old queue.
     thrd_msg_q_destroy(old_queue);
@@ -186,15 +186,15 @@ int thrd_msg_q_destroy(thrd_msg_q_t *queue) {
   int return_value = thrd_success;
   thrd_t thr = thrd_current();
   
-  // radixTreeSetValue will do an atomic swap to keep any other thread from
+  // trieSetValue will do an atomic swap to keep any other thread from
   // trying to push messages onto the queue while we're in the middle of
   // deleting it.
   if (queue == NULL) {
     queue =
-      (thrd_msg_q_t*) radixTreeSetValue(message_queues, &thr, sizeof(thr), NULL);
+      (thrd_msg_q_t*) trieSetValue(message_queues, &thr, sizeof(thr), NULL);
     
     // Delete the node storage for the queue in the radix tree.
-    radixTreeDeleteValue(message_queues, &thr, sizeof(thr));
+    trieDeleteValue(message_queues, &thr, sizeof(thr));
     
     if (queue == NULL) {
       // This shouldn't be possible, but there's no queue for this thread.
@@ -452,7 +452,7 @@ int thrd_msg_q_push(thrd_t thr, thrd_msg_t *msg) {
   }
   
   thrd_msg_q_t *queue
-    = (thrd_msg_q_t*) radixTreeGetValue(message_queues, &thr, sizeof(thr));
+    = (thrd_msg_q_t*) trieGetValue(message_queues, &thr, sizeof(thr));
   if (queue == NULL) {
     // Destination thread has exited.  Fail.
     return return_value; // thrd_error

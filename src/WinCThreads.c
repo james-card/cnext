@@ -30,7 +30,7 @@
 
 #ifdef _WIN32
 #include "WinCThreads.h"
-#include "RadixTree.h"
+#include "Trie.h"
 #include <stdio.h>
 
 #ifdef __cplusplus
@@ -196,7 +196,7 @@ extern FILE *logFile;
     } while (0)
 
 
-// A note about why the radix tree support data structure is here:
+// A note about why the trie support data structure is here:
 //
 // When the C standard incorporated threading in C11, they based their model
 // on pthreads.  The 'p' in "pthreads" stands for "POSIX", which means that the
@@ -222,9 +222,9 @@ extern FILE *logFile;
 // to achieve that.
 //
 // In this library, thread-specific storage is implemented as two lookups: One
-// that is an array by key and then a radix tree by thread ID (this is where the
-// actual storage is) and one that is a radix tree by thread ID and then a radix
-// tree key (which holds a reference to the values in the first trees).
+// that is an array by key and then a trie by thread ID (this is where the
+// actual storage is) and one that is a trie by thread ID and then a trie key
+// (which holds a reference to the values in the first trees).
 //
 // The reason for the second lookup is that all of a thread's storage has to be
 // deleted when the thread exits.  So, when a thread exits, its second level
@@ -480,30 +480,35 @@ typedef struct TssId {
     tss_t key;
 } TssId;
 
-static RadixTree **tssStorageByKey = NULL;
-static RadixTree * tssStorageByThread = NULL;
+static Trie **tssStorageByKey = NULL;
+static Trie * tssStorageByThread = NULL;
 static tss_t tssIndex = 1;
 static once_flag tssMetadataOnceFlag = ONCE_FLAG_INIT;
 static bool tssMetadataInitialized = false;
 
 void tssIdDestroy(TssId *tssId) {
     if (tssId != NULL) {
-        radixTreeDeleteValue(
+        trieDeleteValue(
             tssStorageByKey[tssId->key], &tssId->thread, sizeof(tssId->thread));
         free(tssId); tssId = NULL;
     }
 }
 
+void tssTrieDestroy(Trie *trie) {
+    trieDestroy(trie);
+}
+
 void initializeTssMetadata(void) {
-    tssStorageByKey = (RadixTree**) calloc(
-        1, ARRAY_OF_RADIX_TREES_SIZE * sizeof(RadixTree*));
+    tssStorageByKey = (Trie**) calloc(
+        1, ARRAY_OF_RADIX_TREES_SIZE * sizeof(Trie*));
     if (tssStorageByKey == NULL) {
         // No tree.  Can't proceed.
         LOG_MALLOC_FAILURE();
         exit(1);
     }
 
-    tssStorageByThread = radixTreeCreate((tss_dtor_t) radixTreeDestroy);
+    tssStorageByThread
+      = trieCreate((tss_dtor_t) tssTrieDestroy);
     if (tssStorageByThread == NULL) {
         // No tree.  Can't proceed.
         LOG_MALLOC_FAILURE();
@@ -525,7 +530,7 @@ int tss_create(tss_t* key, tss_dtor_t dtor) {
         dtor = winCThreadsNullFunction;
     }
 
-    tssStorageByKey[tssIndex] = radixTreeCreate(dtor);
+    tssStorageByKey[tssIndex] = trieCreate(dtor);
 
     *key = tssIndex;
     tssIndex++;
@@ -541,7 +546,7 @@ void tss_delete(tss_t key) {
     }
 
     tssStorageByKey[key]
-        = radixTreeDestroy(tssStorageByKey[key]);
+        = trieDestroy(tssStorageByKey[key]);
 
     return;
 }
@@ -554,7 +559,7 @@ void* tss_get(tss_t key) {
     }
 
     thrd_t thisThread = thrd_current();
-    void *returnValue = radixTreeGetValue(
+    void *returnValue = trieGetValue(
         tssStorageByKey[key], &thisThread, sizeof(thisThread));
 
     return returnValue;
@@ -570,26 +575,17 @@ int tss_set(tss_t key, void* val) {
 
     thrd_t thisThread = thrd_current();
     do {
-        if (radixTreeSetValue(
-            tssStorageByKey[key], &thisThread, sizeof(thisThread), val) < 0
-        ) {
-            // returnValue is thrd_error
-            break;
-        }
+        trieSetValue(
+            tssStorageByKey[key], &thisThread, sizeof(thisThread), val);
 
-        TssId *tssId = (TssId*) radixTreeGetValue2(tssStorageByThread,
+        TssId *tssId = (TssId*) trieGetValue2(tssStorageByThread,
             &thisThread, sizeof(thisThread), &key, sizeof(key));
         if (tssId == NULL) {
             TssId *newTssId = (TssId*) malloc(sizeof(TssId));
-            if (radixTreeSetValue2(tssStorageByThread,
+            trieSetValue2(tssStorageByThread,
                 &thisThread, sizeof(thisThread), &key, sizeof(key),
-                newTssId, (tss_dtor_t) tssIdDestroy) < 0
-            ) {
-                // This should be impossible.  Bail.
-                // returnValue is thrd_error
-                break;
-            }
-            tssId = (TssId*) radixTreeGetValue2(tssStorageByThread,
+                newTssId, (tss_dtor_t) tssIdDestroy);
+            tssId = (TssId*) trieGetValue2(tssStorageByThread,
                 &thisThread, sizeof(thisThread), &key, sizeof(key));
             if (tssId == NULL) {
                 // Something is very wrong.  Fail.
@@ -608,7 +604,7 @@ int tss_set(tss_t key, void* val) {
 
 
 // Thread support.
-static RadixTree* attachedThreads = NULL;
+static Trie* attachedThreads = NULL;
 
 typedef struct WindowsCreateWrapperArgs {
   thrd_start_t func;
@@ -678,7 +674,7 @@ int thrd_create(thrd_t* thr, thrd_start_t func, void* arg) {
     if (threadHandle != NULL) {
         if (attachedThreads == NULL) {
             attachedThreads
-                = radixTreeCreate(winCThreadsNullFunction);
+                = trieCreate(winCThreadsNullFunction);
             if (attachedThreads == NULL) {
                 LOG_MALLOC_FAILURE();
                 exit(1);
@@ -686,7 +682,7 @@ int thrd_create(thrd_t* thr, thrd_start_t func, void* arg) {
             }
         }
 
-        radixTreeSetValue(
+        trieSetValue(
             attachedThreads, thr, sizeof(*thr), threadHandle);
     } else {
         returnValue = thrd_error;
@@ -705,11 +701,11 @@ int thrd_detach(thrd_t thr) {
     int returnValue = thrd_success;
     HANDLE threadHandle = NULL;
 
-    threadHandle = (HANDLE) radixTreeGetValue(
+    threadHandle = (HANDLE) trieGetValue(
         attachedThreads, &thr, sizeof(thr));
     if (threadHandle != NULL) {
         CloseHandle(threadHandle);
-        radixTreeDeleteValue(attachedThreads, &thr, sizeof(thr));
+        trieDeleteValue(attachedThreads, &thr, sizeof(thr));
     }
     else {
         returnValue = thrd_error;
@@ -728,7 +724,7 @@ void thrd_exit(int res) {
 
     // Destroy all the thread local storage.
     if (tssMetadataInitialized == true) {
-        radixTreeDeleteValue(
+        trieDeleteValue(
             tssStorageByThread, &thisThread, sizeof(thisThread));
     }
 
@@ -744,7 +740,7 @@ void thrd_exit(int res) {
 
 int thrd_join(thrd_t thr, int* res) {
     int returnValue = thrd_success;
-    HANDLE threadHandle = (HANDLE) radixTreeGetValue(
+    HANDLE threadHandle = (HANDLE) trieGetValue(
         attachedThreads, &thr, sizeof(thr));
 
     if (threadHandle != NULL) {
@@ -766,7 +762,7 @@ int thrd_join(thrd_t thr, int* res) {
             returnValue = thrd_error;
         }
 
-        radixTreeDeleteValue(attachedThreads, &thr, sizeof(thr));
+        trieDeleteValue(attachedThreads, &thr, sizeof(thr));
         CloseHandle(threadHandle);
     }
     else {
@@ -799,7 +795,7 @@ void thrd_yield(void) {
 
 int thrd_terminate(thrd_t thr) {
     int returnValue = thrd_success;
-    HANDLE threadHandle = (HANDLE) radixTreeGetValue(
+    HANDLE threadHandle = (HANDLE) trieGetValue(
       attachedThreads, &thr, sizeof(thr));
 
     if (threadHandle != NULL) {

@@ -2158,7 +2158,7 @@ void printStackTrace(LogLevel logLevel) {
   }
   
   // Bypass all real memory allocation calls for the duration of this function.
-  call_once(&_initLoggingMemoryFunctionsRun, initLoggingMemoryFunctions);
+  call_once(&_initLoggingMemoryRun, initLoggingMemory);
   mtx_lock(&_staticBufferLock);
   _bypassRealMemorySystemCalls++;
   
