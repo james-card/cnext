@@ -125,7 +125,7 @@ static inline TrieNode* trieDestroyNode(
 
     TrieNode **trieNodes = node->trieNodes;
     // Recursively destroy any sub-nodes.
-    for (uint32_t ii = 0; ii < RADIX_TREE_ARRAY_SIZE; ii++) {
+    for (uint32_t ii = 0; ii < TRIE_ARRAY_SIZE; ii++) {
       if (trieNodes[ii] != NULL) {
         trieDestroyNode(
           (TrieNode*) exchangePointer(
@@ -158,7 +158,7 @@ Trie* trieDestroy(Trie *tree) {
 }
 
 /// @fn void* trieNodeGetValue(TrieNode *node,
-///               const volatile RADIX_TREE_KEY_ELEMENT *key, size_t numKeys)
+///               const volatile TRIE_KEY_ELEMENT *key, size_t numKeys)
 ///
 /// @brief Get a previously-set value from a TrieNode.
 ///
@@ -169,13 +169,13 @@ Trie* trieDestroy(Trie *tree) {
 ///
 /// @return Returns the value in the tree if it exists, NULL if not.
 static inline void* trieNodeGetValue(TrieNode *node,
-  const volatile RADIX_TREE_KEY_ELEMENT *key, size_t numKeys
+  const volatile TRIE_KEY_ELEMENT *key, size_t numKeys
 ) {
   const volatile void *returnValue = NULL;
   TrieNode **trieNodes = NULL;
-  RADIX_TREE_KEY_ELEMENT currentKeyIndex = 0;
+  TRIE_KEY_ELEMENT currentKeyIndex = 0;
 
-  if (numKeys != RADIX_TREE_STRING_KEY) {
+  if (numKeys != TRIE_STRING_KEY) {
     // Key is fixed-length (an integer value).  This is the usual case.
     //
     // There are two ways we can go about this search:  We can start from the
@@ -239,8 +239,8 @@ void* trieGetValue(Trie *tree,
 
   returnValue = trieNodeGetValue(
     tree->root,
-     (RADIX_TREE_KEY_ELEMENT*) key,
-     (keySize >> RADIX_TREE_NUM_KEYS_BIT_SHIFT)
+     (TRIE_KEY_ELEMENT*) key,
+     (keySize >> TRIE_NUM_KEYS_BIT_SHIFT)
   );
 
   return returnValue;
@@ -281,7 +281,7 @@ void* trieGetValue2(Trie *tree1,
 }
 
 /// @fn void* trieNodeSetValue(TrieNode *node,
-///             const volatile RADIX_TREE_KEY_ELEMENT *key, size_t numKeys,
+///             const volatile TRIE_KEY_ELEMENT *key, size_t numKeys,
 ///             volatile void *value)
 ///
 /// @brief Set a value in the radix tree.  Allocate any intermediate nodes if
@@ -295,15 +295,15 @@ void* trieGetValue2(Trie *tree1,
 /// @return Returns the previous value of the node if there was one, NULL
 /// otherwise.
 static inline void* trieNodeSetValue(TrieNode *node,
-  const volatile RADIX_TREE_KEY_ELEMENT *key, size_t numKeys,
+  const volatile TRIE_KEY_ELEMENT *key, size_t numKeys,
   volatile void *value
 ) {
   void* returnValue = NULL;
-  RADIX_TREE_KEY_ELEMENT currentKeyIndex = 0;
+  TRIE_KEY_ELEMENT currentKeyIndex = 0;
   TrieNode **trieNodes = NULL;
 
   if (node != NULL) {
-    if (numKeys != RADIX_TREE_STRING_KEY) {
+    if (numKeys != TRIE_STRING_KEY) {
       // Key is fixed-length (an integer value).  This is the usual case.
       while ((numKeys > 0) && (node != NULL)) {
         currentKeyIndex = key[numKeys - 1];
@@ -376,8 +376,8 @@ void* trieSetValue(Trie *tree,
 
   returnValue = trieNodeSetValue(
     tree->root,
-    (RADIX_TREE_KEY_ELEMENT*) key,
-    (keySize >> RADIX_TREE_NUM_KEYS_BIT_SHIFT),
+    (TRIE_KEY_ELEMENT*) key,
+    (keySize >> TRIE_NUM_KEYS_BIT_SHIFT),
     value
   );
 
@@ -442,7 +442,7 @@ void* trieSetValue2(Trie *tree1,
 }
 
 /// @fn int trieNodeDeleteValue(TrieNode *node,
-///             const volatile RADIX_TREE_KEY_ELEMENT *key, size_t numKeys,
+///             const volatile TRIE_KEY_ELEMENT *key, size_t numKeys,
 ///             tss_tdor_t destructor)
 ///
 /// @brief Delete a previously-set value from a TrieNode.
@@ -458,24 +458,24 @@ void* trieSetValue2(Trie *tree1,
 /// found and deleted and the node's array is now empty, -1 on error.
 static inline int trieNodeDeleteValue(
   TrieNode *node,
-  const volatile RADIX_TREE_KEY_ELEMENT *key, size_t numKeys,
+  const volatile TRIE_KEY_ELEMENT *key, size_t numKeys,
   tss_dtor_t destructor
 ) {
   int returnValue = 0;
-  RADIX_TREE_KEY_ELEMENT currentKeyIndex = 0;
+  TRIE_KEY_ELEMENT currentKeyIndex = 0;
   TrieNode **trieNodes = NULL;
 
   if (node != NULL) {
     bool valueDeleted = false;
     trieNodes = node->trieNodes;
-    if (numKeys == RADIX_TREE_STRING_KEY) {
+    if (numKeys == TRIE_STRING_KEY) {
       // Key is a NULL-terminated array of keys.
       currentKeyIndex = key[0];
       if (currentKeyIndex != '\0') {
         // Start the key we send down to the next level with the next index.
         int secondLevelReturnValue = trieNodeDeleteValue(
           trieNodes[currentKeyIndex],
-          &key[1], RADIX_TREE_STRING_KEY, destructor);
+          &key[1], TRIE_STRING_KEY, destructor);
         if (secondLevelReturnValue > 1) {
           // There's nothing left in this node.  Delete it.
           free(exchangePointer(
@@ -525,12 +525,12 @@ static inline int trieNodeDeleteValue(
     if ((valueDeleted == true) && (node->value == NULL)) {
       // See if there's anything left in the array.
       unsigned int ii = 0;
-      for (; ii < RADIX_TREE_ARRAY_SIZE; ii++) {
+      for (; ii < TRIE_ARRAY_SIZE; ii++) {
         if (trieNodes[ii] != NULL) {
           break;
         }
       }
-      if (ii == RADIX_TREE_ARRAY_SIZE) {
+      if (ii == TRIE_ARRAY_SIZE) {
         // There's nothing left in this node.  Get rid of it.
         returnValue = 2;
       }
@@ -562,8 +562,8 @@ int trieDeleteValue(Trie *tree,
 
   trieNodeDeleteValue(
     tree->root,
-    (RADIX_TREE_KEY_ELEMENT*) key,
-    (keySize >> RADIX_TREE_NUM_KEYS_BIT_SHIFT),
+    (TRIE_KEY_ELEMENT*) key,
+    (keySize >> TRIE_NUM_KEYS_BIT_SHIFT),
     tree->destructor
   );
 

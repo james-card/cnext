@@ -50,7 +50,7 @@ int thrd_msg_q_destroy(thrd_msg_q_t *queue);
 #endif
 
 #define TSS_T_BIT_WIDTH (sizeof(tss_t) * 8)
-#define ARRAY_OF_RADIX_TREES_SIZE (1 << TSS_T_BIT_WIDTH)
+#define ARRAY_OF_TRIES_SIZE (1 << TSS_T_BIT_WIDTH)
 
 #if LOGGING_ENABLED && WIN_CTHREADS_LOGGING_ENABLED
 
@@ -500,7 +500,7 @@ void tssTrieDestroy(Trie *trie) {
 
 void initializeTssMetadata(void) {
     tssStorageByKey = (Trie**) calloc(
-        1, ARRAY_OF_RADIX_TREES_SIZE * sizeof(Trie*));
+        1, ARRAY_OF_TRIES_SIZE * sizeof(Trie*));
     if (tssStorageByKey == NULL) {
         // No tree.  Can't proceed.
         LOG_MALLOC_FAILURE();

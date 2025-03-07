@@ -34,8 +34,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef RAIDX_TREE_H
-#define RADIX_TREE_H
+#ifndef TRIE_H
+#define TRIE_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -47,11 +47,11 @@ extern "C"
 {
 #endif
 
-#define RADIX_TREE_KEY_ELEMENT uint8_t
-#define RADIX_TREE_KEY_ELEMENT_BIT_WIDTH (sizeof(RADIX_TREE_KEY_ELEMENT) * 8)
-#define RADIX_TREE_NUM_KEYS_BIT_SHIFT 0
-#define RADIX_TREE_ARRAY_SIZE (1 << RADIX_TREE_KEY_ELEMENT_BIT_WIDTH)
-#define RADIX_TREE_STRING_KEY ((size_t) -1)
+#define TRIE_KEY_ELEMENT uint8_t
+#define TRIE_KEY_ELEMENT_BIT_WIDTH (sizeof(TRIE_KEY_ELEMENT) * 8)
+#define TRIE_NUM_KEYS_BIT_SHIFT 0
+#define TRIE_ARRAY_SIZE (1 << TRIE_KEY_ELEMENT_BIT_WIDTH)
+#define TRIE_STRING_KEY ((size_t) -1)
 
 /// @struct TrieNode
 ///
@@ -64,7 +64,7 @@ extern "C"
 ///   trieNodes.
 typedef struct TrieNode {
   volatile void *value;
-  struct TrieNode *trieNodes[RADIX_TREE_ARRAY_SIZE];
+  struct TrieNode *trieNodes[TRIE_ARRAY_SIZE];
 } TrieNode;
 
 /// @struct Trie
@@ -101,5 +101,5 @@ int trieDeleteValue2(Trie *tree1,
 }
 #endif
 
-#endif // RAIDX_TREE_H
+#endif // TRIE_H
 
