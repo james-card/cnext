@@ -288,7 +288,9 @@ int msg_release(msg_t *msg) {
   if (msg->configured == true) {
     if (((msg->coro_init == false)
         || (comutexTryLock(&msg->coro_lock) == coroutineSuccess))
+#ifdef THREAD_SAFE_COROUTINES
       && (mtx_trylock(&msg->thrd_lock) == thrd_success)
+#endif // THREAD_SAFE_COROUTINES
     ) {
       msg->done = true;
       
@@ -475,8 +477,8 @@ int msg_wait_for_done(msg_t *msg, const struct timespec *ts) {
           wait_status
             = cnd_timedwait(&msg->thrd_condition, &msg->thrd_lock, ts);
         }
-      }
 #endif // THREAD_SAFE_COROUTINES
+      }
       if (wait_status != msg_success) {
         // Either we timed out or there's a problem with the condition.  Again,
         // we don't want to proceed like this.
@@ -502,6 +504,8 @@ int msg_wait_for_done(msg_t *msg, const struct timespec *ts) {
   
   return return_value;
 }
+
+#ifdef THREAD_SAFE_COROUTINES
 
 /// @fn msg_t* msg_wait_for_reply_with_type_(
 ///   msg_t *sent, bool release, int *type, const struct timespec *ts)
@@ -629,6 +633,8 @@ msg_t* msg_wait_for_reply_with_type_thrd(
 
   return reply;
 }
+
+#endif // THREAD_SAFE_COROUTINES
 
 /// @fn msg_t* msg_wait_for_reply_with_type_coro(msg_t *sent,
 ///   bool releaseAfterDone, int *type, const struct timespec *ts)
