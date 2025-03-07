@@ -10,7 +10,7 @@
 ///                    that are intended to be temporary.
 ///
 /// @copyright
-///                   Copyright (c) 2012-2024 James B. Card
+///                   Copyright (c) 2012-2025 James B. Card
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a
 /// copy of this software and associated documentation files (the "Software"),
