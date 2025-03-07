@@ -199,7 +199,7 @@ msg_t* msg_wait_for_reply_with_type(msg_t *sent, bool release, int type,
 #define msg_done(msg_ptr) \
   (((msg_ptr) != NULL) ? (msg_ptr)->done : true)
 #define msg_in_use(msg_ptr) \
-  (((msg_ptr) != NULL) ? (msg_ptr)->inUse : false)
+  (((msg_ptr) != NULL) ? (msg_ptr)->in_use : false)
 #define msg_coro_from(msg_ptr) \
   (((msg_ptr) != NULL) ? (msg_ptr)->coro_from : 0)
 #define msg_coro_to(msg_ptr) \
