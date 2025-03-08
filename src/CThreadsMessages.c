@@ -432,8 +432,8 @@ int thrd_msg_q_push(thrd_t thr, msg_t *msg) {
     return return_value; // thrd_error
   }
   
-  msg->thrd_from = thrd_current();
-  msg->thrd_to = thr;
+  msg->from.thrd = thrd_current();
+  msg->to.thrd = thr;
   msg->next = NULL;
   if (queue->tail != NULL) {
     queue->tail->next = msg;
