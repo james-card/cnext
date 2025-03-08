@@ -443,7 +443,7 @@ int thrd_msg_q_push(thrd_t thr, msg_t *msg) {
     queue->head = msg;
     queue->tail = msg;
   }
-  msg->recipient = MESSAGE_RECIPIENT_THREAD;
+  msg->endpoint_type = MESSAGE_ENDPOINT_TYPE_THREAD;
   
   // Let all the waiters know that there's something new in the queue now.
   return_value = cnd_broadcast(&queue->condition);
