@@ -39,12 +39,29 @@
 #define LOG_MALLOC_FAILURE(...) {}
 #endif
 
+/// @struct thrd_msg_q_t
+///
+/// @brief Definition for a thread's message queue.
+///
+/// @param head The head of the message queue.  Messages will be removed from
+///   this pointer.
+/// @param tail The tail of the message queue.  Messages will be added to this
+///   pointer.
+/// @param condition A condition (cnd_t) that will allow for signalling between
+///   threads when adding a message to the queue.
+/// @param lock A mutex (mtx_t) to guard the condition.
+typedef struct thrd_msg_q_t {
+  msg_t *head;
+  msg_t *tail;
+  cnd_t condition;
+  mtx_t lock;
+} thrd_msg_q_t;
+
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
-typedef struct thrd_msg_q_t thrd_msg_q_t;
 void thrd_msg_q_storage_init(void);
 int thrd_msg_q_create(void);
 int thrd_msg_q_destroy(thrd_msg_q_t *queue);
@@ -53,12 +70,6 @@ int thrd_msg_q_destroy(thrd_msg_q_t *queue);
 }
 #endif
 
-/// @var thrd_msg_q_storage_initialized
-///
-/// @brief once_flag to keep track of whether or not the root storage for thread
-/// message queues has been created.
-once_flag thrd_msg_q_storage_initialized = ONCE_FLAG_INIT;
-
 /// @var message_queues
 ///
 /// @brief Root storage for the message queues.  Keys are thrd_t values.  Values
@@ -66,6 +77,24 @@ once_flag thrd_msg_q_storage_initialized = ONCE_FLAG_INIT;
 /// thread that is currently running.  Queues are created when a thread starts
 /// and destroyed when it exits.
 Trie *message_queues = NULL;
+
+/// @fn thrd_msg_q_t* get_thread_thrd_msg_q(void)
+///
+/// @brief Get the message queue for the current thread.
+///
+/// @return Returns a pointer to the thrd_msg_q_t for the thread making this
+/// call.  This should always be a non-NULL value unless something is wrong with
+/// the system.
+static inline thrd_msg_q_t* get_thread_thrd_msg_q(void) {
+  thrd_t thr = thrd_current();
+  return (thrd_msg_q_t*) trieGetValue(message_queues, &thr, sizeof(thr));
+}
+
+/// @var thrd_msg_q_storage_initialized
+///
+/// @brief once_flag to keep track of whether or not the root storage for thread
+/// message queues has been created.
+once_flag thrd_msg_q_storage_initialized = ONCE_FLAG_INIT;
 
 // Message queue functions
 
@@ -451,5 +480,132 @@ int thrd_msg_q_push(thrd_t thr, msg_t *msg) {
   mtx_unlock(&queue->lock);
   
   return return_value;
+}
+
+/// @fn msg_t* msg_wait_for_reply_with_type_thrd(
+///   msg_t *sent, bool release, int *type, const struct timespec *ts)
+///
+/// @brief Wait for a reply from the thread recipient of a message.
+///
+/// @param sent The message that was originally sent to the recipient.
+/// @param release Whether or not the provided sent message should be released
+///   (*NOT* destroyed) after the recipient has indicated that they're done
+///   processing our sent message.
+/// @param type A pointer to an integer type of message that the caller is
+///   waiting for.  If this parameter is NULL, no type will be considered.
+/// @param ts A pointer to a struct timespec that holds the end time to wait
+///   until for a reply.  If this parameter is NULL, then an infinite timeout
+///   will be used.
+///
+/// @return Returns a pointer to the msg_t received from the recipient of
+/// the original message on success, NULL on failure or if the provided timeout
+/// time is reached.
+msg_t* msg_wait_for_reply_with_type_thrd(
+  msg_t *sent, bool release,
+  int *type, const struct timespec *ts
+) {
+  msg_t *reply = NULL;
+
+  thrd_msg_q_t *queue = get_thread_thrd_msg_q();
+  if (queue == NULL) {
+    // Something is wrong.  Bail.
+    return reply; // NULL
+  }
+
+  if (sent == NULL) {
+    // Invalid.
+    return reply; // NULL
+  }
+
+  // We need to grab the original recipient of the message that was sent before
+  // we wait for done in case the recipient reuses this message as the reply.
+  thrd_t recipient = sent->to.thrd;
+
+  if (msg_wait_for_done(sent, ts) != msg_success) {
+    // Invalid state of the message.  Fail.
+    return reply; // NULL
+  }
+
+  if (release == true) {
+    // We're done with the message that was originally sent and the caller has
+    // indicated that it is to be released now.
+    msg_release(sent);
+  }
+
+  // Recipient has processed the message.  We now need to wait for their reply.
+  int lock_status = msg_success;
+  if (ts == NULL) {
+    lock_status = mtx_lock(&queue->lock);
+  } else {
+    lock_status = mtx_timedlock(&queue->lock, ts);
+  }
+  if (lock_status != msg_success) {
+    // Either we've timed out or there's a problem with the lock.  Either way,
+    // we're done.  Bail.
+    return reply; // NULL
+  }
+
+  // mtx_timedlock will return thrd_timedout if the timeout is
+  // reached, so we'll never reach this point if we've exceeded our timeout.
+  msg_t *prev = NULL;
+  msg_t *cur = queue->head;
+  msg_t **prev_next = &queue->head;
+  int searchType = 0;
+  if (type != NULL) {
+    // This saves us from having to dereference the pointer in every iteration
+    // of the loop below.
+    searchType = *type;
+  }
+
+  // Enter our main wait loop.
+  int wait_status = msg_success;
+  while (reply == NULL) {
+    while ((cur != NULL)
+      && ((cur->from.thrd != recipient)
+        || ((type != NULL) && (cur->type != searchType))
+      )
+    ) {
+      prev = cur;
+      prev_next = &cur->next;
+      cur = cur->next;
+    }
+
+    if (cur != NULL) {
+      // Desired reply was found.  Remove the message from the thread.
+      reply = cur;
+      *prev_next = cur->next;
+
+      if (queue->head == NULL) {
+        // Empty queue.  Set queue->tail to NULL too.
+        queue->tail = NULL;
+      }
+      if (queue->tail == cur) {
+        queue->tail = prev;
+      }
+      cur->next = NULL;
+    } else {
+      // Desired reply was not found.  Block until something else is pushed.
+      if (ts == NULL) {
+        wait_status = cnd_wait(&queue->condition, &queue->lock);
+      } else {
+        wait_status = cnd_timedwait(
+          &queue->condition, &queue->lock, ts);
+      }
+      if (wait_status != msg_success) {
+        // Something isn't as expected.  Bail.
+        break;
+      }
+      // cnd_timedwait will return thrd_timedout if the timeout is
+      // reached, so we won't continue the loop if we've exceeded our timeout.
+    }
+
+    prev = NULL;
+    cur = queue->head;
+    prev_next = &queue->head;
+  }
+
+  mtx_unlock(&queue->lock);
+
+  return reply;
 }
 
