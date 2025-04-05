@@ -7,13 +7,16 @@ ARCHIVE     := ar rcs
 
 OBJ_FILES := \
     $(OBJ_DIR)/Coroutines.o \
+    $(OBJ_DIR)/CThreadsMessages.o \
     $(OBJ_DIR)/DataTypes.o \
     $(OBJ_DIR)/Dictionary.o \
     $(OBJ_DIR)/DirectoryLib.o \
     $(OBJ_DIR)/Glibc27CompatLib.o \
     $(OBJ_DIR)/HashTable.o \
     $(OBJ_DIR)/List.o \
+    $(OBJ_DIR)/LinuxProcessSync.o \
     $(OBJ_DIR)/LoggingLib.o \
+    $(OBJ_DIR)/Messages.o \
     $(OBJ_DIR)/PosixCThreads.o \
     $(OBJ_DIR)/PosixProcesses.o \
     $(OBJ_DIR)/Queue.o \
@@ -28,13 +31,12 @@ OBJ_FILES := \
     $(OBJ_DIR)/Stack.o \
     $(OBJ_DIR)/StringLib.o \
     $(OBJ_DIR)/TimeUtils.o \
+    $(OBJ_DIR)/Trie.o \
     $(OBJ_DIR)/Vector.o \
     $(OBJ_DIR)/WinCThreads.o \
     $(OBJ_DIR)/WinProcesses.o \
     $(OBJ_DIR)/ZipLib.o \
     $(OBJ_DIR)/miniz.o \
-    $(OBJ_DIR)/RadixTree.o \
-    $(OBJ_DIR)/CThreadsMessages.o \
 
 INCLUDES := \
     -Iinclude \
