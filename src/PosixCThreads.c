@@ -46,10 +46,9 @@ extern "C"
 
 // Functions, variables, and types defined in CThreadsMessages.c
 extern once_flag thrd_msg_q_storage_initialized;
-typedef struct thrd_msg_q_t thrd_msg_q_t;
 void thrd_msg_q_storage_init(void);
 int thrd_msg_q_create(void);
-int thrd_msg_q_destroy(thrd_msg_q_t *queue);
+int thrd_msg_q_destroy(msg_q_t *queue);
 
 #ifdef __cplusplus
 }
