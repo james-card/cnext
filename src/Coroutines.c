@@ -127,18 +127,16 @@
 // Doxygen marker
 /// @file
 
-#ifdef THREAD_SAFE_COROUTINES
-#include "CThreads.h"
-#endif
-
 #include <string.h>
 #include <stdio.h> // For error messages
 
 #include "Coroutines.h"
 
-// Prototype forward declarations for mutual recursion.
+// Prototype forward declarations.
 void coroutineAllocateStack(int stackSize);
 void coroutineMain(void *stack);
+int comessageQueueCreate(Coroutine *coroutine);
+int comessageQueueDestroy(Coroutine *coroutine);
 
 /// @def ZEROINIT
 ///
@@ -902,8 +900,8 @@ void coroutineMain(void *stack) {
   coroutineGlobalPush(&_globalIdle, &me);
 #endif
 
-  // Initialize the message queue.  (Destroying it also initializes it.)
-  comessageQueueDestroy(&me);
+  // Initialize the message queue.
+  comessageQueueCreate(&me);
 
   // The target of coroutinePass() (the caller) is at the head of the running
   // list.  The return point for that Coroutine was either set in the setjmp
@@ -997,7 +995,8 @@ void coroutineMain(void *stack) {
     // Block until we're called from the constructor again.
     funcData.data = ret;
     funcData = coroutinePass(&me, funcData);
-    me.nextMessage = NULL;
+    // Re-initialize the queue.
+    comessageQueueCreate(&me);
     func = funcData.func;
   }
 }
@@ -1243,6 +1242,8 @@ int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes) {
   // above because the coroutine may have been waiting on a message, in which
   // case its message queue mutex and condition will have been in use.
   comessageQueueDestroy(targetCoroutine);
+  // Re-initialize the queue.
+  comessageQueueCreate(targetCoroutine);
 
   return coroutineSuccess;
 }
@@ -2110,6 +2111,29 @@ void* coconditionLastYieldValue(Cocondition* cond) {
   return returnValue;
 }
 
+/// @fn int comessageQueueCreate(Coroutine *coroutine)
+///
+/// @brief Initialize the message queue for the specified coroutine.
+///
+/// @param coroutine A pointer to the coroutien to initialize the queue of.
+///
+/// @return Returns coroutineSuccess on success, coroutineError on failure.
+int comessageQueueCreate(Coroutine *coroutine) {
+  int returnValue = coroutineError;
+
+  if (coroutine == NULL) {
+    return returnValue; // coroutineError
+  }
+
+  if (msg_q_create(&coroutine->messageQueue, MSG_CORO_SAFE, NULL, NULL)
+    == &coroutine->messageQueue
+  ) {
+    returnValue = coroutineSuccess;
+  }
+
+  return returnValue;
+}
+
 /// @fn int comessageQueueDestroy(Coroutine *coroutine)
 ///
 /// @brief Destroy the message queue for the specified coroutine.
@@ -2126,20 +2150,7 @@ int comessageQueueDestroy(Coroutine *coroutine) {
     return returnValue; // coroutineSuccess
   }
 
-  for (msg_t *cur = coroutine->nextMessage; cur != NULL; ) {
-    msg_t *next = cur->next;
-    msg_destroy(cur);
-    cur = next;
-  }
-
-  coroutine->nextMessage = NULL;
-  coroutine->lastMessage = NULL;
-
-  // Re-initialize the member elements that require initialization.
-  comutexInit(&coroutine->messageLock, comutexPlain | comutexTimed);
-  coconditionInit(&coroutine->messageCondition);
-
-  return returnValue;
+  return msg_q_destroy(&coroutine->messageQueue);
 }
 
 /// @fn msg_t* comessageQueuePeek(void)
@@ -2154,7 +2165,7 @@ msg_t* comessageQueuePeek(void) {
 
   Coroutine *coroutine = getRunningCoroutine();
   if (coroutine != NULL) {
-    comessage = coroutine->nextMessage;
+    comessage = msg_q_peek(&coroutine->messageQueue);
   }
 
   return comessage;
@@ -2171,21 +2182,8 @@ msg_t* comessageQueuePop(void) {
   msg_t *head = NULL;
 
   Coroutine *coroutine = getRunningCoroutine();
-  if ((coroutine != NULL)
-    && (comutexLock(&coroutine->messageLock) == coroutineSuccess)
-  ) {
-    head = coroutine->nextMessage;
-    if (head != NULL) {
-      coroutine->nextMessage = head->next;
-      head->next = NULL;
-    }
-
-    if (coroutine->nextMessage == NULL) {
-      // Empty queue.  Set coroutine->lastMessage to NULL too.
-      coroutine->lastMessage = NULL;
-    }
-
-    comutexUnlock(&coroutine->messageLock);
+  if (coroutine != NULL) {
+    head = msg_q_pop(&coroutine->messageQueue);
   }
 
   return head;
@@ -2209,130 +2207,15 @@ msg_t* comessageQueuePopType(int type) {
     return returnValue;
   }
 
-  // Initialize these variables before entering the if to avoid out-of-order
-  // code execution later.
-  //
-  // JBC 2024-11-26
-  msg_t *prev = NULL;
-  msg_t *cur = coroutine->nextMessage;
-  msg_t **prevNext = &coroutine->nextMessage;
-  if (comutexLock(&coroutine->messageLock) == coroutineSuccess) {
-    while ((cur != NULL) && (cur->type != type)) {
-      prev = cur;
-      prevNext = &cur->next;
-      cur = cur->next;
-    }
-
-    if (cur != NULL) {
-      // Desired type was found.  Remove the message from the queue.
-      returnValue = cur;
-      *prevNext = cur->next;
-
-      if (coroutine->nextMessage == NULL) {
-        // Empty queue.  Set coroutine->lastMessage to NULL too.
-        coroutine->lastMessage = NULL;
-      }
-      if (coroutine->lastMessage == cur) {
-        coroutine->lastMessage = prev;
-      }
-      cur->next = NULL;
-    }
-
-    comutexUnlock(&coroutine->messageLock);
-  }
+  returnValue = msg_q_pop_type(&coroutine->messageQueue, type);
 
   return returnValue;
 }
 
-/// @fn msg_t* comessageQueueWaitForType_(int *type, const struct timespec *ts)
-///
-/// @brief WaitFor for a message of a given type to be available in the message
-/// queue or until a specified time has elapsed.  Remove the message from the
-/// queue and return it if one is available before the specified time is
-/// reached.
-///
-/// @param type A pointer to the message type to look for.  If this parameter is
-///   NULL then the first message of any type will be returned.
-/// @param ts A pointer to a struct timespec that specifies the end of the time
-///   period to wait for.  If this parameter is NULL then an infinite timeout
-///   will be used.
-///
-/// @return Returns the first message of the provided type if one is available
-/// before the specified time.  Returns NULL if no such message is available
-/// within that time period or if an error occurrs.
-msg_t* comessageQueueWaitForType_(
-  int *type, const struct timespec *ts
-) {
-  msg_t *returnValue = NULL;
-
-  Coroutine *coroutine = getRunningCoroutine();
-  if (coroutine == NULL) {
-    // Coroutines haven't been configured yet.
-    return returnValue;
-  }
-
-  msg_t *prev = NULL;
-  msg_t *cur = coroutine->nextMessage;
-  msg_t **prevNext = &coroutine->nextMessage;
-  int searchType = 0;
-  if (type != NULL) {
-    // This allows us to bypass dereferncing the pointer every time in the loop
-    // below.
-    searchType = *type;
-  }
-  int lockStatus = coroutineSuccess;
-  if (ts == NULL) {
-    lockStatus = comutexLock(&coroutine->messageLock);
-  } else {
-    lockStatus = comutexTimedLock(&coroutine->messageLock, ts);
-  }
-  int waitStatus = coroutineSuccess;
-  if (lockStatus == coroutineSuccess) {
-    while (returnValue == NULL) {
-      while ((cur != NULL) && (type != NULL) && (cur->type != searchType)) {
-        prev = cur;
-        prevNext = &cur->next;
-        cur = cur->next;
-      }
-
-      if (cur != NULL) {
-        // Desired type was found.  Remove the message from the coroutine.
-        returnValue = cur;
-        *prevNext = cur->next;
-
-        if (coroutine->nextMessage == NULL) {
-          // Empty queue.  Set coroutine->lastMessage to NULL too.
-          coroutine->lastMessage = NULL;
-        }
-        if (coroutine->lastMessage == cur) {
-          coroutine->lastMessage = prev;
-        }
-        cur->next = NULL;
-      } else {
-        // Desired type was not found.  Block until something else is pushed.
-        if (ts == NULL) {
-          waitStatus= coconditionWait(
-            &coroutine->messageCondition, &coroutine->messageLock);
-        } else {
-          waitStatus = coconditionTimedWait(
-            &coroutine->messageCondition, &coroutine->messageLock, ts);
-        }
-        if (waitStatus != coroutineSuccess) {
-          // Either something is wrong or we've reached our timeout.  Bail.
-          break;
-        }
-      }
-
-      prev = NULL;
-      cur = coroutine->nextMessage;
-      prevNext = &coroutine->nextMessage;
-    }
-
-    comutexUnlock(&coroutine->messageLock);
-  } // else We've reached our timeout or something is wrong.
-
-  return returnValue;
-}
+// Underlying worker function in Messages.c.  Expose the prototype here so that
+// we can bypass a layer of abstraction into the Messages library.
+msg_t* msg_q_wait_for_type_(msg_q_t *queue, int *type,
+  const struct timespec *ts);
 
 /// @fn msg_t* comessageQueueWait(const struct timespec *ts)
 ///
@@ -2347,7 +2230,14 @@ msg_t* comessageQueueWaitForType_(
 /// before the specified time.  Returns NULL if no such message is available
 /// within that time period or if an error occurrs.
 msg_t* comessageQueueWait(const struct timespec *ts) {
-  return comessageQueueWaitForType_(NULL, ts);
+  msg_t *returnValue = NULL;
+
+  Coroutine *coroutine = getRunningCoroutine();
+  if (coroutine != NULL) {
+    returnValue = msg_q_wait_for_type_(&coroutine->messageQueue, NULL, ts);
+  }
+
+  return returnValue;
 }
 
 /// @fn msg_t* comessageQueueWaitForType(int type, const struct timespec *ts)
@@ -2364,7 +2254,14 @@ msg_t* comessageQueueWait(const struct timespec *ts) {
 /// before the specified time.  Returns NULL if no such message is available
 /// within that time period or if an error occurrs.
 msg_t* comessageQueueWaitForType(int type, const struct timespec *ts) {
-  return comessageQueueWaitForType_(&type, ts);
+  msg_t *returnValue = NULL;
+
+  Coroutine *coroutine = getRunningCoroutine();
+  if (coroutine != NULL) {
+    returnValue = msg_q_wait_for_type_(&coroutine->messageQueue, &type, ts);
+  }
+
+  return returnValue;
 }
 
 /// @fn int comessageQueuePush(Coroutine *coroutine, msg_t *msg)
@@ -2388,29 +2285,9 @@ int comessageQueuePush(Coroutine *coroutine, msg_t *msg) {
     coroutine = getRunningCoroutine();
   }
 
-  if ((coroutine != NULL)
-    && (comutexLock(&coroutine->messageLock) == coroutineSuccess)
-  ){
-    msg->from.coro = getRunningCoroutine();
-    msg->to.coro = coroutine;
-    msg->next = NULL;
-    if (coroutine->lastMessage != NULL) {
-      coroutine->lastMessage->next = msg;
-      coroutine->lastMessage = msg;
-    } else {
-      // Empty queue.  Populate both coroutine->nextMessage and
-      // coroutine->lastMessage.
-      coroutine->nextMessage = msg;
-      coroutine->lastMessage = msg;
-    }
-    msg->endpoint_type = MESSAGE_ENDPOINT_TYPE_COROUTINE;
+  msg->from.coro = getRunningCoroutine();
+  msg->to.coro = coroutine;
 
-    // Let all the waiters know that there's something new in the queue now.
-    returnValue = coconditionBroadcast(&coroutine->messageCondition);
-
-    comutexUnlock(&coroutine->messageLock);
-  }
-
-  return returnValue;
+  return msg_q_push(&coroutine->messageQueue, msg);
 }
 
