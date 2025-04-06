@@ -108,7 +108,7 @@ typedef struct msg_t msg_t;
 ///
 /// @brief The size of a single chunk of the stack allocated by
 /// coroutineAllocateStack.
-#define COROUTINE_STACK_CHUNK_SIZE 64
+#define COROUTINE_STACK_CHUNK_SIZE 32
 
 /// @def COROUTINE_DEFAULT_STACK_SIZE
 ///
@@ -335,6 +335,12 @@ bool coroutineThreadingSupportEnabled();
 int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes);
 Coroutine* getRunningCoroutine(void);
 
+
+// Message functions
+msg_t* comessageWaitForReply(msg_t *sent, bool release,
+  const struct timespec *ts);
+msg_t* comessageWaitForReplyWithType(msg_t *sent, bool release, int type,
+  const struct timespec *ts);
 
 // Message queue functions
 msg_t* comessageQueuePeek(void);
