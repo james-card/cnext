@@ -46,6 +46,12 @@ extern "C"
 {
 #endif
 
+// Message functions
+msg_t* thrd_msg_wait_for_reply(msg_t *sent, bool release,
+  const struct timespec *ts);
+msg_t* thrd_msg_wait_for_reply_with_type(msg_t *sent, bool release, int type,
+  const struct timespec *ts);
+
 // Message queue functions
 msg_t* thrd_msg_q_peek(void);
 msg_t* thrd_msg_q_pop(void);
