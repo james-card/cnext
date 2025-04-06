@@ -55,7 +55,7 @@ extern "C"
 ///
 /// @brief The type by which processes identify themselves in inter-process
 /// communication.
-typedef HANDLE proc_t;
+typedef DWORD proc_t;
 
 // Process synchronization function return values.
 
