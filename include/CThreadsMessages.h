@@ -5,7 +5,7 @@
 ///
 /// @file              CThreadsMessages.h
 ///
-/// @brief             Inter-process message functionality for C threads.
+/// @brief             Inter-thread message functionality for C threads.
 ///
 /// @copyright
 ///                   Copyright (c) 2012-2025 James Card
