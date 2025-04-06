@@ -56,7 +56,7 @@ int thrd_msg_q_destroy(msg_q_t *queue);
 /// @var message_queues
 ///
 /// @brief Root storage for the message queues.  Keys are thrd_t values.  Values
-/// are msg_q_t values.  There is one msg_q_t in the tree for ever thread that
+/// are msg_q_t values.  There is one msg_q_t in the tree for every thread that
 /// is currently running.  Queues are created when a thread starts and destroyed
 /// when it exits.
 static Trie *message_queues = NULL;
