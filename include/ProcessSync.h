@@ -44,6 +44,7 @@
 
 // Figure out how to support process synchronization.
 #if defined(_WIN32)
+#include "WinProcessSync.h"
 #elif defined(__linux__)
 #include "LinuxProcessSync.h"
 #endif // 
