@@ -56,6 +56,11 @@ extern "C"
 #define msg_nomem      3
 #define msg_timedout   4
 
+// Mutex types
+#define msg_mtx_plain     0
+#define msg_mtx_recursive 1
+#define msg_mtx_timed     2
+
 /// @enum msg_safety_t
 ///
 /// @brief Indicator of what level of safety to employ with message operations
@@ -88,6 +93,9 @@ typedef struct msg_sync_t {
   int  (*cnd_timedwait)(void *cond, void *mtx, const struct timespec *ts);
   int  (*cnd_wait)(void *cond, void *mtx);
 } msg_sync_t;
+
+// Array of these structures declared and instantiated in Messages.c.
+extern msg_sync_t msg_sync_array[];
 
 /// @union msg_mtx_t
 ///

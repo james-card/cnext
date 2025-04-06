@@ -47,7 +47,7 @@ typedef struct msg_q_t msg_q_t;
 ///
 /// @brief Array of msg_sync_t objects that hold the function pointers to use
 /// with the synchronization primitives
-static msg_sync_t msg_sync_array[] = {
+msg_sync_t msg_sync_array[] = {
 #ifdef PROCESS_SYNC_H
   {
     (int  (*)(void *mtx, int type)) proc_mtx_init,
@@ -128,7 +128,7 @@ static inline int msg_start_use(msg_t *msg, msg_safety_t msg_safety) {
       if (msg->configured == false) {
         msg->msg_sync = &msg_sync_array[msg_safety];
         if (msg->msg_sync->cnd_init(&msg->condition) == msg_success) {
-          if (msg->msg_sync->mtx_init(&msg->lock, mtx_plain | mtx_timed)
+          if (msg->msg_sync->mtx_init(&msg->lock, msg_mtx_plain | msg_mtx_timed)
             == msg_success
           ) {
             msg->configured = true;
@@ -378,9 +378,7 @@ int msg_set_done(msg_t *msg) {
     if (msg->waiting == true) {
       // Something is waiting.  Signal the waiters.  It will be up to them to
       // destroy this message again later.
-      if (msg->msg_sync->cnd_broadcast(&msg->condition) == msg_success) {
-        return_value = msg_success;
-      } // else return_value remains msg_error.
+      return_value = msg->msg_sync->cnd_broadcast(&msg->condition);
     } else {
       return_value = msg_success;
     }
@@ -542,7 +540,7 @@ msg_t* msg_wait_for_reply_with_type_(
   int wait_status = msg_success;
   while (reply == NULL) {
     while ((cur != NULL)
-      && ((memcmp(&cur->from, &recipient, sizeof(msg_endpoint_t)) == 0)
+      && ((memcmp(&cur->from, &recipient, sizeof(msg_endpoint_t)) != 0)
         || ((type != NULL) && (cur->type != searchType))
       )
     ) {
@@ -770,7 +768,7 @@ msg_q_t* msg_q_create(msg_q_t *q, msg_safety_t msg_safety,
   }
   
   if (return_value->msg_sync->mtx_init(
-    &return_value->lock, mtx_plain | mtx_timed) != msg_success
+    &return_value->lock, msg_mtx_plain | msg_mtx_timed) != msg_success
   ) {
     // Can't proceed.  Bail.
     goto mtx_init_failure;
