@@ -59,7 +59,7 @@ int thrd_msg_q_destroy(msg_q_t *queue);
 /// are msg_q_t values.  There is one msg_q_t in the tree for ever thread that
 /// is currently running.  Queues are created when a thread starts and destroyed
 /// when it exits.
-Trie *message_queues = NULL;
+static Trie *message_queues = NULL;
 
 /// @fn msg_q_t* get_thread_thrd_msg_q(void)
 ///
