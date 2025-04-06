@@ -291,7 +291,7 @@ int proc_cnd_init(proc_cnd_t *proc_cond) {
     return proc_error;
   }
 
-  char conditionName[25];
+  char conditionName[35];
   sprintf(conditionName, "Global\\%uEvent%u",
     (uint32_t) GetCurrentProcessId(),
     (uint32_t) InterlockedExchangeAdd(&proc_cnd_index, 1));
