@@ -82,8 +82,8 @@ typedef pthread_mutex_t mtx_t;
 int mtx_init(mtx_t *mtx, int type);
 int mtx_lock(mtx_t *mtx);
 int mtx_unlock(mtx_t *mtx);
-void mtx_destroy(mtx_t* mtx);
-int mtx_timedlock(mtx_t* mtx, const struct timespec* ts);
+void mtx_destroy(mtx_t *mtx);
+int mtx_timedlock(mtx_t *mtx, const struct timespec *ts);
 int mtx_trylock(mtx_t *mtx);
 
 
@@ -91,10 +91,10 @@ int mtx_trylock(mtx_t *mtx);
 typedef pthread_cond_t cnd_t;
 
 int cnd_broadcast(cnd_t *cond);
-void cnd_destroy(cnd_t* cond);
+void cnd_destroy(cnd_t *cond);
 int cnd_init(cnd_t *cond);
 int cnd_signal(cnd_t *cond);
-int cnd_timedwait(cnd_t * cond, mtx_t * mtx, const struct timespec * ts);
+int cnd_timedwait(cnd_t *cond, mtx_t *mtx, const struct timespec *ts);
 int cnd_wait(cnd_t *cond, mtx_t *mtx);
 
 
