@@ -39,6 +39,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+// Do forward declarations before including headers from this library to avoid
+// circular dependencies.
+typedef struct msg_t msg_t;
+typedef struct msg_q_t msg_q_t;
+
 #if defined(__linux__) || defined(_WIN32)
 #include "ProcessSync.h"
 #endif // defined(__linux__) || defined(_WIN32)
