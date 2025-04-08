@@ -98,61 +98,6 @@ void thrd_msg_q_storage_init(void) {
   return;
 }
 
-// Underlying worker function in Messages.c.  Expose the prototype here so that
-// we can bypass a layer of abstraction into the Messages library.
-msg_t* msg_wait_for_reply_with_type_(
-  msg_q_t *queue, msg_t *sent, bool release,
-  int *type, const struct timespec *ts);
-
-/// @fn msg_t* thrd_msg_wait_for_reply(msg_t *sent, bool release,
-///   const struct timespec *ts)
-///
-/// @brief Block until a reply has been received from the original recipient of
-/// the provided message or until a specified future time has been reached.
-///
-/// @param sent The message that was originally sent to the recipient.
-/// @param release Whether or not the provided sent message should be released
-///   (*NOT* destroyed) after the recipient has indicated that they're done
-///   processing our sent message.
-/// @param ts A pointer to a struct timespec that holds the end time to wait
-///   until for a reply.  If this parameter is NULL, then an infinite timeout
-///   will be used.
-///
-/// @return Returns a pointer to the msg_t received from the recipient of
-/// the original message on success, NULL on failure.
-msg_t* thrd_msg_wait_for_reply(msg_t *sent, bool release,
-  const struct timespec *ts
-) {
-  msg_q_t *queue = get_thread_thrd_msg_q();
-  return msg_wait_for_reply_with_type_(queue, sent, release, NULL, ts);
-}
-
-/// @fn msg_t* thrd_msg_wait_for_reply_with_type(msg_t *sent, bool release,
-///   int type, const struct timespec *ts)
-///
-/// @brief Block until a reply of a specified type has been received from the
-/// original recipient of the provided message or until a specified future time
-/// has been reached.
-///
-/// @param sent The message that was originally sent to the recipient.
-/// @param release Whether or not the provided sent message should be released
-///   (*NOT* destroyed) after the recipient has indicated that they're done
-///   processing our sent message.
-/// @param type An integer type of message that the caller is waiting for.
-/// @param ts A pointer to a struct timespec that holds the end time to wait
-///   until for a reply.  If this parameter is NULL, then an infinite timeout
-///   will be used.
-///
-/// @return Returns a pointer to the msg_t received from the recipient of
-/// the original message of the specified tyep on success, NULL on failure or if
-/// the provided timeout time is reached.
-msg_t* thrd_msg_wait_for_reply_with_type(msg_t *sent, bool release, int type,
-  const struct timespec *ts
-) {
-  msg_q_t *queue = get_thread_thrd_msg_q();
-  return msg_wait_for_reply_with_type_(queue, sent, release, &type, ts);
-}
-
 /// @fn int thrd_msg_q_create(void)
 ///
 /// @brief Dynamically allocate and initialize a msg_q_t that will serve as the
@@ -331,6 +276,6 @@ int thrd_msg_q_push(thrd_t thr, msg_t *msg) {
   msg->from.thrd = thrd_current();
   msg->to.thrd = thr;
   
-  return msg_q_push(queue, msg);
+  return msg_q_push(queue, get_thread_thrd_msg_q(), msg);
 }
 
