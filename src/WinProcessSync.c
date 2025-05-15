@@ -36,7 +36,7 @@
 /// @var proc_mtx_index
 ///
 /// @brief Variable to ensure that mutexes get unique names in the system.
-LONG proc_mtx_index = 0;
+static LONG proc_mtx_index = 0;
 
 /// @fn int proc_mtx_init(proc_mtx_t *proc_mtx, int type)
 ///
@@ -50,14 +50,13 @@ int proc_mtx_init(proc_mtx_t *proc_mtx, int type) {
   int return_value = proc_error;
 
   if (proc_mtx != NULL) {
-    char mutexName[35];
-    sprintf(mutexName, "Global\\%uMutex%u",
+    sprintf(proc_mtx->name, "Global\\%uMutex%u",
       (uint32_t) GetCurrentProcessId(),
       (uint32_t) InterlockedExchangeAdd(&proc_mtx_index, 1));
     proc_mtx->lock = CreateMutex(
-      NULL,     // Default security attributes
-      FALSE,    // Initially not owned
-      mutexName // Named mutex, shared across processes
+      NULL,          // Default security attributes
+      FALSE,         // Initially not owned
+      proc_mtx->name // Named mutex, shared across processes
     );
     if (proc_mtx->lock != NULL) {
       proc_mtx->flags = type;
@@ -277,7 +276,7 @@ void proc_cnd_destroy(proc_cnd_t *proc_cond) {
 /// @var proc_cnd_index
 ///
 /// @brief Variable to ensure that conditions get unique names in the system.
-LONG proc_cnd_index = 0;
+static LONG proc_cnd_index = 0;
 
 /// @fn int proc_cnd_init(proc_cnd_t *proc_cond)
 ///
@@ -291,15 +290,14 @@ int proc_cnd_init(proc_cnd_t *proc_cond) {
     return proc_error;
   }
 
-  char conditionName[35];
-  sprintf(conditionName, "Global\\%uEvent%u",
+  sprintf(proc_cond->name, "Global\\%uEvent%u",
     (uint32_t) GetCurrentProcessId(),
     (uint32_t) InterlockedExchangeAdd(&proc_cnd_index, 1));
   proc_cond->condition = CreateEvent(
-    NULL,         // Default security attributes
-    TRUE,         // Manual-reset event
-    FALSE,        // Initial state is nonsignaled
-    conditionName // Named event, shared across processes
+    NULL,           // Default security attributes
+    TRUE,           // Manual-reset event
+    FALSE,          // Initial state is nonsignaled
+    proc_cond->name // Named event, shared across processes
   );
   if (proc_cond->condition == NULL) {
     return proc_error;

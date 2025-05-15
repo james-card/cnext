@@ -410,7 +410,7 @@ void* trieSetValue2(Trie *tree1,
     || ((key1 == NULL) && (keySize1 != 0))
     || ((key2 == NULL) && (keySize2 != 0))
   ) {
-    return returnValue; // -1
+    return returnValue; // NULL
   }
 
   Trie *tree2

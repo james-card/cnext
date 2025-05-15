@@ -116,7 +116,7 @@ int thrd_msg_q_create(void) {
   }
   
   thrd_t thr = thrd_current();
-  msg_q_t *new_queue = msg_q_create(NULL, MSG_THRD_SAFE, NULL, NULL);
+  msg_q_t *new_queue = msg_q_create(NULL, MSG_THRD_SAFE);
   if (new_queue == NULL) {
     goto new_queue_calloc_failure;
   }

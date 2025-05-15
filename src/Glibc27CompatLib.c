@@ -107,6 +107,8 @@ int sscanf(const char *str, const char *format, ...) {
   asm (".symver pthread_rwlock_wrlock, pthread_rwlock_wrlock@GLIBC_2.2.5");
   asm (".symver pthread_setspecific, pthread_setspecific@GLIBC_2.2.5");
   asm (".symver pthread_cancel, pthread_cancel@GLIBC_2.2.5");
+  asm (".symver shm_open, shm_open@GLIBC_2.2.5");
+  asm (".symver shm_unlink, shm_unlink@GLIBC_2.2.5");
 #else // 32-bit
   asm (".symver __libc_start_main, __libc_start_main@GLIBC_2.0");
   asm (".symver dlsym, dlsym@GLIBC_2.0");
@@ -134,6 +136,8 @@ int sscanf(const char *str, const char *format, ...) {
   asm (".symver pthread_rwlock_wrlock, pthread_rwlock_wrlock@GLIBC_2.1");
   asm (".symver pthread_setspecific, pthread_setspecific@GLIBC_2.0");
   asm (".symver pthread_cancel, pthread_cancel@GLIBC_2.0");
+  asm (".symver shm_open, shm_open@GLIBC_2.2");
+  asm (".symver shm_unlink, shm_unlink@GLIBC_2.2");
 #endif // __x86_64__
 
 // __libc_start_main contains a compile-time optional parameter called auxvec

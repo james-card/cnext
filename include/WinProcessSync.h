@@ -77,11 +77,13 @@ typedef DWORD proc_t;
 ///
 /// @brief Structure to represent an inter-process mutex object in Windows.
 ///
+/// @param name The name of the mutex in shared memory.
 /// @param lock The HANDLE value to use with the Windows mutex calls.
 /// @param flags The bitwise-OR of the proc_mtx_* values in use for this mutex.
 /// @param lock_count The number of times the the current process has
 ///   successfully locked the mutex.
 typedef struct proc_mtx_t {
+  char     name[35];
   HANDLE   lock;
   uint32_t flags;
   uint32_t lock_count;
@@ -100,13 +102,15 @@ int proc_mtx_trylock(proc_mtx_t *proc_mtx);
 ///
 /// @brief Structure to represent an inter-process condition object in Windows.
 ///
+/// @param name The name of the condition in shared memory.
 /// @param condition The HANDLE value to use with the Windows Event calls.
 /// @param num_waiters The number of processes waiting on this condition.
 /// @param num_signals The number of processes that have been signaled.
 typedef struct proc_cnd_t {
+  char   name[35];
   HANDLE condition;
-  int num_waiters;
-  int num_signals;
+  int    num_waiters;
+  int    num_signals;
 } proc_cnd_t;
 
 int proc_cnd_broadcast(proc_cnd_t *proc_cond);
