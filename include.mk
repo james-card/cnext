@@ -14,7 +14,6 @@ OBJ_FILES := \
     $(OBJ_DIR)/Glibc27CompatLib.o \
     $(OBJ_DIR)/HashTable.o \
     $(OBJ_DIR)/List.o \
-    $(OBJ_DIR)/LinuxProcessSync.o \
     $(OBJ_DIR)/LoggingLib.o \
     $(OBJ_DIR)/Messages.o \
     $(OBJ_DIR)/PosixCThreads.o \
