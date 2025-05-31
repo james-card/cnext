@@ -36,6 +36,8 @@
 #else
 #undef printLog
 #define printLog(...) {}
+#undef shouldLog
+#define shouldLog(...) (false)
 #define logFile stderr
 #endif
 
@@ -68,7 +70,7 @@ Dictionary *dictionaryCreate(TypeDescriptor *type) {
   return returnValue;
 }
 
-/// @fn DictionaryEntry* dictionaryAddEntry_(Dictionary **dictionary, const volatile void *key, const volatile void *value, TypeDescriptor *type, ...)
+/// @fn DictionaryEntry* dictionaryAddEntry_(Dictionary *dictionary, const volatile void *key, const volatile void *value, TypeDescriptor *type, ...)
 ///
 /// @brief Adds a DictionaryEntry to a Dictionary.
 ///
@@ -81,7 +83,7 @@ Dictionary *dictionaryCreate(TypeDescriptor *type) {
 /// typeString as the type by default.
 ///
 /// @return Returns a pointer to a new DictionaryEntry on success, NULL on failure.
-DictionaryEntry* dictionaryAddEntry_(Dictionary **dictionary, const volatile void *key,
+DictionaryEntry* dictionaryAddEntry_(Dictionary *dictionary, const volatile void *key,
   const volatile void *value, TypeDescriptor *type, ...
 ) {
   char *dictionaryString = NULL;
@@ -91,56 +93,53 @@ DictionaryEntry* dictionaryAddEntry_(Dictionary **dictionary, const volatile voi
     return NULL;
   }
   
-  dictionaryString = dictionaryToString(*dictionary);
-  const char *keyString = NULL;
-  (void) keyString; // In case logging is not enabled.
-  if (*dictionary == NULL) {
-    keyString = type->name;
-  } else if (((*dictionary)->keyType == typeString)
-    || ((*dictionary)->keyType == typeStringNoCopy)
-    || ((*dictionary)->keyType == typeStringCi)
-  ) {
-    keyString = (const char*) key;
-  } else {
-    keyString = (*dictionary)->keyType->name;
-  }
-  printLog(TRACE, "ENTER dictionaryAddEntry(dictionary={%s}, key=\"%s\", value=\"%s\")\n",
-    dictionaryString, keyString, (type == typeString) ? (char*) value : type->name);
-  
-  // Make sure the list is good.
-  if (*dictionary == NULL) {
-    *dictionary = rbTreeCreate(typeString);
-    if (*dictionary == NULL) {
-      printLog(ERR,  "Could not create hash table for dictionary.\n");
-      printLog(TRACE,
-        "EXIT dictionaryAddEntry(dictionary={%s}, key=\"%s\", value=\"%s\") = {NULL}\n",
-        dictionaryString,
-        ((*dictionary)->keyType == typeString) ? (char*) key : (*dictionary)->keyType->name,
-        (type == typeString) ? (char*) value : type->name);
-      dictionaryString = stringDestroy(dictionaryString);
-      return NULL;
+  if (shouldLog(TRACE)) {
+    dictionaryString = dictionaryToString(dictionary);
+    const char *keyString = NULL;
+    (void) keyString; // In case logging is not enabled.
+    if ((dictionary->keyType == typeString)
+      || (dictionary->keyType == typeStringNoCopy)
+      || (dictionary->keyType == typeStringCi)
+    ) {
+      keyString = (const char*) key;
+    } else {
+      keyString = dictionary->keyType->name;
     }
+    printLog(TRACE,
+      "ENTER dictionaryAddEntry(dictionary={%s}, key=\"%s\", value=\"%s\")\n",
+      dictionaryString, keyString,
+      (type == typeString) ? (char*) value : type->name);
   }
   
-  DictionaryEntry *returnValue = rbTreeAddEntry(*dictionary, key, value, type);
+  DictionaryEntry *returnValue = rbTreeAddEntry(dictionary, key, value, type);
   if (returnValue == NULL) {
     printLog(ERR, "Could not add entry into dictionary.\n");
-    printLog(TRACE,
-      "EXIT dictionaryAddEntry(dictionary={%s}, key=\"%s\", value=\"%s\") = {NULL}\n",
-      dictionaryString,
-      ((*dictionary)->keyType == typeString) ? (char*) key : (*dictionary)->keyType->name,
-      (type == typeString) ? (char*) value : type->name);
-    dictionaryString = stringDestroy(dictionaryString);
+    if (shouldLog(TRACE)) {
+      printLog(TRACE,
+        "EXIT dictionaryAddEntry(dictionary={%s}, key=\"%s\", value=\"%s\") "
+          "= {NULL}\n",
+        dictionaryString,
+        (dictionary->keyType == typeString)
+          ? (char*) key
+          : dictionary->keyType->name,
+        (type == typeString) ? (char*) value : type->name);
+      dictionaryString = stringDestroy(dictionaryString);
+    }
     return NULL;
   }
   
-  printLog(TRACE,
-    "EXIT dictionaryAddEntry(dictionary={%s}, key=\"%s\", value=\"%s\") = {%p}\n",
-    dictionaryString,
-    ((*dictionary)->keyType == typeString) ? (char*) key : (*dictionary)->keyType->name,
-    (type == typeString) ? (char*) value : type->name,
-    returnValue);
-  dictionaryString = stringDestroy(dictionaryString);
+  if (shouldLog(TRACE)) {
+    printLog(TRACE,
+      "EXIT dictionaryAddEntry(dictionary={%s}, key=\"%s\", value=\"%s\") "
+        "= {%p}\n",
+      dictionaryString,
+      (dictionary->keyType == typeString)
+        ? (char*) key
+        : dictionary->keyType->name,
+      (type == typeString) ? (char*) value : type->name,
+      returnValue);
+    dictionaryString = stringDestroy(dictionaryString);
+  }
   return returnValue;
 }
 
@@ -150,7 +149,7 @@ DictionaryEntry* dictionaryAddEntry_(Dictionary **dictionary, const volatile voi
 // dictionary.                                                               //
 ///////////////////////////////////////////////////////////////////////////////
 
-/// @fn int keyValueStringToDictionaryEntry(Dictionary **kvList, char *inputString)
+/// @fn int keyValueStringToDictionaryEntry(Dictionary *kvList, char *inputString)
 ///
 /// @brief Convert an '='-delimited key-value string to a DictionaryEntry.
 ///
@@ -158,7 +157,7 @@ DictionaryEntry* dictionaryAddEntry_(Dictionary **dictionary, const volatile voi
 /// @param inputString is the string to parse.  It is not modified.
 ///
 /// @return Returns 0 on success, any other value is failure
-int keyValueStringToDictionaryEntry(Dictionary **kvList, char *inputString) {
+int keyValueStringToDictionaryEntry(Dictionary *kvList, char *inputString) {
   int returnValue = 0;
   printLog(TRACE, "ENTER keyValueStringToDictionaryEntry(inputString=\"%s\")\n", inputString);
   
@@ -208,7 +207,7 @@ Dictionary *kvStringToDictionary(const char *inputString,
     char *separatorAt = strstr(stringCopy, separator);
     while (separatorAt != NULL) {
       *separatorAt = '\0';
-      if (keyValueStringToDictionaryEntry(&returnValue, stringCopy) != 0) {
+      if (keyValueStringToDictionaryEntry(returnValue, stringCopy) != 0) {
         printLog(ERR, "Could not add \"%s\" to new Dictionary.\n",
           stringCopy);
       }
@@ -216,7 +215,7 @@ Dictionary *kvStringToDictionary(const char *inputString,
       stringCopy = separatorAt;
       separatorAt = strstr(separatorAt, separator);
     }
-    if (keyValueStringToDictionaryEntry(&returnValue, stringCopy) != 0) {
+    if (keyValueStringToDictionaryEntry(returnValue, stringCopy) != 0) {
       printLog(ERR, "Could not add \"%s\" to new Dictionary.\n",
         stringCopy);
     }
@@ -244,7 +243,8 @@ Dictionary *parseCommandLine(int argc, char **argv) {
   
   printLog(TRACE, "ENTER parseCommandLine(argc=%d, argv=%p)\n", argc, argv);
   
-  dictionaryAddEntry(&returnValue, "programPath", argv[0]);
+  returnValue = dictionaryCreate(typeString);
+  dictionaryAddEntry(returnValue, "programPath", argv[0]);
   
   if (argc > 1) {
     // There are arguments to parse.  Parse them.
@@ -260,16 +260,16 @@ Dictionary *parseCommandLine(int argc, char **argv) {
             char *value = strchr(name, '=');
             *value = '\0';
             value++;
-            dictionaryAddEntry(&returnValue, name, value);
+            dictionaryAddEntry(returnValue, name, value);
           } else if (i < argc - 1 && argv[i + 1][0] != '-') {
             // The next argument is the value for the argument.
             char *value = argv[i + 1];
-            dictionaryAddEntry(&returnValue, name, value);
+            dictionaryAddEntry(returnValue, name, value);
             i++; // Skip over the value for the next pass.
           } else {
             // Argument represents a boolean.
             const char *value = "";
-            dictionaryAddEntry(&returnValue, name, value);
+            dictionaryAddEntry(returnValue, name, value);
           }
           name = stringDestroy(name);
         } else {
@@ -281,18 +281,18 @@ Dictionary *parseCommandLine(int argc, char **argv) {
           const char *value = "";
           for (int j = 1; j < arglen - 1; j++) {
             name[0] = argv[i][j];
-            dictionaryAddEntry(&returnValue, name, value);
+            dictionaryAddEntry(returnValue, name, value);
           }
           // We've taken care of all but the last flag in this argument.
           name[0] = argv[i][arglen - 1];
           if ((i == argc - 1) || (argv[i + 1][0] == '-')) {
             // Next argument is named or does not exist.
             // This flag is a boolean.
-            dictionaryAddEntry(&returnValue, name, value);
+            dictionaryAddEntry(returnValue, name, value);
           } else {
             // Next argument is unnamed.  Use it as the value.
             value = argv[i + 1];
-            dictionaryAddEntry(&returnValue, name, value);
+            dictionaryAddEntry(returnValue, name, value);
             i++; // Skip over the value for the next pass.
           }
         }
@@ -300,7 +300,7 @@ Dictionary *parseCommandLine(int argc, char **argv) {
         char *name = NULL;
         char *value = argv[i];
         if (asprintf(&name, "unnamedParameter%u", unnamedParameterIndex++) > 0) {
-          dictionaryAddEntry(&returnValue, name, value);
+          dictionaryAddEntry(returnValue, name, value);
           name = stringDestroy(name);
         }
       }

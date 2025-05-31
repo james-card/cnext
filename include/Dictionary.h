@@ -58,7 +58,7 @@ extern "C"
 #define jsonToDictionary jsonToRedBlackTree
 
 // Helper functions.
-int keyValueStringToDictionaryEntry(Dictionary **dictionary, char *inputString);
+int keyValueStringToDictionaryEntry(Dictionary *dictionary, char *inputString);
 Dictionary* kvStringToDictionary(const char *inputString,
   const char *separator);
 Dictionary* parseCommandLine(int argc, char **argv);
@@ -68,7 +68,7 @@ char* getUserValue(Dictionary *args, const char *argName, const char *prompt,
 // Dictionary functions.
 char* dictionaryToString(const Dictionary *dictionary);
 #define dictionaryAdd rbTreeAddEntry
-DictionaryEntry* dictionaryAddEntry_(Dictionary **dictionary, const volatile void *key,
+DictionaryEntry* dictionaryAddEntry_(Dictionary *dictionary, const volatile void *key,
   const volatile void *value, TypeDescriptor *type, ...);
 #define dictionaryAddEntry(dictionary, key, value, ...) \
   dictionaryAddEntry_(dictionary, key, value, ##__VA_ARGS__, typeString)
