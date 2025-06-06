@@ -710,6 +710,24 @@ void dirent_set_errno(int error)
 
 #endif // _WIN32
 
+/// @fn bool isDirectory(const char *path)
+///
+/// @brief Determine whether or not a provided path is a directory.
+///
+/// @path The path to the directory.  This may be either an absolute path or
+///   a path relative to the running program's current working directory.
+///
+/// @return Returns true if the provided path can be determined to be a
+/// directory, false otherwise.
+bool isDirectory(const char *path) {
+  DIR *dir = opendir(path);
+  if (dir == NULL) {
+    return false;
+  }
+  closedir(dir); dir = NULL;
+  return true;
+}
+
 /// @fn int mkpath(const char *path, mode_t mode)
 ///
 /// @param path The full path to create.  Trailing '/' is optional.
@@ -911,7 +929,7 @@ char** getDirectoryEntries(const char *path) {
   return returnValue;
 }
 
-/// @fn char **selectDirectoryEntries(const char *path, const char **directoryEntries, DirectoryEntryType entryType)
+/// @fn char** selectDirectoryEntries(const char *path, const char **directoryEntries, DirectoryEntryType entryType)
 ///
 /// @brief Select only the directory entries that are interesting.
 ///
@@ -920,7 +938,7 @@ char** getDirectoryEntries(const char *path) {
 ///   directory.
 /// @param entryType A DirectoryEntryType value indicating the kind of entry
 ///   of interest.  Only entries of this type will be returned.
-char **selectDirectoryEntries(const char *path, const char **directoryEntries,
+char** selectDirectoryEntries(const char *path, const char **directoryEntries,
   DirectoryEntryType entryType
 ) {
   if ((path == NULL) || (*path == '\0')) {

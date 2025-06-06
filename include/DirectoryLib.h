@@ -45,6 +45,8 @@
 extern "C" {
 #endif
 
+#include <stdbool.h>
+
 #ifdef _WIN32
 /*
  * Dirent interface for Microsoft Visual Studio
@@ -419,11 +421,12 @@ typedef enum DirectoryEntryType {
   NUM_ENTRY_TYPES
 } DirectoryEntryType;
 
+bool isDirectory(const char *path);
 int mkpath(const char *path, int mode);
 int rmdirRecursive(const char *directory);
 char** destroyDirectoryEntries(char **directoryArray);
 char** getDirectoryEntries(const char *path);
-char **selectDirectoryEntries(const char *path, const char **directoryEntries,
+char** selectDirectoryEntries(const char *path, const char **directoryEntries,
   DirectoryEntryType entryType);
 char** getDirectoryFiles(const char *path);
 char** getDirectoryDirectories(const char *path);
