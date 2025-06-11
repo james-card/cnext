@@ -95,6 +95,9 @@ void thrd_msg_q_storage_init(void) {
     exit(1);
   }
   
+  // We have to create a message queue for ourselves, otherwise, none of the
+  // child threads will be able to talk to us.
+  thrd_msg_q_create();
   return;
 }
 

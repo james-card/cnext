@@ -109,7 +109,7 @@ static inline i64 utcTimestampToTime(const char *timestamp) {
 
 /// @fn static inline i64 localTimestampToTime(const char *timestamp)
 ///
-/// @brief Convert a UTC timestamp in the format "YYYY-MM-DD HH:MM:SS" to a
+/// @brief Convert a local timestamp in the format "YYYY-MM-DD HH:MM:SS" to a
 /// time_t value.
 ///
 /// @param timestamp The string containing the timestamp to convert.

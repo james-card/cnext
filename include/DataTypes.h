@@ -691,24 +691,6 @@ int byteSwapIfNotBigEndian(volatile void *value, size_t size);
     ? byteSwapIfNotBigEndian(value, size) \
     : TRINARY_ZERO
 
-bool boolUnitTest();
-bool u8UnitTest();
-bool u16UnitTest();
-bool u32UnitTest();
-bool u64UnitTest();
-bool i8UnitTest();
-bool i16UnitTest();
-bool i32UnitTest();
-bool i64UnitTest();
-bool floatUnitTest();
-bool doubleUnitTest();
-bool longDoubleUnitTest();
-bool stringUnitTest();
-bool pointerUnitTest();
-bool bytesUnitTest();
-bool structUnitTest();
-bool valueToStringUnitTest();
-
 extern u16 DsMarker;
 extern u32 DsVersion;
 
