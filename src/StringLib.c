@@ -3741,3 +3741,27 @@ bool dataEndsWith(const volatile void *haystack, u64 haystackLength,
   return returnValue;
 }
 
+/// @fn ssize_t ungets(const char *str, FILE *stream)
+///
+/// @brief Un-get a string from a FILE stream buffer.
+///
+/// @param str The string to push into the FILE stream buffer.
+/// @param stream A pointer to the FILE stream to push into.
+///
+/// @return Returns the number of characters pushed into the FILE stream buffer
+/// on success, EOF on failure.
+ssize_t ungets(const char *str, FILE *stream) {
+  if ((str == NULL) || (stream == NULL)) {
+    return EOF;
+  }
+  
+  ssize_t length = (ssize_t) strlen(str);
+  for (ssize_t ii = length - 1; ii >= 0; ii--) {
+    if (ungetc(str[ii], stream) == EOF) {
+      return EOF;
+    }
+  }
+  
+  return length;
+}
+

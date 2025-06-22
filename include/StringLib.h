@@ -213,6 +213,7 @@ bool dataEndsWith(const volatile void *haystack, u64 haystackLength,
   dataEndsWith(bytes1, bytesLength(bytes1), str2, strlen(str(str2)))
 #define bytesEndsWithBytes(bytes1, bytes2) \
   dataEndsWith(bytes1, bytesLength(bytes1), bytes2, bytesLength(bytes2))
+ssize_t ungets(const char *str, FILE *stream);
 
 /// @fn static inline char* getToken(char *start, char **end, const char *delimiters)
 ///
