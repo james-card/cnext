@@ -6,6 +6,7 @@ OBJ_FILES := \
     $(OBJ_DIR)/CoroutinesUnitTest.o \
     $(OBJ_DIR)/DataTypesUnitTest.o \
     $(OBJ_DIR)/DictionaryUnitTest.o \
+    $(OBJ_DIR)/DirectoryLibUnitTest.o \
 
 INCLUDES := \
     -I../include \
