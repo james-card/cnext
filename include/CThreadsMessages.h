@@ -51,7 +51,7 @@ msg_t* thrd_msg_q_peek(void);
 msg_t* thrd_msg_q_pop(void);
 msg_t* thrd_msg_q_pop_type(int type);
 msg_t* thrd_msg_q_wait(const struct timespec *ts);
-msg_t* thrd_msg_q_wait_for_type(int type, const struct timespec *ts);
+msg_t* thrd_msg_q_wait_for_type(int64_t type, const struct timespec *ts);
 int thrd_msg_q_push(thrd_t thr, msg_t *msg);
 
 #ifdef __cplusplus

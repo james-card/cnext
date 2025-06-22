@@ -211,7 +211,7 @@ msg_t* thrd_msg_q_pop_type(int type) {
 
 // Underlying worker function in Messages.c.  Expose the prototype here so that
 // we can bypass a layer of abstraction into the Messages library.
-msg_t* msg_q_wait_for_type_(msg_q_t *queue, int *type,
+msg_t* msg_q_wait_for_type_(msg_q_t *queue, int64_t *type,
   const struct timespec *ts);
 
 /// @fn msg_t* thrd_msg_q_wait(const struct timespec *ts)
@@ -232,7 +232,7 @@ msg_t* thrd_msg_q_wait(const struct timespec *ts) {
   return msg_q_wait_for_type_(queue, NULL, ts);
 }
 
-/// @fn msg_t* thrd_msg_q_wait_for_type(int type, const struct timespec *ts)
+/// @fn msg_t* thrd_msg_q_wait_for_type(int64_t type, const struct timespec *ts)
 ///
 /// @brief Wait until there is a message of a specified type in the queue or
 /// until a specified has been reached.  If there is a message of the specified
@@ -246,7 +246,7 @@ msg_t* thrd_msg_q_wait(const struct timespec *ts) {
 /// @return Returns the first message of the provided type if one is available
 /// before the specified time.  Returns NULL if no such message is available
 /// within that time period or if an error occurrs.
-msg_t* thrd_msg_q_wait_for_type(int type, const struct timespec *ts) {
+msg_t* thrd_msg_q_wait_for_type(int64_t type, const struct timespec *ts) {
   msg_q_t *queue = get_thread_thrd_msg_q();
   return msg_q_wait_for_type_(queue, &type, ts);
 }
