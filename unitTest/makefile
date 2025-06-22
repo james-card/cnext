@@ -6,5 +6,3 @@ MAKEFILE    := makefile
 
 include include.mk
 
-clean:
-	$(REMOVE) $(OBJ_DIR)
