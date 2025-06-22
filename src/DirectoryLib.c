@@ -720,11 +720,16 @@ void dirent_set_errno(int error)
 /// @return Returns true if the provided path can be determined to be a
 /// directory, false otherwise.
 bool isDirectory(const char *path) {
+  if (path == NULL) {
+    return false;
+  }
+  
   DIR *dir = opendir(path);
   if (dir == NULL) {
     return false;
   }
   closedir(dir); dir = NULL;
+  
   return true;
 }
 
@@ -737,6 +742,10 @@ bool isDirectory(const char *path) {
 /// @return Returns 0 on success, the value of errno on failure.
 int mkpath(const char *path, int mode) {
   int returnValue = 0;
+  
+  if (path == NULL) {
+    return EINVAL;
+  }
   
   if (mkdir(path, mode) != 0) {
     if (errno == ENOENT) {
