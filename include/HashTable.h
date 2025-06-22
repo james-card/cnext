@@ -101,7 +101,6 @@ int htCompare(const HashTable *htA, const HashTable *htB);
 #define htToJson(table) listToJson((List*) table)
 HashTable* jsonToHashTable(const char *jsonText, long long int *position);
 i32 htClear(HashTable *table);
-bool hashTableUnitTest();
 
 /// @def htSetKeyType
 ///
