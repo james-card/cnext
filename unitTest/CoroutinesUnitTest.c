@@ -1110,7 +1110,7 @@ bool coroutinesUnitTest(void) {
   Coroutine threadCoroutine;
   
   int result = coroutineConfig(&globalCoroutine, 
-    COROUTINE_DEFAULT_STACK_SIZE, testStateData,
+    COROUTINE_DEFAULT_STACK_SIZE + 512 + 256 + 128 + 64 + 32, testStateData,
     testComutexUnlockCallback, testCoconditionSignalCallback);
   if (result != coroutineSuccess) {
     printLog(ERR, "Failed to configure coroutine system: %d\n", result);
@@ -1191,7 +1191,7 @@ bool coroutinesUnitTest(void) {
       // Test threading support functions if available
       coroutineSetThreadingSupportEnabled(true);
       result = coroutineConfig(&threadCoroutine, 
-        COROUTINE_DEFAULT_STACK_SIZE, testStateData,
+        COROUTINE_DEFAULT_STACK_SIZE + 512 + 256 + 128 + 64 + 32, testStateData,
         testComutexUnlockCallback, testCoconditionSignalCallback);
       if (result != coroutineSuccess) {
         printLog(ERR, "Failed to configure coroutine system: %d\n", result);

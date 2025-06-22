@@ -664,7 +664,7 @@ bool testMessageWaitingAndSync(void) {
 ///
 /// @return true if test passes, false otherwise.
 ///
-bool testNullParameterHandling(void) {
+bool testCThreadsMessagesNullParameterHandling(void) {
   printLog(DEBUG, "Testing NULL parameter handling...");
   
   // Test msg_destroy with NULL
@@ -1277,7 +1277,7 @@ bool cThreadsMessagesUnitTest(void) {
   }
   
   // New NULL parameter handling tests
-  if (!testNullParameterHandling()) {
+  if (!testCThreadsMessagesNullParameterHandling()) {
     printLog(ERR, "NULL parameter handling test FAILED");
     allTestsPassed = false;
   }

@@ -41,113 +41,45 @@
 #define logFile stderr
 #endif
 
-int (*dictionaryRemove)(Dictionary*, const char*)
-  = (int (*)(Dictionary*, const char*)) rbTreeRemove;
+// Dictionary functions.
+Dictionary* (*jsonToDictionary)(const char *jsonText, long long int *position)
+  = jsonToRedBlackTree;
+char* (*dictionaryToString)(const Dictionary *dictionary)
+  = (char* (*)(const Dictionary*)) listToString;
+Dictionary* (*dictionaryCreate_)(TypeDescriptor *type, bool disableThreadSafety,
+  ...) = rbTreeCreate_;
+DictionaryEntry* (*dictionaryAddEntry_)(Dictionary *dictionary,
+  const volatile void *key, const volatile void *value, TypeDescriptor *type,
+  ...) = rbTreeAddEntry_;
+int (*dictionaryRemove)(Dictionary*, const volatile void*)
+  = (int (*)(Dictionary*, const volatile void*)) rbTreeRemove;
 DictionaryEntry* (*dictionaryGetEntry)(const Dictionary*, const volatile void*)
-  = (DictionaryEntry* (*)(const Dictionary*, const volatile void*)) rbTreeGetEntry;
-int (*dictionaryCompare)(const Dictionary *dictionaryA, const Dictionary *dictionaryB)
-  = rbTreeCompare;
-
-/// @fn Dictionary *dictionaryCreate(TypeDescriptor *type)
-///
-/// @brief Constructor for a dictionary.
-///
-/// @param type The TypeDescrptor for the Dictionary keys.
-///
-/// @return Returns a pointer to a newly-constructed Dictionary on success,
-/// NULL on failure.
-Dictionary *dictionaryCreate(TypeDescriptor *type) {
-  if (type == NULL) {
-    type = typeString;
-  }
-  
-  printLog(TRACE, "ENTER dictionaryCreate(type=%s)\n", type->name);
-  
-  Dictionary *returnValue = rbTreeCreate(type);
-  
-  printLog(TRACE, "EXIT dictionaryCreate(type=%s) = {%p}\n",
-    type->name, returnValue);
-  return returnValue;
-}
-
-/// @fn DictionaryEntry* dictionaryAddEntry_(Dictionary *dictionary, const volatile void *key, const volatile void *value, TypeDescriptor *type, ...)
-///
-/// @brief Adds a DictionaryEntry to a Dictionary.
-///
-/// @param dictionary is a pointer to the Dictionary to add the new
-///   DictionaryEntry to.
-/// @param key is the key of the DictionaryEntry to add.
-/// @param value is the value of the DictionaryEntry to add.
-///
-/// @note the dictionaryAddEntry macro that wraps this function provides
-/// typeString as the type by default.
-///
-/// @return Returns a pointer to a new DictionaryEntry on success, NULL on failure.
-DictionaryEntry* dictionaryAddEntry_(Dictionary *dictionary, const volatile void *key,
-  const volatile void *value, TypeDescriptor *type, ...
-) {
-  char *dictionaryString = NULL;
-  
-  if (dictionary == NULL) {
-    printLog(ERR, "NULL dictionary provided.\n");
-    return NULL;
-  }
-  
-  if (shouldLog(TRACE)) {
-    dictionaryString = dictionaryToString(dictionary);
-    const char *keyString = NULL;
-    (void) keyString; // In case logging is not enabled.
-    if ((dictionary->keyType == typeString)
-      || (dictionary->keyType == typeStringNoCopy)
-      || (dictionary->keyType == typeStringCi)
-    ) {
-      keyString = (const char*) key;
-    } else {
-      keyString = dictionary->keyType->name;
-    }
-    printLog(TRACE,
-      "ENTER dictionaryAddEntry(dictionary={%s}, key=\"%s\", value=\"%s\")\n",
-      dictionaryString, keyString,
-      (type == typeString) ? (char*) value : type->name);
-  }
-  
-  DictionaryEntry *returnValue = rbTreeAddEntry(dictionary, key, value, type);
-  if (returnValue == NULL) {
-    printLog(ERR, "Could not add entry into dictionary.\n");
-    if (shouldLog(TRACE)) {
-      printLog(TRACE,
-        "EXIT dictionaryAddEntry(dictionary={%s}, key=\"%s\", value=\"%s\") "
-          "= {NULL}\n",
-        dictionaryString,
-        (dictionary->keyType == typeString)
-          ? (char*) key
-          : dictionary->keyType->name,
-        (type == typeString) ? (char*) value : type->name);
-      dictionaryString = stringDestroy(dictionaryString);
-    }
-    return NULL;
-  }
-  
-  if (shouldLog(TRACE)) {
-    printLog(TRACE,
-      "EXIT dictionaryAddEntry(dictionary={%s}, key=\"%s\", value=\"%s\") "
-        "= {%p}\n",
-      dictionaryString,
-      (dictionary->keyType == typeString)
-        ? (char*) key
-        : dictionary->keyType->name,
-      (type == typeString) ? (char*) value : type->name,
-      returnValue);
-    dictionaryString = stringDestroy(dictionaryString);
-  }
-  return returnValue;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Code below this point uses only dictionary-based functions and does not   //
-// require modification based on the underlying data structure of the        //
-// dictionary.                                                               //
-///////////////////////////////////////////////////////////////////////////////
+  = (DictionaryEntry* (*)(const Dictionary*, const volatile void*))
+  rbTreeGetEntry;
+int (*dictionaryCompare)(const Dictionary *dictionaryA,
+  const Dictionary *dictionaryB) = rbTreeCompare;
+Dictionary* (*dictionaryDestroy)(Dictionary*) = rbTreeDestroy;
+Bytes (*dictionaryToXml_)(
+  const Dictionary *dictionary, const char *elementName, bool indent, ...)
+  = (Bytes (*)(const Dictionary *, const char *, bool, ...)) listToXml_;
+void* (*dictionaryGetValue)(
+  const Dictionary *dictionary, const volatile void *key) = rbTreeGetValue;
+List* (*dictionaryToList)(Dictionary *dictionary)
+  = (List* (*)(Dictionary*)) listCopy;
+Bytes (*dictionaryToJson)(const Dictionary *dictionary)
+  = (Bytes (*)(const Dictionary *)) listToJson;
+char* (*dictionaryToKeyValueString)(const Dictionary *dictionary,
+  const char *separator)
+  = (char* (*)(const Dictionary*, const char*)) listToKeyValueString;
+Dictionary* (*dictionaryCopy)(const Dictionary *dictionary) = rbTreeCopy;
+Dictionary* (*listToDictionary)(const List *list) = listToRbTree;
+Dictionary* (*dictionaryFromBlob_)(const volatile void *array, u64 *length,
+  bool inPlaceData, bool disableThreadSafety, ...) = rbTreeFromBlob_;
+Bytes (*dictionaryToBlob)(const Dictionary *dictionary)
+  = (Bytes (*)(const Dictionary*)) listToBlob;
+Dictionary* (*xmlToDictionary)(const char *inputData) = xmlToRedBlackTree;
+int (*dictionaryDestroyNode)(Dictionary *dictionary, DictionaryEntry *node)
+  = rbTreeDestroyNode;
 
 /// @fn int keyValueStringToDictionaryEntry(Dictionary *kvList, char *inputString)
 ///
@@ -349,33 +281,5 @@ char* getUserValue(Dictionary *args, const char *argName, const char *prompt,
   }
 
   return returnValue;
-}
-
-/// @fn char* dictionaryToString(const Dictionary *dictionary)
-///
-/// @brief Wrapper function to create a string representation of a Dictionary.
-/// This is a wrapper function instead of a function pointer because C doesn't
-/// allow initializers to other function pointers from function pointers.
-///
-/// @param dictionary A pointer to a Dictionary object to convert to a string.
-///
-/// @return Returns a string representation of the Dictionary on success, NULL
-/// on failure.
-char* dictionaryToString(const Dictionary *dictionary) {
-  return listToString((List*) dictionary);
-}
-
-/// @fn void* dictionaryGetValue(const Dictionary *dictionary, const volatile void *key)
-///
-/// @brief Wrapper function to get a value from a Dictionary.
-/// This is a wrapper function instead of a function pointer because C doesn't
-/// allow initializers to other function pointers from function pointers.
-///
-/// @param dictionary A pointer to a Dictionary object to search.
-/// @param key The key of the value to search for.
-///
-/// @return Returns a pointer to the located value on success, NULL on failure.
-void* dictionaryGetValue(const Dictionary *dictionary, const volatile void *key) {
-  return rbTreeGetValue(dictionary, key);
 }
 

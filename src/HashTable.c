@@ -359,9 +359,9 @@ HashNode *htAddEntry_(HashTable *table, const volatile void *key,
     next = table->table[index]->tail->next;
   }
   
-  RedBlackNode *node = rbInsert(table->table[index], key, value, type);
+  RedBlackNode *node = rbTreeAddEntry(table->table[index], key, value, type);
   if (node == NULL) {
-    printLog(ERR, "NULL node returned from rbInsert.\n");
+    printLog(ERR, "NULL node returned from rbTreeAddEntry.\n");
     if (table->lock != NULL) {
       mtx_unlock(table->lock);
     }

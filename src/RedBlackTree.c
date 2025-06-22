@@ -227,7 +227,7 @@ void rightRotate(RedBlackTree *tree, RedBlackNode *y) {
 /// Uses the algorithm described in _Introduction_To_Algorithms_ by
 ///   Cormen et al.
 ///
-/// @note This funciton is only intended to be called by the rbInsert function
+/// @note This funciton is only intended to be called by the rbTreeAddEntry function
 ///   and not by the user.
 ///
 /// @param tree is a pointer to the RedBlackTree to insert into.
@@ -239,7 +239,7 @@ void rightRotate(RedBlackTree *tree, RedBlackNode *y) {
 void treeInsertHelp(RedBlackTree *tree, RedBlackNode *z) {
   printLog(TRACE, "ENTER treeInsertHelp(tree=%p, z=%p)\n", tree, z);
   
-  // This function should only be called by rbInsert (see above)
+  // This function should only be called by rbTreeAddEntry (see above)
   RedBlackNode *x = NULL;
   RedBlackNode *y = NULL;
   RedBlackNode *nil = tree->nil;
@@ -269,7 +269,7 @@ void treeInsertHelp(RedBlackTree *tree, RedBlackNode *z) {
   printLog(TRACE, "EXIT treeInsertHelp(tree=%p, z=%p)\n", tree, z);
 }
 
-/// @fn RedBlackNode *rbInsert_(RedBlackTree *tree, const volatile void *key, const volatile void *value, TypeDescriptor *type, ...)
+/// @fn RedBlackNode *rbTreeAddEntry_(RedBlackTree *tree, const volatile void *key, const volatile void *value, TypeDescriptor *type, ...)
 ///
 /// @brief Insert a new key/value pair into a RedBlackTree.
 ///
@@ -291,10 +291,10 @@ void treeInsertHelp(RedBlackTree *tree, RedBlackNode *z) {
 ///   What this means is if another data structure stores this
 ///   pointer then the tree does not need to be searched when this
 ///   is to be deleted.
-RedBlackNode *rbInsert_(RedBlackTree *tree, const volatile void *key,
+RedBlackNode *rbTreeAddEntry_(RedBlackTree *tree, const volatile void *key,
   const volatile void *value, TypeDescriptor *type, ...
 ) {
-  printLog(TRACE, "ENTER rbInsert(tree=%p, key=%p, value=%p, type=%s)\n",
+  printLog(TRACE, "ENTER rbTreeAddEntry(tree=%p, key=%p, value=%p, type=%s)\n",
     tree, key, value, (type != NULL) ? type->name : "NULL");
   RedBlackNode *x = NULL;
   RedBlackNode *y = NULL;
@@ -305,14 +305,14 @@ RedBlackNode *rbInsert_(RedBlackTree *tree, const volatile void *key,
   if (tree == NULL) {
     printLog(ERR, "NULL tree provided.\n");
     printLog(TRACE,
-      "EXIT rbInsert(tree=%p, key=%p, value=%p, type=%s) = {%p}\n",
+      "EXIT rbTreeAddEntry(tree=%p, key=%p, value=%p, type=%s) = {%p}\n",
       tree, key, value, (type != NULL) ? type->name : "NULL", (void*) NULL);
     return NULL;
   }
   if (key == NULL) {
     printLog(ERR, "NULL key provided.\n");
     printLog(TRACE,
-      "EXIT rbInsert(tree=%p, key=%p, value=%p, type=%s) = {%p}\n",
+      "EXIT rbTreeAddEntry(tree=%p, key=%p, value=%p, type=%s) = {%p}\n",
       tree, key, value, (type != NULL) ? type->name : "NULL", (void*) NULL);
     return NULL;
   }
@@ -416,17 +416,14 @@ RedBlackNode *rbInsert_(RedBlackTree *tree, const volatile void *key,
   }
   
 #ifdef DEBUG_ASSERT
-  rbAssert((tree->nil->red == false), "nil not black in rbInsert");
-  rbAssert((tree->root->red == false), "root not black in rbInsert");
+  rbAssert((tree->nil->red == false), "nil not black in rbTreeAddEntry");
+  rbAssert((tree->root->red == false), "root not black in rbTreeAddEntry");
 #endif
   
-  printLog(TRACE, "EXIT rbInsert(tree=%p, key=%p, value=%p, type=%s) = {%p}\n",
+  printLog(TRACE, "EXIT rbTreeAddEntry(tree=%p, key=%p, value=%p, type=%s) = {%p}\n",
     tree, key, value, type->name, newNode);
   return newNode;
 }
-
-RedBlackNode* (*rbTreeAddEntry_)(RedBlackTree *tree, const volatile void *key,
-  const volatile void *value, TypeDescriptor *type, ...) = rbInsert_;
 
 /// @fn RedBlackNode *rbTreeSuccessor(RedBlackTree *tree, RedBlackNode *x)
 ///
@@ -1222,7 +1219,7 @@ RedBlackTree *rbTreeCopy(const RedBlackTree *tree) {
   }
   
   for (node = tree->head; node != tree->tail->next; node = node->next) {
-    rbInsert(treeCopy, node->key, node->value, node->type);
+    rbTreeAddEntry(treeCopy, node->key, node->value, node->type);
   }
   
   if (tree->lock != NULL) {
@@ -1496,9 +1493,9 @@ RedBlackTree* listToRbTree(const List *list) {
   for (ListNode *node = list->head; node != NULL; node = node->next) {
     if (getIndexFromTypeDescriptor(node->type) < listIndex) {
       // The usual case, so put it first.
-      rbInsert(tree, node->key, node->value, node->type);
+      rbTreeAddEntry(tree, node->key, node->value, node->type);
     } else {
-      rbInsert(tree, node->key, listToRbTree((List*) node->value),
+      rbTreeAddEntry(tree, node->key, listToRbTree((List*) node->value),
         typeRedBlackTreeNoCopy)->type = typeRedBlackTree;
     }
   }
@@ -1793,19 +1790,19 @@ bool redBlackTreeUnitTest() { \
     return false; \
   } \
  \
-  node = rbInsert(NULL, NULL, NULL, NULL); \
+  node = rbTreeAddEntry(NULL, NULL, NULL, NULL); \
   if (node != NULL) { \
-    printLog(ERR, "Expected NULL from rbInsert, got %p\n", node); \
+    printLog(ERR, "Expected NULL from rbTreeAddEntry, got %p\n", node); \
     return false; \
   } \
-  node = rbInsert(NULL, "key", NULL, NULL); \
+  node = rbTreeAddEntry(NULL, "key", NULL, NULL); \
   if (node != NULL) { \
-    printLog(ERR, "Expected NULL from rbInsert, got %p\n", node); \
+    printLog(ERR, "Expected NULL from rbTreeAddEntry, got %p\n", node); \
     return false; \
   } \
-  node = rbInsert(NULL, "key", "value", NULL); \
+  node = rbTreeAddEntry(NULL, "key", "value", NULL); \
   if (node != NULL) { \
-    printLog(ERR, "Expected NULL from rbInsert, got %p\n", node); \
+    printLog(ERR, "Expected NULL from rbTreeAddEntry, got %p\n", node); \
     return false; \
   } \
  \
@@ -1896,9 +1893,9 @@ bool redBlackTreeUnitTest() { \
     return false; \
   } \
  \
-  node = rbInsert(tree, NULL, NULL, NULL); \
+  node = rbTreeAddEntry(tree, NULL, NULL, NULL); \
   if (node != NULL) { \
-    printLog(ERR, "Expected NULL from rbInsert, got %p\n", node); \
+    printLog(ERR, "Expected NULL from rbTreeAddEntry, got %p\n", node); \
     return false; \
   } \
  \
@@ -2001,9 +1998,9 @@ bool redBlackTreeUnitTest() { \
  \
   tree2 = (RedBlackTree*) rbTreeDestroy(tree2); \
  \
-  rbInsert(tree, "key2", "value2"); \
-  rbInsert(tree, "key1", "value1"); \
-  rbInsert(tree, "key3", "value3", typeString); \
+  rbTreeAddEntry(tree, "key2", "value2"); \
+  rbTreeAddEntry(tree, "key1", "value1"); \
+  rbTreeAddEntry(tree, "key3", "value3", typeString); \
  \
   tree2 = rbTreeCopy(tree); \
   if (rbTreeCompare(tree, tree2) != 0) { \
@@ -2140,10 +2137,10 @@ bool redBlackTreeUnitTest() { \
  \
   tree = rbTreeCreate(typeI32); \
   for (int i = 1; i < 100; i++) { \
-    rbInsert(tree, &i, &i); \
+    rbTreeAddEntry(tree, &i, &i); \
   } \
   for (int i = -1; i > -100; i--) { \
-    rbInsert(tree, &i, &i); \
+    rbTreeAddEntry(tree, &i, &i); \
   } \
   list = rbTreeToList(tree); \
   if (list == NULL) { \

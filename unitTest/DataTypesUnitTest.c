@@ -753,7 +753,10 @@ bool SMALL_TYPE##UnitTest() { \
       #BIG_TYPE); \
     return false; \
   } \
-  if (type##BIG_TYPE->size(&value1) != SIZE) { \
+  /* 128-bit types can return 8 bytes on 32-bit systems. So, allow for that.  */ \
+  if ((type##BIG_TYPE->size(&value1) != SIZE) \
+    && (type##BIG_TYPE->size(&value1) != (SIZE >> 1)) \
+  ) { \
     printLog(ERR, "type%s->size did not return %d for non-NULL pointer.\n", \
       #BIG_TYPE, SIZE); \
     return false; \

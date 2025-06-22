@@ -122,12 +122,8 @@ extern "C"
 
 RedBlackTree *rbTreeCreate_(TypeDescriptor *keyType, bool disableThreadSafety, ...);
 #define rbTreeCreate(keyType, ...) rbTreeCreate_(keyType, ##__VA_ARGS__, 0)
-RedBlackNode *rbInsert_(RedBlackTree *tree, const volatile void *key,
+RedBlackNode *rbTreeAddEntry_(RedBlackTree *tree, const volatile void *key,
   const volatile void *value, TypeDescriptor *type, ...);
-#define rbInsert(tree, key, value, ...) \
-  rbInsert_(tree, key, value, ##__VA_ARGS__, NULL)
-extern RedBlackNode* (*rbTreeAddEntry_)(RedBlackTree *tree,
-  const volatile void *key, const volatile void *value, TypeDescriptor *type, ...);
 #define rbTreeAddEntry(tree, key, value, ...) \
   rbTreeAddEntry_(tree, key, value, ##__VA_ARGS__, NULL)
 RedBlackNode *rbQuery(const RedBlackTree *tree, const volatile void *key);
@@ -156,7 +152,8 @@ RedBlackTree* listToRbTree(const List *list);
 RedBlackTree* jsonToRedBlackTree(const char *jsonText, long long int *position);
 RedBlackTree *xmlToRedBlackTree(const char *inputData);
 i32 rbTreeClear(RedBlackTree *tree);
-RedBlackTree *rbTreeFromBlob_(const volatile void *array, u64 *length, bool inPlaceData, bool disableThreadSafety, ...);
+RedBlackTree *rbTreeFromBlob_(const volatile void *array, u64 *length,
+  bool inPlaceData, bool disableThreadSafety, ...);
 #define rbTreeFromBlob(array, length, ...) \
   rbTreeFromBlob_(array, length, ##__VA_ARGS__, 0, 0)
 bool redBlackTreeUnitTest();

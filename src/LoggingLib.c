@@ -1936,10 +1936,12 @@ void* (*localCalloc)(size_t nmemb, size_t size) = calloc;
 #include <cxxabi.h>
 #endif
 void printStackTrace(LogLevel logLevel) {
-  if ((logLevel == NEVER) || (logLevel < logThreshold)
-    || (logThreshold == NONE)
-  ) {
-    return;
+  if (logLevel < CRITICAL) {
+    if ((logLevel == NEVER) || (logLevel < logThreshold)
+      || (logThreshold == NONE)
+    ) {
+      return;
+    }
   }
   
   // Bypass all real memory allocation calls for the duration of this function.
@@ -1991,9 +1993,13 @@ void printStackTrace(LogLevel logLevel) {
     startIndex = 0;
   }
   if (startIndex == 0) {
-    if ((logFile == NULL) || (logFile == stderr) || (logFile == stdout)) {
+    if ((logFile == stderr) || (logFile == stdout)) {
       endIndex = 1;
     }
+  }
+  if (logFile == NULL) {
+    startIndex = 0;
+    endIndex = 1;
   }
   
   for (int j = startIndex; j < endIndex; j++) {
@@ -2151,10 +2157,12 @@ static inline char* u64ToHex(u64 number, char *buffer) {
 
 #include <dbghelp.h>
 void printStackTrace(LogLevel logLevel) {
-  if ((logLevel == NEVER) || (logLevel < logThreshold)
-    || (logThreshold == NONE)
-  ) {
-    return;
+  if (logLevel < CRITICAL) {
+    if ((logLevel == NEVER) || (logLevel < logThreshold)
+      || (logThreshold == NONE)
+    ) {
+      return;
+    }
   }
   
   // Bypass all real memory allocation calls for the duration of this function.
@@ -2209,9 +2217,13 @@ void printStackTrace(LogLevel logLevel) {
     startIndex = 0;
   }
   if (startIndex == 0) {
-    if ((logFile == NULL) || (logFile == stderr) || (logFile == stdout)) {
+    if ((logFile == stderr) || (logFile == stdout)) {
       endIndex = 1;
     }
+  }
+  if (logFile == NULL) {
+    startIndex = 0;
+    endIndex = 1;
   }
   
   ZEROINIT(char hexBuffer[19]);

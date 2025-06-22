@@ -55,7 +55,6 @@ extern "C"
 
 #define typeDictionary typeRedBlackTree
 #define typeDictionaryNoCopy typeRedBlackTreeNoCopy
-#define jsonToDictionary jsonToRedBlackTree
 
 // Helper functions.
 int keyValueStringToDictionaryEntry(Dictionary *dictionary, char *inputString);
@@ -66,35 +65,45 @@ char* getUserValue(Dictionary *args, const char *argName, const char *prompt,
   const char *defaultValue);
 
 // Dictionary functions.
-char* dictionaryToString(const Dictionary *dictionary);
-#define dictionaryAdd rbTreeAddEntry
-DictionaryEntry* dictionaryAddEntry_(Dictionary *dictionary, const volatile void *key,
+extern Dictionary* (*jsonToDictionary)(
+  const char *jsonText, long long int *position);
+extern char* (*dictionaryToString)(const Dictionary *dictionary);
+extern DictionaryEntry* (*dictionaryAddEntry_)(
+  Dictionary *dictionary, const volatile void *key,
   const volatile void *value, TypeDescriptor *type, ...);
 #define dictionaryAddEntry(dictionary, key, value, ...) \
   dictionaryAddEntry_(dictionary, key, value, ##__VA_ARGS__, typeString)
-#define dictionaryDestroy rbTreeDestroy
-extern int (*dictionaryRemove)(Dictionary *dictionary, const char *key);
-#define dictionaryRemoveEntry rbTreeRemove
-/// @def dictionaryToXml
-/// Method for converting a dictionary to its XML representation.
+extern Dictionary* (*dictionaryDestroy)(Dictionary*);
+extern int (*dictionaryRemove)(
+  Dictionary *dictionary, const volatile void *key);
+extern Bytes (*dictionaryToXml_)(
+  const Dictionary *dictionary, const char *elementName, bool indent, ...);
 #define dictionaryToXml(dictionary, elementName, ...)  \
-  listToXml_((const List*) dictionary, elementName, ##__VA_ARGS__, false)
-extern DictionaryEntry* (*dictionaryGetEntry)(const Dictionary *dictionary, const volatile void *key);
-void* dictionaryGetValue(const Dictionary *dictionary, const volatile void *key);
-#define dictionaryToList rbTreeToList
-extern int (*dictionaryCompare)(const Dictionary *dictionaryA, const Dictionary *dictionaryB);
-Dictionary *dictionaryCreate(TypeDescriptor *type);
-#define dictionaryToJson(dictionary) listToJson((List*) dictionary)
-#define dictionaryToKeyValueString(dictionary) \
-  listToKeyValueString((List*) dictionary)
-#define dictionaryCopy rbTreeCopy
-#define listToDictionary listToRbTree
+  dictionaryToXml_(dictionary, elementName, ##__VA_ARGS__, false)
+extern DictionaryEntry* (*dictionaryGetEntry)(
+  const Dictionary *dictionary, const volatile void *key);
+extern void* (*dictionaryGetValue)(
+  const Dictionary *dictionary, const volatile void *key);
+extern List* (*dictionaryToList)(Dictionary *dictionary);
+extern Bytes (*dictionaryToJson)(const Dictionary *dictionary);
+extern int (*dictionaryCompare)(
+  const Dictionary *dictionaryA, const Dictionary *dictionaryB);
+extern Dictionary* (*dictionaryCreate_)(
+  TypeDescriptor *type, bool disableThreadSafety, ...);
+#define dictionaryCreate(keyType, ...) \
+  dictionaryCreate_(keyType, ##__VA_ARGS__, 0)
+extern char* (*dictionaryToKeyValueString)(const Dictionary *dictionary,
+  const char *separator);
+extern Dictionary* (*dictionaryCopy)(const Dictionary *dictionary);
+extern Dictionary* (*listToDictionary)(const List *list);
+extern Dictionary* (*dictionaryFromBlob_)(const volatile void *array,
+  u64 *length, bool inPlaceData, bool disableThreadSafety, ...);
 #define dictionaryFromBlob(array, length, ...) \
-  rbTreeFromBlob_(array, length, ##__VA_ARGS__, 0, 0)
-#define dictionaryToBlob(dictionary) \
-  listToBlob((List*) dictionary)
-#define xmlToDictionary xmlToRedBlackTree
-#define dictionaryDestroyNode rbTreeDestroyNode
+  dictionaryFromBlob_(array, length, ##__VA_ARGS__, 0, 0)
+extern Bytes (*dictionaryToBlob)(const Dictionary *dictionary);
+extern Dictionary* (*xmlToDictionary)(const char *inputData);
+extern int (*dictionaryDestroyNode)(
+  Dictionary *dictionary, DictionaryEntry *node);
 
 #ifdef __cplusplus
 } // extern "C"
