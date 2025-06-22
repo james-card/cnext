@@ -730,8 +730,8 @@ Coroutine* coroutineInit(Coroutine *userCoroutine,
     coroutineAllocateStack(stackSize);
   }
   // Either there was an idle coroutine on the idle list or we just returned
-  // from coroutineMain (called by coroutineAllocateStack).  Either way, the Coroutine
-  // instance we want to use is now at the head of the idle list.
+  // from coroutineMain (called by coroutineAllocateStack).  Either way, the
+  // Coroutine instance we want to use is now at the head of the idle list.
 
   Coroutine *configuredCoroutine = NULL;
   if (userCoroutine == NULL) {
@@ -775,20 +775,19 @@ Coroutine* coroutineInit(Coroutine *userCoroutine,
 #endif
     }
 
+    configuredCoroutine = userCoroutine;
     if (found == false) {
       // The user has provided an uninitialized coroutine.  Pop one from idle.
 #ifdef THREAD_SAFE_COROUTINES
       if (!_coroutineThreadingSupportEnabled) {
-        userCoroutine = coroutineGlobalPop(&_globalIdle);
+        configuredCoroutine = coroutineGlobalPop(&_globalIdle);
       } else {
-        userCoroutine = coroutineTssPop(&_tssIdle);
+        configuredCoroutine = coroutineTssPop(&_tssIdle);
       }
 #else
-      userCoroutine = coroutineGlobalPop(&_globalIdle);
+      configuredCoroutine = coroutineGlobalPop(&_globalIdle);
 #endif
     }
-
-    configuredCoroutine = userCoroutine;
   }
 
   // The head of the running list is the current coroutine.
