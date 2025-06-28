@@ -8,6 +8,7 @@ OBJ_FILES := \
     $(OBJ_DIR)/DictionaryUnitTest.o \
     $(OBJ_DIR)/DirectoryLibUnitTest.o \
     $(OBJ_DIR)/HashTableUnitTest.o \
+    $(OBJ_DIR)/ListUnitTest.o \
 
 INCLUDES := \
     -I../include \

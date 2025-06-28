@@ -82,7 +82,6 @@ char* listToKeyValueString(const List *list, const char *separator);
 i32 listClear(List *list);
 u64 listLength(List *list);
 #define listIsEmpty(list) (listLength(list) == 0)
-bool listUnitTest();
 
 #ifdef __cplusplus
 } // extern "C"
