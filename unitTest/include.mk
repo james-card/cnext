@@ -1,6 +1,7 @@
 FLAGS := -g $(EXTRA_FLAGS) $(COMMAND_LINE_FLAGS)
 
 OBJ_FILES := \
+    $(OBJ_DIR)/CThreadsUnitTest.o \
     $(OBJ_DIR)/CThreadsMessagesUnitTest.o \
     $(OBJ_DIR)/CoroutinesMessagesUnitTest.o \
     $(OBJ_DIR)/CoroutinesUnitTest.o \
