@@ -28,8 +28,8 @@
 // Doxygen marker
 /// @file
 
-#include "StringLib.h"
 #include "OsApi.h"
+#include "StringLib.h"
 #ifdef DS_LOGGING_ENABLED
 #include "LoggingLib.h"
 #else
