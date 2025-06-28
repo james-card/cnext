@@ -252,6 +252,10 @@ static void winCThreadsNullFunction(void *parameter) {
 
 // Call once support.
 void call_once(once_flag* flag, void(*func)(void)) {
+    if ((flag == NULL) || (func == NULL)) {
+        return;
+    }
+
     LONG currentFlagValue
         = InterlockedCompareExchange(flag, ONCE_FLAG_RUNNING, ONCE_FLAG_INIT);
 
@@ -273,7 +277,7 @@ void call_once(once_flag* flag, void(*func)(void)) {
 
 // Mutex support.
 int mtx_init(mtx_t* mtx, int type) {
-    if (mtx == NULL) {
+    if ((mtx == NULL) || (type > (mtx_plain | mtx_recursive | mtx_timed))) {
         return thrd_error;
     }
 
@@ -311,6 +315,10 @@ static inline void ensureMutexInitialized(mtx_t* mtx) {
 }
 
 int mtx_lock(mtx_t* mtx) {
+    if (mtx == NULL) {
+        return thrd_error;
+    }
+
     int returnValue = thrd_success;
 
     ensureMutexInitialized(mtx);
@@ -345,6 +353,10 @@ int mtx_lock(mtx_t* mtx) {
 }
 
 int mtx_timedlock(mtx_t* mtx, const struct timespec* ts) {
+    if ((mtx == NULL) || (ts == NULL)) {
+        return thrd_error;
+    }
+
     struct timespec now;
     DWORD waitms = 0;
 
@@ -381,6 +393,10 @@ int mtx_timedlock(mtx_t* mtx, const struct timespec* ts) {
 }
 
 int mtx_trylock(mtx_t* mtx) {
+    if (mtx == NULL) {
+        return thrd_error;
+    }
+
     DWORD waitResult = WAIT_OBJECT_0;
     
     ensureMutexInitialized(mtx);
@@ -402,6 +418,10 @@ int mtx_trylock(mtx_t* mtx) {
 }
 
 int mtx_unlock(mtx_t* mtx) {
+    if (mtx == NULL) {
+        return thrd_error;
+    }
+
     int returnValue = thrd_success;
 
     if (mtx->initialized == true) {
@@ -419,6 +439,10 @@ int mtx_unlock(mtx_t* mtx) {
 }
 
 void mtx_destroy(mtx_t* mtx) {
+    if (mtx == NULL) {
+        return;
+    }
+
     mtx->initialized = false;
     CloseHandle(mtx->handle);
     DeleteCriticalSection(&mtx->criticalSection);
@@ -427,6 +451,10 @@ void mtx_destroy(mtx_t* mtx) {
 
 // Condition support.
 int cnd_broadcast(cnd_t* cond) {
+    if (cond == NULL) {
+        return thrd_error;
+    }
+
     WakeAllConditionVariable(cond);
     return thrd_success;
 }
@@ -437,16 +465,28 @@ void cnd_destroy(cnd_t* cond) {
 }
 
 int cnd_init(cnd_t* cond) {
+    if (cond == NULL) {
+        return thrd_error;
+    }
+
     InitializeConditionVariable(cond);
     return thrd_success;
 }
 
 int cnd_signal(cnd_t* cond) {
+    if (cond == NULL) {
+        return thrd_error;
+    }
+
     WakeConditionVariable(cond);
     return thrd_success;
 }
 
 int cnd_timedwait(cnd_t* cond, mtx_t* mtx, const struct timespec* ts) {
+    if ((cond == NULL) || (mtx == NULL) || (ts == NULL)) {
+        return thrd_error;
+    }
+
     int returnValue = thrd_success;
     uint64_t durationns = (ts->tv_sec * 1000000000) + ts->tv_nsec;
     DWORD durationms = (DWORD)(durationns / 1000000);
@@ -464,6 +504,10 @@ int cnd_timedwait(cnd_t* cond, mtx_t* mtx, const struct timespec* ts) {
 }
 
 int cnd_wait(cnd_t* cond, mtx_t* mtx) {
+    if ((cond == NULL) || (mtx == NULL)) {
+        return thrd_error;
+    }
+
     int returnValue = thrd_success;
 
     if (SleepConditionVariableCS(cond, &mtx->criticalSection, INFINITE) == 0) {
@@ -520,6 +564,10 @@ void initializeTssMetadata(void) {
 
 int tss_create(tss_t* key, tss_dtor_t dtor) {
     call_once(&tssMetadataOnceFlag, initializeTssMetadata);
+
+    if (key == NULL) {
+        return thrd_error;
+    }
 
     if (tssIndex == 0) {
         // We've created all the thread-specific storage we can.  Fail.
@@ -636,7 +684,7 @@ int thrd_create(thrd_t* thr, thrd_start_t func, void* arg) {
     printLog(TRACE, "ENTER thrd_create(thr=%p, func=%p, arg=%p)\n",
         thr, func, arg);
 
-    if (thr == NULL) {
+    if ((thr == NULL) || (func == NULL)) {
         printLog(TRACE, "EXIT thrd_create(thr=%p, func=%p, arg=%p) = {%d}\n",
             thr, func, arg, thrd_error);
         return thrd_error;
@@ -822,10 +870,15 @@ int thrd_terminate(thrd_t thr) {
 /// @param base The base to use as defined on page 287 of the ISO/IEC 9899_2018
 ///   spec.
 ///
-/// @return This function always returns base.
+/// @return Returns the value of the base parameter on success, zero on failure.
 ///
 /// @note This only produces a time value down to 1/10th of a microsecond.
 int timespec_get(struct timespec* spec, int base) {
+    if ((spec == NULL) || (base != TIME_UTC)) {
+        // Cannot proceed.
+        return 0;
+    }
+
     __int64 wintime = 0;
     FILETIME filetime = { 0, 0 };
 

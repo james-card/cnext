@@ -55,10 +55,17 @@ int thrd_msg_q_destroy(msg_q_t *queue);
 #endif
 
 void call_once(once_flag* flag, void(*func)(void)) {
+  if ((flag == NULL) || (func == NULL)) {
+    return;
+  }
   pthread_once(flag, func);
 }
 
 int mtx_init(mtx_t *mtx, int type) {
+  if ((mtx == NULL) || (type > (mtx_plain | mtx_recursive | mtx_timed))) {
+    return thrd_error;
+  }
+  
   int returnValue = thrd_success;
   
   if ((type & mtx_recursive) != 0) {
@@ -105,6 +112,10 @@ int mtx_init(mtx_t *mtx, int type) {
 }
 
 int mtx_timedlock(mtx_t* mtx, const struct timespec* ts) {
+  if ((mtx == NULL) || (ts == NULL)) {
+    return thrd_error;
+  }
+  
   int returnValue = thrd_success;
   
 #ifdef _GNU_SOURCE
@@ -140,6 +151,10 @@ int mtx_timedlock(mtx_t* mtx, const struct timespec* ts) {
 }
 
 int mtx_trylock(mtx_t *mtx) {
+  if (mtx == NULL) {
+    return thrd_error;
+  }
+  
   int returnValue = thrd_success;
   
   returnValue = pthread_mutex_trylock(mtx);
@@ -154,6 +169,10 @@ int mtx_trylock(mtx_t *mtx) {
 }
 
 int mtx_lock(mtx_t *mtx) {
+  if (mtx == NULL) {
+    return thrd_error;
+  }
+  
   int returnValue = thrd_success;
   
   returnValue = pthread_mutex_lock(mtx);
@@ -166,6 +185,10 @@ int mtx_lock(mtx_t *mtx) {
 }
 
 int mtx_unlock(mtx_t *mtx) {
+  if (mtx == NULL) {
+    return thrd_error;
+  }
+  
   int returnValue = thrd_success;
   
   returnValue = pthread_mutex_unlock(mtx);
@@ -178,6 +201,10 @@ int mtx_unlock(mtx_t *mtx) {
 }
 
 void mtx_destroy(mtx_t* mtx) {
+  if (mtx == NULL) {
+    return;
+  }
+  
   pthread_mutex_destroy(mtx);
 }
 
@@ -248,7 +275,7 @@ void *posix_c_threads_create_wrapper(void* wrapper_args) {
 }
 
 int thrd_create(thrd_t *thr, thrd_start_t func, void *arg) {
-  if (thr == NULL) {
+  if ((thr == NULL) || (func == NULL)) {
     return thrd_error;
   }
 
@@ -324,6 +351,10 @@ int thrd_join(thrd_t thr, int *res) {
 }
 
 int thrd_sleep(const struct timespec* duration, struct timespec* remaining) {
+  if (duration == NULL) {
+    return -1;
+  }
+  
   return nanosleep(duration, remaining);
 }
 
@@ -344,6 +375,10 @@ int thrd_terminate(thrd_t thr) {
 }
 
 int tss_create(tss_t *key, tss_dtor_t dtor) {
+  if (key == NULL) {
+    return thrd_error;
+  }
+  
   int returnValue = thrd_success;
   
   returnValue = pthread_key_create(key, dtor);
@@ -376,6 +411,10 @@ int tss_set(tss_t key, void *val) {
 }
 
 int cnd_broadcast(cnd_t *cond) {
+  if (cond == NULL) {
+    return thrd_error;
+  }
+  
   int returnValue = thrd_success;
   
   returnValue = pthread_cond_broadcast(cond);
@@ -388,10 +427,18 @@ int cnd_broadcast(cnd_t *cond) {
 }
 
 void cnd_destroy(cnd_t* cond) {
+  if (cond == NULL) {
+    return;
+  }
+  
   pthread_cond_destroy(cond);
 }
 
 int cnd_init(cnd_t *cond) {
+  if (cond == NULL) {
+    return thrd_error;
+  }
+  
   int returnValue = thrd_success;
   
   returnValue = pthread_cond_init(cond, NULL);
@@ -404,6 +451,10 @@ int cnd_init(cnd_t *cond) {
 }
 
 int cnd_signal(cnd_t *cond) {
+  if (cond == NULL) {
+    return thrd_error;
+  }
+  
   int returnValue = thrd_success;
   
   returnValue = pthread_cond_signal(cond);
@@ -416,6 +467,10 @@ int cnd_signal(cnd_t *cond) {
 }
 
 int cnd_timedwait(cnd_t* cond, mtx_t* mtx, const struct timespec* ts) {
+  if ((cond == NULL) || (mtx == NULL) || (ts == NULL)) {
+    return thrd_error;
+  }
+  
   int returnValue = thrd_success;
   
   returnValue = pthread_cond_timedwait(cond, mtx, ts);
@@ -430,6 +485,10 @@ int cnd_timedwait(cnd_t* cond, mtx_t* mtx, const struct timespec* ts) {
 }
 
 int cnd_wait(cnd_t *cond, mtx_t *mtx) {
+  if ((cond == NULL) || (mtx == NULL)) {
+    return thrd_error;
+  }
+  
   int returnValue = thrd_success;
   
   returnValue = pthread_cond_wait(cond, mtx);
