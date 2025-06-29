@@ -14,6 +14,7 @@ OBJ_FILES := \
     $(OBJ_DIR)/RegexUnitTest.o \
     $(OBJ_DIR)/StringLibUnitTest.o \
     $(OBJ_DIR)/TimeUtilsUnitTest.o \
+    $(OBJ_DIR)/TrieUnitTest.o \
 
 INCLUDES := \
     -I../include \
