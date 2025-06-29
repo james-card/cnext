@@ -156,7 +156,6 @@ RedBlackTree *rbTreeFromBlob_(const volatile void *array, u64 *length,
   bool inPlaceData, bool disableThreadSafety, ...);
 #define rbTreeFromBlob(array, length, ...) \
   rbTreeFromBlob_(array, length, ##__VA_ARGS__, 0, 0)
-bool redBlackTreeUnitTest();
 
 #ifdef __cplusplus
 } // extern "C"
