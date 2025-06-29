@@ -67,18 +67,19 @@ const char *weekdayToString(int weekday);
 ///
 /// @param timestamp The string containing the timestamp to convert.
 ///
-/// @return Returns the time_t value of the timestamp on success, 0 on failure.
+/// @return Returns the time_t value of the timestamp on success,
+/// 0x8000000000000000 on failure.
 static inline i64 utcTimestampToTime(const char *timestamp) {
   struct tm timestampStruct;
   int year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0;
-  i64 returnValue = 0;
+  i64 returnValue = (i64) 0x8000000000000000;
   
   if ((timestamp != NULL) && (*timestamp != '\0')) {
     if (sscanf(timestamp, "%d-%d-%d %d:%d:%d",
       &year, &month, &day, &hour, &minute, &second) != 6
     ) {
       // This isn't a timestamp.  Bail.
-      return returnValue; // 0
+      return returnValue; // 0x8000000000000000
     }
     
     timestampStruct.tm_year = year - 1900;
@@ -157,14 +158,19 @@ static inline i64 localTimestampToTime(const char *timestamp) {
 ///   may be more data after the seconds of the timestamp - it will be ignored
 ///   if present.
 ///
-/// @return Returns the timezone of the local timestamp, in nanoseconds.
+/// @return Returns the timezone of the local timestamp in nanoseconds on
+/// success, 0x8000000000000000 on failure.
 static inline i64 getTimezoneNanosecondsFromTimestamp(
   const char *localTimestamp
 ) {
-  i64 timezoneNanoseconds = 0;
+  i64 timezoneNanoseconds = 0x8000000000000000;
   
   if ((localTimestamp != NULL) && (*localTimestamp != '\0')) {
     i64 localTime = utcTimestampToTime(localTimestamp);
+    if (localTime == (i64) 0x8000000000000000) {
+      // Parse failure.  This is not a timestamp.
+      return 0x8000000000000000;
+    }
     i64 utcTime = (i64) time(NULL);
     i64 localTimezone = utcTime - localTime;
     // Timezones across the world are aligned in 15-minute increments.  So, any
