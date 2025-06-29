@@ -11,6 +11,7 @@ OBJ_FILES := \
     $(OBJ_DIR)/HashTableUnitTest.o \
     $(OBJ_DIR)/ListUnitTest.o \
     $(OBJ_DIR)/RedBlackTreeUnitTest.o \
+    $(OBJ_DIR)/RegexUnitTest.o \
 
 INCLUDES := \
     -I../include \
