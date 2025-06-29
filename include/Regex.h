@@ -33,6 +33,11 @@
 #include <string.h>
 #include <stdlib.h>
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 /*
  * FORKED FROM: tiny-regex-c, see https://github.com/kokke/tiny-regex-c
  *
@@ -165,3 +170,8 @@ uint64_t substituteMultiple_(const char *haystack, Substitution *substitutions,
 
 #define substituteMultiple(haystack, substitutions, greedy, buffers, bufferLength, finalIndex, ...) \
     substituteMultiple_(haystack, substitutions, greedy, buffers, bufferLength, finalIndex, ##__VA_ARGS__, 0, 0, 0)
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
+
