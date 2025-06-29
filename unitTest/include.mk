@@ -12,6 +12,7 @@ OBJ_FILES := \
     $(OBJ_DIR)/ListUnitTest.o \
     $(OBJ_DIR)/RedBlackTreeUnitTest.o \
     $(OBJ_DIR)/RegexUnitTest.o \
+    $(OBJ_DIR)/StringLibUnitTest.o \
 
 INCLUDES := \
     -I../include \
