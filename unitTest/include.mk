@@ -13,6 +13,7 @@ OBJ_FILES := \
     $(OBJ_DIR)/RedBlackTreeUnitTest.o \
     $(OBJ_DIR)/RegexUnitTest.o \
     $(OBJ_DIR)/StringLibUnitTest.o \
+    $(OBJ_DIR)/TimeUtilsUnitTest.o \
 
 INCLUDES := \
     -I../include \
