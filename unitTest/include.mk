@@ -10,6 +10,7 @@ OBJ_FILES := \
     $(OBJ_DIR)/DirectoryLibUnitTest.o \
     $(OBJ_DIR)/HashTableUnitTest.o \
     $(OBJ_DIR)/ListUnitTest.o \
+    $(OBJ_DIR)/RedBlackTreeUnitTest.o \
 
 INCLUDES := \
     -I../include \
