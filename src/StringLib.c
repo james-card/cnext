@@ -201,6 +201,10 @@ void plusToSpace(char *inputString) {
 ///
 /// @return There is no return value for this function.
 void dosToUnix(char *str) {
+  if (str == NULL) {
+    return;
+  }
+  
   int i = 0, len = (int) strlen(str);
   char *pos = str;
   
@@ -539,7 +543,7 @@ Bytes getFileContent_(const char *fullPath, i64 start, i64 length, ...) {
 /// @note This function is wrapped by a macro of the same name (minus the
 /// trailing underscore) that automatically provides 0 for the start parameter.
 ///
-/// @return Returns the number of bytes written.
+/// @return Returns the number of bytes written on success, -1 on failure.
 i64 putFileContent_(
   const char *fullPath, const volatile void *dataBuffer, i64 dataLength, i64 start, ...
 ) {
@@ -559,7 +563,7 @@ i64 putFileContent_(
       dataBuffer,
       lli(dataLength),
       llu(totalBytesWritten));
-    return 0;
+    return -1;
   }
   
   quotient = dataLength / PAGE_SIZE;
@@ -684,21 +688,25 @@ u64 getFileLine(FILE *requestedFile, char **dataBuffer) {
 ///   NULL character on failure.
 char unampersand(const char *inputString) {
   char character = '\0';
-  printLog(FLOOD, "ENTER unampersand(inputString=\"%s\")\n", inputString);
+  printLog(FLOOD, "ENTER unampersand(inputString=%s)\n",
+    strOrNull(inputSring));
   
-  if (strncmp(inputString, "&quot;", 6) == 0) {
-    character = '"';
-  } else if (strncmp(inputString, "&lt;", 3) == 0) {
-    character = '<';
-  } else if (strncmp(inputString, "&gt;", 3) == 0) {
-    character = '>';
-  } else if (strncmp(inputString, "&apos;", 6) == 0) {
-    character = '\'';
-  } else if (strncmp(inputString, "&amp;", 5) == 0) {
-    character = '&';
+  if (inputString != NULL) {
+    if (strncmp(inputString, "&quot;", 6) == 0) {
+      character = '"';
+    } else if (strncmp(inputString, "&lt;", 3) == 0) {
+      character = '<';
+    } else if (strncmp(inputString, "&gt;", 3) == 0) {
+      character = '>';
+    } else if (strncmp(inputString, "&apos;", 6) == 0) {
+      character = '\'';
+    } else if (strncmp(inputString, "&amp;", 5) == 0) {
+      character = '&';
+    }
   }
   
-  printLog(FLOOD, "EXIT unampersand(inputString=\"%s\") = {%c}\n", inputString, character);
+  printLog(FLOOD, "EXIT unampersand(inputString=%s) = {%c}\n",
+    strOrNull(inputString), character);
   return character;
 }
 
@@ -1726,8 +1734,8 @@ Bytes bytesAllocate(Bytes *buffer, u64 size) {
   size--; // Reset for the logging statement.
   
   printLog(FLOOD, "EXIT bytesAllocate(*buffer=%p, size=%llu) = {%p}\n",
-    (buffer) ? *buffer : NULL, llu(size), *buffer);
-  return *buffer;
+    (buffer) ? *buffer : NULL, llu(size), (buffer) ? *buffer : NULL);
+  return (buffer) ? *buffer : NULL;
 }
 
 /// @fn Bytes bytesAddData(Bytes *buffer, const volatile void *input, u64 inputLength)
@@ -2475,57 +2483,6 @@ Bytes bytesReplaceStr(
   return returnValue;
 }
 
-/// @fn Bytes bytesFindBytes(const Bytes haystack, const Bytes needle)
-///
-/// @param haystack The Bytes object to search.
-/// @param needle The Bytes object to search for.
-///
-/// @return Returns a pointer to the beginning of the first instance of needle
-/// in haystack if needle is found, NULL if not.
-Bytes bytesFindBytes(const Bytes haystack, const Bytes needle) {
-  printLog(TRACE, "ENTER bytesFindBytes(haystack=\"%s\", needle=\"%s\")\n",
-    (const char*) haystack, (const char*) needle);
-  
-  u64 haystackLength = bytesLength(haystack);
-  u64 needleLength = bytesLength(needle);
-  
-  if (needleLength > haystackLength) {
-    printLog(TRACE,
-      "EXIT bytesFindBytes(haystack=\"%s\", needle=\"%s\") = {NULL}\n",
-      (const char*) haystack, (const char*) needle);
-    return NULL;
-  }
-  u64 lastIndex = haystackLength - needleLength;
-  
-  // Cast haystack to non-const to avoid compiler complaints.
-  Bytes searchBytes = (Bytes) haystack;
-  for (u64 i = 0; i < lastIndex; i++) {
-    if (memcmp((void*) searchBytes, (void*) needle,
-      (size_t) needleLength) == 0
-    ) {
-      break;
-    }
-    searchBytes++;
-  }
-  if (searchBytes > &haystack[lastIndex]) {
-    // needle not found.
-    printLog(TRACE,
-      "EXIT bytesFindBytes(haystack=\"%s\", needle=\"%s\") = {NULL}\n",
-      (const char*) haystack, (const char*) needle);
-    return NULL;
-  }
-  
-  // searchBytes is at the location we're interested in for the return value.
-  u64 returnValueLength = haystackLength - (searchBytes - haystack);
-  Bytes returnValue = NULL;
-  bytesAddData(&returnValue, searchBytes, returnValueLength);
-  
-  printLog(TRACE,
-    "EXIT bytesFindBytes(haystack=\"%s\", needle=\"%s\") = {%s}\n",
-    (const char*) haystack, (const char*) needle, (const char*) returnValue);
-  return returnValue;
-}
-
 /// @fn Bytes bytesTableToCsv(const Bytes **table)
 ///
 /// @brief Convert a two-dimensional Bytes table to a single CSV-formatted
@@ -2579,6 +2536,13 @@ Bytes bytesTableToCsv(const Bytes **table) {
 int charToHex(char c, bool upperCase, char output[3]) {
   printLog(FLOOD, "ENTER charToHex(c='%c', upperCase=%s, output=%p)\n",
     c, (upperCase) ? "true" : "false", output);
+  
+  if (output == NULL) {
+    printLog(FLOOD,
+      "EXIT charToHex(c='%c', upperCase=%s, output=NULL) = {-1}\n",
+      c, (upperCase) ? "true" : "false");
+    return -1;
+  }
   
   char a = 'A';
   if (upperCase == false) {
@@ -2935,9 +2899,12 @@ bool isNumber(const char *string) {
 ///
 /// @brief Get the program name (the leaf) from the value of argv[0].
 ///
-/// @return This function always succeeds and always returns a valid
-/// program name.
+/// @return Returns a valid program name on success, NULL on failure.
 const char *getProgramName(const char *argv0) {
+  if (argv0 == NULL) {
+    return NULL;
+  }
+  
   const char *programName = strrchr(argv0, '/');
   if (programName == NULL) {
     programName = strrchr(argv0, '\\');
@@ -2995,7 +2962,15 @@ bool stringStartsWithCi(const char *haystack, const char *beginning) {
     "ENTER stringStartsWithCi(haystack=\"%s\", beginning=\"%s\")\n",
     haystack, beginning);
   
-  bool startsWithBeginning
+  bool startsWithBeginning = false;
+  if ((haystack == NULL) || (beginning == NULL)) {
+    printLog(TRACE,
+      "EXIT stringStartsWith(haystack=\"%s\", beginning=\"%s\") = {%s}\n",
+      haystack, beginning, (startsWithBeginning == true) ? "true" : "false");
+    return startsWithBeginning; // false
+  }
+  
+  startsWithBeginning
     = (strncmpci(haystack, beginning, strlen(beginning)) == 0);
   
   printLog(TRACE,
@@ -3233,10 +3208,6 @@ bool dataIsString(const volatile void *data, u64 dataLength) {
   
   u8 *dataBytes = (u8*) data;
   bool returnValue = true;
-  u64 lastCharIndex = 0;
-  if (dataLength > 0) {
-    lastCharIndex = dataLength - 1;
-  }
   
   if (data == NULL) {
     // NULL data is not a string.
@@ -3246,19 +3217,15 @@ bool dataIsString(const volatile void *data, u64 dataLength) {
     return returnValue;
   }
   
-  u64 i = 0;
-  for (i = 0; i < lastCharIndex; i++) {
-    if (((dataBytes[i] < 32) || (dataBytes[i] > 126))
-      && (dataBytes[i] != '\r') && (dataBytes[i] != '\n')
-      && (dataBytes[i] != '\0')
+  for (u64 ii = 0; ii < dataLength; ii++) {
+    u8 dataChar = dataBytes[ii];
+    if (((dataChar < 32) || (dataChar > 126))
+      && (dataChar != '\r') && (dataChar != '\n')
+      && (dataChar != '\t') && (dataChar != '\0')
     ) {
       returnValue = false;
       break;
     }
-  }
-  
-  if (dataBytes[i] != '\0') {
-    returnValue = false;
   }
   
   printLog(TRACE, "EXIT dataIsString(data=%p, dataLength=%llu) = {%s}\n",
