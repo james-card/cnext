@@ -165,10 +165,17 @@ void regexCompile(Regex *regex, const char *pattern) {
 }
 
 bool regexMatchMatcher(Regex *regex, const char *text, Matcher *matcher) {
+    if (matcher == NULL) {
+        // Nothing more we can do.
+        return false;
+    }
+
     matcher->foundAtIndex = 0;
     matcher->matchLength = 0;
     matcher->isFound = false;
-    if (regex == NULL || !regex->isPatternValid) return matcher->isFound;
+    if ((regex == NULL) || (!regex->isPatternValid) || (text == NULL)) {
+        return matcher->isFound;
+    }
 
     if (regex->compiledRegexArray[0].patternType == REGEX_BEGIN) {
         matcher->isFound = matchPattern(regex->compiledRegexArray + 1, matcher, text);
