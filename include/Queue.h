@@ -64,7 +64,6 @@ int queueFlush(Queue *queue, int numItems);
 #define queueLength(queue) listLength((List*) queue)
 #define queueCompare(queueA, queueB) \
   listCompare((List*) queueA, (List*) queueB)
-bool queueUnitTest();
 
 #ifdef __cplusplus
 } // extern "C"
