@@ -62,7 +62,6 @@ int stackFlush(Stack *stack, int numItems);
 #define stackToJson(stack) listToJson((List*) stack)
 #define stackCompare(stackA, stackB) \
   listCompare((List*) stackA, (List*) stackB)
-bool stackUnitTest();
 
 #ifdef __cplusplus
 } // extern "C"
