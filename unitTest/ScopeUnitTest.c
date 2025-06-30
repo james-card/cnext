@@ -33,7 +33,7 @@
 #include <stdlib.h>
 #include "StringLib.h"
 
-bool scopeUnitTest() {
+bool scopeUnitTest(void) {
   bool returnValue = true;
   
   SCOPE_ENTER("");

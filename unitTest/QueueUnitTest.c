@@ -31,7 +31,7 @@
 #include "Queue.h"
 #include "LoggingLib.h"
 
-bool queueUnitTest() {
+bool queueUnitTest(void) {
   Queue *queue = NULL;
   QueueNode *node = NULL;
 

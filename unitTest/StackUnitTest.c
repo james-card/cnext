@@ -31,7 +31,7 @@
 #include "Stack.h"
 #include "LoggingLib.h"
 
-bool stackUnitTest() {
+bool stackUnitTest(void) {
   Stack *stack = NULL;
   StackNode *node = NULL;
 

@@ -12,12 +12,12 @@
 #include "Dictionary.h"
 #include "LoggingLib.h"
 
-/// @fn bool dictionaryUnitTest()
+/// @fn bool dictionaryUnitTest(void)
 ///
 /// @brief Unit tests for dictionary functionality.
 ///
 /// @return Returns true on success, false on failure.
-bool dictionaryUnitTest() {
+bool dictionaryUnitTest(void) {
   Dictionary *dictionary = NULL;
   char *stringValue = NULL;
   List *dictList = NULL;
