@@ -105,8 +105,6 @@ int scopeEnd_(Scope *scope);
 #define scopeEnd() \
   ((_scope_.numVars > 0) ? scopeEnd_((Scope*) &_scope_) : TRINARY_ZERO)
 
-bool scopeUnitTest();
-
 #ifdef __cplusplus
 } // extern "C"
 #endif

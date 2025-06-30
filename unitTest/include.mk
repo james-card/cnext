@@ -13,6 +13,7 @@ OBJ_FILES := \
     $(OBJ_DIR)/QueueUnitTest.o \
     $(OBJ_DIR)/RedBlackTreeUnitTest.o \
     $(OBJ_DIR)/RegexUnitTest.o \
+    $(OBJ_DIR)/ScopeUnitTest.o \
     $(OBJ_DIR)/StringLibUnitTest.o \
     $(OBJ_DIR)/TimeUtilsUnitTest.o \
     $(OBJ_DIR)/TrieUnitTest.o \
