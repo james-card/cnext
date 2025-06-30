@@ -707,6 +707,10 @@ Type* jsonTo##Type(const char *jsonText, long long int *position) { \
   printLog(TRACE, "ENTER jsonTo" #Type "(jsonText=\"%s\", position=%p)\n", \
     (jsonText != NULL) ? jsonText : "NULL", position); \
   Type *returnValue = NULL; \
+  long long int zero = 0; \
+  if (position == NULL) { \
+    position = &zero; \
+  } \
    \
   if (jsonText == NULL) { \
     printLog(ERR, "jsonText parameter is NULL.\n"); \

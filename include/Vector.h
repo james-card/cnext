@@ -96,7 +96,6 @@ VectorNode* vectorGetIndex(Vector *vector, char *index);
 Vector* vectorFromBlob_(const volatile void *array, u64 *length, bool inPlaceData, bool disableThreadSafety, ...);
 #define vectorFromBlob(array, length, ...) \
   vectorFromBlob_(array, length, ##__VA_ARGS__, 0, 0)
-bool vectorUnitTest();
 
 #ifdef __cplusplus
 } // extern "C"
