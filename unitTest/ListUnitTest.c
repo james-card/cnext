@@ -21,7 +21,7 @@
 /// @param value       The integer value to convert to string
 /// @return            Allocated string that must be freed by caller
 ///////////////////////////////////////////////////////////////////////////////
-char* createTestString(int value) {
+char* createListTestString(int value) {
   char* result = (char*) malloc(32);
   if (result != NULL) {
     snprintf(result, 32, "test_%d", value);
@@ -75,8 +75,8 @@ bool testListAdd(void) {
   }
   
   // Test addFrontEntry with valid parameters
-  char* key1 = createTestString(1);
-  char* value1 = createTestString(10);
+  char* key1 = createListTestString(1);
+  char* value1 = createListTestString(10);
   ListNode* node1 = listAddFrontEntry(list, key1, value1, typeString);
   if (node1 == NULL) {
     printLog(ERR, "listAddFrontEntry with valid params failed\n");
@@ -87,8 +87,8 @@ bool testListAdd(void) {
   }
   
   // Test addBackEntry with valid parameters
-  char* key2 = createTestString(2);
-  char* value2 = createTestString(20);
+  char* key2 = createListTestString(2);
+  char* value2 = createListTestString(20);
   ListNode* node2 = listAddBackEntry(list, key2, value2, typeString);
   if (node2 == NULL) {
     printLog(ERR, "listAddBackEntry with valid params failed\n");
@@ -101,8 +101,8 @@ bool testListAdd(void) {
   }
   
   // Test addFrontEntry with NULL list (should fail)
-  char* key3 = createTestString(3);
-  char* value3 = createTestString(30);
+  char* key3 = createListTestString(3);
+  char* value3 = createListTestString(30);
   ListNode* node3 = listAddFrontEntry(NULL, key3, value3, typeString);
   if (node3 != NULL) {
     printLog(ERR, "listAddFrontEntry with NULL list should have failed\n");
@@ -157,10 +157,10 @@ bool testListRemove(void) {
   }
   
   // Add some test data
-  char* key1 = createTestString(1);
-  char* value1 = createTestString(10);
-  char* key2 = createTestString(2);
-  char* value2 = createTestString(20);
+  char* key1 = createListTestString(1);
+  char* value1 = createListTestString(10);
+  char* key2 = createListTestString(2);
+  char* value2 = createListTestString(20);
   
   if (listAddFrontEntry(list, key1, value1, typeString) == NULL ||
       listAddBackEntry(list, key2, value2, typeString) == NULL) {
@@ -264,10 +264,10 @@ bool testListGet(void) {
   }
   
   // Add test data
-  char* key1 = createTestString(1);
-  char* value1 = createTestString(10);
-  char* key2 = createTestString(2);
-  char* value2 = createTestString(20);
+  char* key1 = createListTestString(1);
+  char* value1 = createListTestString(10);
+  char* key2 = createListTestString(2);
+  char* value2 = createListTestString(20);
   
   if (listAddFrontEntry(list, key1, value1, typeString) == NULL ||
       listAddBackEntry(list, key2, value2, typeString) == NULL) {
@@ -412,8 +412,8 @@ bool testListUtilities(void) {
   }
   
   // Add test data
-  char* key1 = createTestString(1);
-  char* value1 = createTestString(10);
+  char* key1 = createListTestString(1);
+  char* value1 = createListTestString(10);
   
   if (listAddFrontEntry(list, key1, value1, typeString) == NULL) {
     printLog(ERR, "Failed to add test data for utility tests\n");
@@ -594,8 +594,8 @@ bool testListCopyCompare(void) {
   }
   
   // Add test data to list1
-  char* key1 = createTestString(1);
-  char* value1 = createTestString(10);
+  char* key1 = createListTestString(1);
+  char* value1 = createListTestString(10);
   
   if (listAddFrontEntry(list1, key1, value1, typeString) == NULL) {
     printLog(ERR, "Failed to add test data for copy/compare tests\n");
@@ -714,8 +714,8 @@ bool testListDestroyNode(void) {
   }
   
   // Add test data
-  char* key1 = createTestString(1);
-  char* value1 = createTestString(10);
+  char* key1 = createListTestString(1);
+  char* value1 = createListTestString(10);
   
   ListNode* node = listAddFrontEntry(list, key1, value1, typeString);
   if (node == NULL) {
