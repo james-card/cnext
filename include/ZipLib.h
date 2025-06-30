@@ -207,11 +207,6 @@ i64          zipGetEntrySize(Zip *zip, i64 index);
 bool         zipHasEntry(Zip *zip, const char *entryName);
 
 
-// Unit tests.
-bool compressedDataUnitTest();
-bool zipUnitTest();
-
-
 #ifdef __cplusplus
 } // extern "C"
 #endif
