@@ -545,7 +545,7 @@ int configureTlsServerSocket(Socket *sock,
   const char *certificate, const char *key
 ) {
   printLog(TRACE,
-    "ENTER configureTlsServerSocket(sock=%s, certificate=%s, key=%s)\n",
+    "ENTER configureTlsServerSocket(sock=%s, certificate=%p, key=%p)\n",
     socketToString(sock), certificate, key);
   
   SSL_library_init();
@@ -567,7 +567,7 @@ int configureTlsServerSocket(Socket *sock,
     // SSL is completely unconfigured, so we can't use sslGetLastError here.
     printLog(ERR, "Unable to create SSL context.\n");
     printLog(TRACE,
-      "EXIT configureTlsServerSocket(sock=%s, certificate=%s, key=%s) = {%d}\n",
+      "EXIT configureTlsServerSocket(sock=%s, certificate=%p, key=%p) = {%d}\n",
       socketToString(sock), certificate, key, -1);
     return -1;
   }
@@ -588,7 +588,7 @@ int configureTlsServerSocket(Socket *sock,
     BIO_free(bio); bio = NULL;
     SSL_CTX_free(sslContext); sslContext = NULL;
     printLog(TRACE,
-      "EXIT configureTlsServerSocket(sock=%s, certificate=%s, key=%s) = {%d}\n",
+      "EXIT configureTlsServerSocket(sock=%s, certificate=%p, key=%p) = {%d}\n",
       socketToString(sock), certificate, key, -2);
     return -2;
   }
@@ -606,7 +606,7 @@ int configureTlsServerSocket(Socket *sock,
     error = stringDestroy(error);
     SSL_CTX_free(sslContext); sslContext = NULL;
     printLog(TRACE,
-      "EXIT configureTlsServerSocket(sock=%s, certificate=%s, key=%s) = {%d}\n",
+      "EXIT configureTlsServerSocket(sock=%s, certificate=%p, key=%p) = {%d}\n",
       socketToString(sock), certificate, key, -3);
     return -3;
   }
@@ -621,7 +621,7 @@ int configureTlsServerSocket(Socket *sock,
     EVP_PKEY_free(rsaKey); rsaKey = NULL;
     SSL_CTX_free(sslContext); sslContext = NULL;
     printLog(TRACE,
-      "EXIT configureTlsServerSocket(sock=%s, certificate=%s, key=%s) = {%d}\n",
+      "EXIT configureTlsServerSocket(sock=%s, certificate=%p, key=%p) = {%d}\n",
       socketToString(sock), certificate, key, -3);
     return -4;
   }
@@ -631,7 +631,7 @@ int configureTlsServerSocket(Socket *sock,
   _tlsSocketsEnabled = true;
   
   printLog(TRACE,
-    "EXIT configureTlsServerSocket(sock=%s, certificate=%s, key=%s) = {%d}\n",
+    "EXIT configureTlsServerSocket(sock=%s, certificate=%p, key=%p) = {%d}\n",
     socketToString(sock), certificate, key, 0);
   return 0;
 }
@@ -646,7 +646,7 @@ int configureTlsServerSocket(Socket *sock,
 /// @return Returns true if the pair is valid, false if not.
 bool tlsKeyAndCertificateValid(const char *certificate, const char *key) {
   printLog(TRACE,
-    "ENTER tlsKeyAndCertificateValid(certificate=%s, key=%s)\n",
+    "ENTER tlsKeyAndCertificateValid(certificate=%p, key=%p)\n",
     certificate, key);
   
   bool returnValue = true;
@@ -661,7 +661,7 @@ bool tlsKeyAndCertificateValid(const char *certificate, const char *key) {
     printLog(ERR, "One or more missing parameters.\n");
     returnValue = false;
     printLog(TRACE,
-      "EXIT tlsKeyAndCertificateValid(certificate=%s, key=%s) = {%s}\n",
+      "EXIT tlsKeyAndCertificateValid(certificate=%p, key=%p) = {%s}\n",
       certificate, key, boolNames[returnValue]);
     return returnValue; // false
   }
@@ -673,7 +673,7 @@ bool tlsKeyAndCertificateValid(const char *certificate, const char *key) {
     printLog(ERR, "Unable to create SSL context.\n");
     returnValue = false;
     printLog(TRACE,
-      "EXIT tlsKeyAndCertificateValid(certificate=%s, key=%s) = {%s}\n",
+      "EXIT tlsKeyAndCertificateValid(certificate=%p, key=%p) = {%s}\n",
       certificate, key, boolNames[returnValue]);
     return returnValue; // false
   }
@@ -695,7 +695,7 @@ bool tlsKeyAndCertificateValid(const char *certificate, const char *key) {
     SSL_CTX_free(sslContext); sslContext = NULL;
     returnValue = false;
     printLog(TRACE,
-      "EXIT tlsKeyAndCertificateValid(certificate=%s, key=%s) = {%s}\n",
+      "EXIT tlsKeyAndCertificateValid(certificate=%p, key=%p) = {%s}\n",
       certificate, key, boolNames[returnValue]);
     return returnValue; // false
   }
@@ -714,7 +714,7 @@ bool tlsKeyAndCertificateValid(const char *certificate, const char *key) {
     SSL_CTX_free(sslContext); sslContext = NULL;
     returnValue = false;
     printLog(TRACE,
-      "EXIT tlsKeyAndCertificateValid(certificate=%s, key=%s) = {%s}\n",
+      "EXIT tlsKeyAndCertificateValid(certificate=%p, key=%p) = {%s}\n",
       certificate, key, boolNames[returnValue]);
     return returnValue; // false
   }
@@ -730,7 +730,7 @@ bool tlsKeyAndCertificateValid(const char *certificate, const char *key) {
     SSL_CTX_free(sslContext); sslContext = NULL;
     returnValue = false;
     printLog(TRACE,
-      "EXIT tlsKeyAndCertificateValid(certificate=%s, key=%s) = {%s}\n",
+      "EXIT tlsKeyAndCertificateValid(certificate=%p, key=%p) = {%s}\n",
       certificate, key, boolNames[returnValue]);
     return returnValue; // false
   }
@@ -740,7 +740,7 @@ bool tlsKeyAndCertificateValid(const char *certificate, const char *key) {
   _tlsSocketsEnabled = true;
   
   printLog(TRACE,
-    "EXIT tlsKeyAndCertificateValid(certificate=%s, key=%s) = {%s}\n",
+    "EXIT tlsKeyAndCertificateValid(certificate=%p, key=%p) = {%s}\n",
     certificate, key, boolNames[returnValue]);
   return returnValue; // true
 }
@@ -919,7 +919,7 @@ Socket* createServerSocket(SocketProtocol socketProtocol, const char *address,
       // This may help catch situations when they're not defined but should be.
       printLog(TRACE,
         "EXIT createServerSocket(socketProtocol=%s, address=%s, socketMode=%s, "
-        "certificate=%s, key=%s) = {NULL}\n",
+        "certificate=%p, key=%p) = {NULL}\n",
         SocketProtocolNames[socketProtocol],
         address,
         SocketModeNames[socketMode],
