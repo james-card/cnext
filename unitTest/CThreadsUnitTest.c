@@ -219,7 +219,7 @@ bool testMutex(void) {
 ///
 /// @return true if test passes, false otherwise
 ///////////////////////////////////////////////////////////////////////////////
-bool testCondition(void) {
+bool cThreadsUnitTestTestCondition(void) {
   printLog(DEBUG, "Testing condition variable functionality\n");
   
   cnd_t condition;
@@ -533,7 +533,7 @@ bool cThreadsUnitTest(void) {
     return false;
   }
   
-  if (!testCondition()) {
+  if (!cThreadsUnitTestTestCondition()) {
     printLog(ERR, "Condition variable test failed\n");
     return false;
   }
