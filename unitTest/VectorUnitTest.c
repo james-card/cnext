@@ -715,7 +715,7 @@ bool testVectorSerialization(void) {
     vectorDestroy(vector);
     return false;
   }
-  stringDestroy(toStringResult);
+  toStringResult = stringDestroy(toStringResult);
   
   // Test toXml
   Bytes xmlResult = vectorToXml(vector, "TestVector");
@@ -846,7 +846,7 @@ bool testVectorSerialization(void) {
   vectorDestroy(vector);
   bytesDestroy(jsonResult);
   bytesDestroy(blobResult);
-  stringDestroy(nullToString);
+  nullToString = stringDestroy(nullToString);
   
   printLog(DEBUG, "Vector serialization tests passed\n");
   return true;
