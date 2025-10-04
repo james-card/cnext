@@ -375,6 +375,7 @@ bool testStrReplaceStr(void) {
   // Test with NULL input
   result = strReplaceStr(NULL, "World", "Universe");
   TEST_ASSERT_STR_EQ(result, "", "strReplaceStr should return empty string for NULL input");
+  result = stringDestroy(result);
   
   return true;
 }

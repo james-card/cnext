@@ -227,9 +227,8 @@ bool dataTypesUnitTest(void) {
   if (bytesResult == NULL) {
     printLog(ERR, "pointerToBytes failed for valid pointer\n");
     allTestsPassed = false;
-  } else {
-    // Clean up bytes if needed
   }
+  bytesResult = bytesDestroy(bytesResult);
   
   // Test pointerCompare
   int valueA = 10;
@@ -273,6 +272,7 @@ bool dataTypesUnitTest(void) {
       allTestsPassed = false;
     }
   }
+  blobResult = bytesDestroy(blobResult);
   
   if (pointerFromBlob(NULL, NULL, false, false) != NULL) {
     printLog(ERR, "pointerFromBlob should handle NULL input\n");

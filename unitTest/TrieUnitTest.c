@@ -173,6 +173,18 @@ bool testBasicValueOperations(void) {
   return true;
 }
 
+/// @fn void dualKeyTopDestructor(void *value)
+///
+/// @brief Wrapper around trieDestroy to make the C compiler happy.
+///
+/// @param value A pointer to a Trie cast to a void*.
+///
+/// @return This function returns no value.
+void dualKeyTopDestructor(void *value) {
+  Trie *trie = (Trie*) value;
+  trieDestroy(trie);
+}
+
 ///
 /// @brief Test dual key operations (set/get/delete with two keys).
 ///
@@ -181,7 +193,7 @@ bool testBasicValueOperations(void) {
 bool testDualKeyOperations(void) {
   printLog(DEBUG, "Testing dual key operations");
   
-  Trie *trie = trieCreate(testDestructor);
+  Trie *trie = trieCreate(dualKeyTopDestructor);
   if (trie == NULL) {
     printLog(ERR, "Failed to create trie for dual key operations test");
     return false;

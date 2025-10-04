@@ -137,6 +137,7 @@ int consumerThreadFunction(void *arg) {
       printLog(DEBUG, "Consumer received unexpected message type: %d", 
                msg_type(message));
       msg_release(message);
+      msg_destroy(message);
       continue;
     }
     
@@ -149,7 +150,19 @@ int consumerThreadFunction(void *arg) {
     
     msg_set_done(message);
     msg_release(message);
+    msg_destroy(message);
     printLog(DEBUG, "Consumer processed message %d", ii);
+  }
+  
+  sleep(1);
+  msg_t *message = thrd_msg_q_pop();
+  while (message != NULL) {
+    TestData *receivedData = (TestData *) msg_data(message);
+    free(receivedData);
+    msg_set_done(message);
+    msg_release(message);
+    msg_destroy(message);
+    message = thrd_msg_q_pop();
   }
   
   printLog(DEBUG, "Consumer thread finished");
@@ -338,6 +351,9 @@ bool testMessageQueue(void) {
   }
   
   // Clean up
+  for (int ii = 0; ii < numMessages; ii++) {
+    msg_destroy(messages[ii]);
+  }
   int result = msg_q_destroy(&queue);
   if (result != msg_success) {
     printLog(ERR, "Failed to destroy message queue");
@@ -422,6 +438,7 @@ bool testMessageTypeFiltering(void) {
   free(simpleData);
   
   msg_release(simpleMessage);
+  msg_destroy(simpleMessage);
   
   // Test pop by type - should get COMPLEX message
   msg_t *complexMessage = msg_q_pop_type(queue, TEST_MSG_TYPE_COMPLEX);
@@ -440,12 +457,14 @@ bool testMessageTypeFiltering(void) {
   free(msg_data(complexMessage));
   
   msg_release(complexMessage);
+  msg_destroy(complexMessage);
   
   // Clean up remaining messages
   msg_t *remainingMessage;
   while ((remainingMessage = msg_q_pop(queue)) != NULL) {
     free(msg_data(remainingMessage));
     msg_release(remainingMessage);
+    msg_destroy(remainingMessage);
   }
   
   msg_q_destroy(queue);
@@ -531,6 +550,7 @@ bool testTimeoutOperations(void) {
   }
   
   msg_release(waitedMessage);
+  msg_destroy(message);
   msg_q_destroy(queue);
   printLog(DEBUG, "Timeout operations test passed");
   return true;
@@ -914,6 +934,7 @@ bool testNullQueueParameterHandling(void) {
     msg_release(cleanupMessage);
   }
   
+  msg_destroy(message);
   msg_q_destroy(queue);
   printLog(DEBUG, "NULL parameter handling for message queues test passed");
   return true;
@@ -1034,6 +1055,7 @@ bool testNullThreadParameterHandling(void) {
   if (cleanupMessage != NULL) {
     msg_release(cleanupMessage);
   }
+  msg_destroy(message);
   
   printLog(DEBUG, "NULL parameter handling for thread message functions test passed");
   return true;
@@ -1230,6 +1252,7 @@ bool testMessageQueueEdgeCases(void) {
   }
   
   msg_release(retrievedMessage);
+  msg_destroy(zeroSizeMessage);
   msg_q_destroy(queue);
   printLog(DEBUG, "Message queue edge cases test passed");
   return true;

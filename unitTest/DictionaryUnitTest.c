@@ -75,6 +75,7 @@ bool dictionaryUnitTest(void) {
     return false;
   }
   printLog(DEBUG, "userValue was \"val2\" as expected.\n");
+  userValue = stringDestroy(userValue);
 
   ungets("marklar\n", stdin);
   userValue = getUserValue(dictionary, "arg2", "arg2:", "val2");
@@ -84,6 +85,7 @@ bool dictionaryUnitTest(void) {
     return false;
   }
   printLog(DEBUG, "userValue was \"marklar\" as expected.\n");
+  userValue = stringDestroy(userValue);
 
   dictionaryDestroy(dictionary); dictionary = NULL;
 
