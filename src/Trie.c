@@ -112,7 +112,7 @@ Trie* trieCreate(tss_dtor_t destructor) {
 ///   the node.
 ///
 /// @return This function always returns NULL.
-static inline TrieNode* trieDestroyNode(
+inline TrieNode* trieDestroyNode(
   TrieNode *node, tss_dtor_t destructor
 ) {
   if (node != NULL) {
@@ -168,7 +168,7 @@ Trie* trieDestroy(Trie *tree) {
 /// @param numKeys The number of keys pointed to by the key.
 ///
 /// @return Returns the value in the tree if it exists, NULL if not.
-static inline void* trieNodeGetValue(TrieNode *node,
+inline void* trieNodeGetValue(TrieNode *node,
   const volatile TRIE_KEY_ELEMENT *key, size_t numKeys
 ) {
   const volatile void *returnValue = NULL;
@@ -239,8 +239,10 @@ void* trieGetValue(Trie *tree,
 
   returnValue = trieNodeGetValue(
     tree->root,
-     (TRIE_KEY_ELEMENT*) key,
-     (keySize >> TRIE_NUM_KEYS_BIT_SHIFT)
+    (TRIE_KEY_ELEMENT*) key,
+    (keySize != TRIE_STRING_KEY)
+      ? (keySize >> TRIE_NUM_KEYS_BIT_SHIFT)
+      : keySize
   );
 
   return returnValue;
@@ -294,7 +296,7 @@ void* trieGetValue2(Trie *tree1,
 ///
 /// @return Returns the previous value of the node if there was one, NULL
 /// otherwise.
-static inline void* trieNodeSetValue(TrieNode *node,
+inline void* trieNodeSetValue(TrieNode *node,
   const volatile TRIE_KEY_ELEMENT *key, size_t numKeys,
   volatile void *value
 ) {
@@ -377,7 +379,9 @@ void* trieSetValue(Trie *tree,
   returnValue = trieNodeSetValue(
     tree->root,
     (TRIE_KEY_ELEMENT*) key,
-    (keySize >> TRIE_NUM_KEYS_BIT_SHIFT),
+    (keySize != TRIE_STRING_KEY)
+      ? (keySize >> TRIE_NUM_KEYS_BIT_SHIFT)
+      : keySize,
     value
   );
 
@@ -456,7 +460,7 @@ void* trieSetValue2(Trie *tree1,
 /// @return Returns 0 if the value was not found, 1 if the value was found and
 /// deleted but there are still things in the node's array, 2 if the value was
 /// found and deleted and the node's array is now empty, -1 on error.
-static inline int trieNodeDeleteValue(
+inline int trieNodeDeleteValue(
   TrieNode *node,
   const volatile TRIE_KEY_ELEMENT *key, size_t numKeys,
   tss_dtor_t destructor
@@ -563,7 +567,9 @@ int trieDeleteValue(Trie *tree,
   trieNodeDeleteValue(
     tree->root,
     (TRIE_KEY_ELEMENT*) key,
-    (keySize >> TRIE_NUM_KEYS_BIT_SHIFT),
+    (keySize != TRIE_STRING_KEY)
+      ? (keySize >> TRIE_NUM_KEYS_BIT_SHIFT)
+      : keySize,
     tree->destructor
   );
 
