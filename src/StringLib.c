@@ -461,10 +461,26 @@ Bytes getFileContent_(const char *fullPath, i64 start, i64 length, ...) {
   }
   
   // Get the file size and allocate the buffer.
-  fseek(requestedFile, 0, SEEK_END);
+  if (fseek(requestedFile, 0, SEEK_END) < 0) {
+    printLog(ERR, "Could not get to end of file \"%s\" in getFileContent.\n");
+    printLog(ERR, "Error returned: %s\n", strerror(errno));
+    fclose(requestedFile); requestedFile = NULL;
+    printLog(TRACE,
+      "EXIT getFileContent(fullPath=\"%s\", start=%lld, length=%lld) = {NULL}\n",
+      (fullPath != NULL) ? fullPath : "NULL", lli(start), lli(length));
+    return NULL;
+  }
   i64 fileSize = (i64) ftell(requestedFile);
   if (start > fileSize) {
     // Not an error, but nothing to read.
+    fclose(requestedFile); requestedFile = NULL;
+    printLog(TRACE,
+      "EXIT getFileContent(fullPath=\"%s\", start=%lld, length=%lld) = {NULL}\n",
+      (fullPath != NULL) ? fullPath : "NULL", lli(start), lli(length));
+    return NULL;
+  } else if (fileSize < 0) {
+    printLog(ERR, "Could not get position of file \"%s\" in getFileContent.\n");
+    printLog(ERR, "Error returned: %s\n", strerror(errno));
     fclose(requestedFile); requestedFile = NULL;
     printLog(TRACE,
       "EXIT getFileContent(fullPath=\"%s\", start=%lld, length=%lld) = {NULL}\n",
