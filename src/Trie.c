@@ -112,7 +112,7 @@ Trie* trieCreate(tss_dtor_t destructor) {
 ///   the node.
 ///
 /// @return This function always returns NULL.
-inline TrieNode* trieDestroyNode(
+TrieNode* trieDestroyNode(
   TrieNode *node, tss_dtor_t destructor
 ) {
   if (node != NULL) {
@@ -168,7 +168,7 @@ Trie* trieDestroy(Trie *tree) {
 /// @param numKeys The number of keys pointed to by the key.
 ///
 /// @return Returns the value in the tree if it exists, NULL if not.
-inline void* trieNodeGetValue(TrieNode *node,
+void* trieNodeGetValue(TrieNode *node,
   const volatile TRIE_KEY_ELEMENT *key, size_t numKeys
 ) {
   const volatile void *returnValue = NULL;
@@ -296,7 +296,7 @@ void* trieGetValue2(Trie *tree1,
 ///
 /// @return Returns the previous value of the node if there was one, NULL
 /// otherwise.
-inline void* trieNodeSetValue(TrieNode *node,
+void* trieNodeSetValue(TrieNode *node,
   const volatile TRIE_KEY_ELEMENT *key, size_t numKeys,
   volatile void *value
 ) {
@@ -458,9 +458,8 @@ void* trieSetValue2(Trie *tree1,
 /// @param destructor The destructor to call on the value, if found.
 ///
 /// @return Returns 0 if the value was not found, 1 if the value was found and
-/// deleted but there are still things in the node's array, 2 if the value was
-/// found and deleted and the node's array is now empty, -1 on error.
-inline int trieNodeDeleteValue(
+/// deleted, -1 on error.
+int trieNodeDeleteValue(
   TrieNode *node,
   const volatile TRIE_KEY_ELEMENT *key, size_t numKeys,
   tss_dtor_t destructor
@@ -469,78 +468,34 @@ inline int trieNodeDeleteValue(
   TRIE_KEY_ELEMENT currentKeyIndex = 0;
   TrieNode **trieNodes = NULL;
 
-  if (node != NULL) {
-    bool valueDeleted = false;
-    trieNodes = node->trieNodes;
-    if (numKeys == TRIE_STRING_KEY) {
-      // Key is a NULL-terminated array of keys.
-      currentKeyIndex = key[0];
-      if (currentKeyIndex != '\0') {
-        // Start the key we send down to the next level with the next index.
-        int secondLevelReturnValue = trieNodeDeleteValue(
-          trieNodes[currentKeyIndex],
-          &key[1], TRIE_STRING_KEY, destructor);
-        if (secondLevelReturnValue > 1) {
-          // There's nothing left in this node.  Delete it.
-          free(exchangePointer(
-            (void* volatile*) &trieNodes[currentKeyIndex], NULL));
-          valueDeleted = true;
-          returnValue = 1;
-        } else {
-          returnValue = secondLevelReturnValue;
-        }
-      } else if (destructor != NULL) {
-        // Delete the value.
-        destructor(exchangePointer((void* volatile*)&node->value, NULL));
-        valueDeleted = true;
-        returnValue = 1;
-      } else {
-        // destructor is NULL.  Just set the pointer to NULL.
-        node->value = NULL;
-        valueDeleted = true;
-        returnValue = 1;
-      }
-    } else if (numKeys > 0) {
-      // Key is fixed-length (an integer value).  This is the usual case.
+  if (numKeys != TRIE_STRING_KEY) {
+    // See the note in trieNodeGetValue about the order of this search.
+    while ((numKeys > 0) && (node != NULL)) {
       currentKeyIndex = key[numKeys - 1];
-      int secondLevelReturnValue = trieNodeDeleteValue(
-        trieNodes[currentKeyIndex], key, numKeys - 1, destructor);
-      if (secondLevelReturnValue > 1) {
-        // There's nothing left in this node.  Delete it.
-        free(exchangePointer(
-          (void* volatile*) &trieNodes[currentKeyIndex], NULL));
-        valueDeleted = true;
-        returnValue = 1;
-      } else {
-        returnValue = secondLevelReturnValue;
-      }
-    } else if (destructor != NULL) {
+      trieNodes = node->trieNodes;
+      node = trieNodes[currentKeyIndex];
+      numKeys--;
+    }
+  } else {
+    // Key is a NULL-terminated array of keys.
+    for (numKeys = 0; (key[numKeys] != '\0') && (node != NULL); numKeys++) {
+      currentKeyIndex = key[numKeys];
+      trieNodes = node->trieNodes;
+      node = trieNodes[currentKeyIndex];
+    }
+    // numKeys now holds the true number of keys.
+  }
+
+  if (node != NULL) {
+    if (destructor != NULL) {
       // Delete the value.
       destructor(exchangePointer((void* volatile*)&node->value, NULL));
-      valueDeleted = true;
       returnValue = 1;
     } else {
       // destructor is NULL.  Just set the pointer to NULL.
       node->value = NULL;
-      valueDeleted = true;
       returnValue = 1;
     }
-
-    if ((valueDeleted == true) && (node->value == NULL)) {
-      // See if there's anything left in the array.
-      unsigned int ii = 0;
-      for (; ii < TRIE_ARRAY_SIZE; ii++) {
-        if (trieNodes[ii] != NULL) {
-          break;
-        }
-      }
-      if (ii == TRIE_ARRAY_SIZE) {
-        // There's nothing left in this node.  Get rid of it.
-        returnValue = 2;
-      }
-    }
-  } else {
-    returnValue = -1;
   }
 
   return returnValue;
