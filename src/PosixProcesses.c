@@ -398,7 +398,7 @@ bool startPosixProcess(
       
       // If we get this far then the command above failed.
       // Since we forked above, continuing on will spawn off more instances
-      // of the Test Client.  Exit to avoid that scenario.
+      // of the process.  Exit to avoid that scenario.
       fprintf(stderr, "startPosixProcess(): execve(%s) failed!\n", argArray[0]);
       fprintf(stderr, "[ERROR] %s\n", strerror(errno));
       argArray = posixProcessesFreeArgArray(argArray);
