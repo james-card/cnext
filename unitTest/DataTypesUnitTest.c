@@ -231,27 +231,27 @@ bool dataTypesUnitTest(void) {
   bytesResult = bytesDestroy(bytesResult);
   
   // Test pointerCompare
-  int valueA = 10;
-  int valueB = 20;
+  int *valueA = (int*) 10;
+  int *valueB = (int*) 20;
   
-  int compareResult = pointerCompare(&valueA, &valueB);
+  int compareResult = pointerCompare(valueA, valueB);
   if (compareResult >= 0) {
     printLog(ERR, "pointerCompare failed: should be negative\n");
     allTestsPassed = false;
   }
   
-  compareResult = pointerCompare(&valueB, &valueA);
+  compareResult = pointerCompare(valueB, valueA);
   if (compareResult <= 0) {
     printLog(ERR, "pointerCompare failed: should be positive\n");
     allTestsPassed = false;
   }
   
-  if (pointerCompare(NULL, &valueA) == 0) {
+  if (pointerCompare(NULL, valueA) == 0) {
     printLog(ERR, "pointerCompare should handle NULL first parameter\n");
     allTestsPassed = false;
   }
   
-  if (pointerCompare(&valueA, NULL) == 0) {
+  if (pointerCompare(valueA, NULL) == 0) {
     printLog(ERR, "pointerCompare should handle NULL second parameter\n");
     allTestsPassed = false;
   }
