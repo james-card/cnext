@@ -6574,3 +6574,203 @@ bool strtobool(const char *str, char **endptr) {
   return false;
 }
 
+/// @fn bool amongVaPointer(
+///   int (*compare)(const volatile void*, const volatile void*),
+///   const volatile void *needle, va_list args)
+///
+/// @brief See if a value is one of the values in the va_list provided.
+///
+/// @param compare A compararison function that returns 0 if the two parameters
+///   provided to it are equal.
+/// @param needle A pointer to the value to search for in the remaining
+///   parameters.
+/// @param args A va_list containing one or more values to compare the needle
+///   against to see if there's a match.  The va_list is NULL terminated.
+///
+/// @return Returns true if the provided needle is the same as one of the other
+/// provided parameters according to the provided comaprison function, false
+/// otherwise.
+bool amongVaPointer(
+  int (*compare)(const volatile void*, const volatile void*),
+  const volatile void *needle, va_list args
+) {
+  bool returnValue = false;
+  
+  const void *haystack = va_arg(args, void*);
+  while (haystack != NULL) {
+    if (compare(haystack, needle) == 0) {
+      returnValue = true;
+      break;
+    }
+    haystack = va_arg(args, void*);
+  }
+  
+  return returnValue;
+}
+
+/// @fn bool amongVa64(u64 needle, va_list args)
+///
+/// @brief See if a value is one of the values in the va_list provided.
+///
+/// @param needle The 64-bit value to search for in the remaining parameters.
+/// @param args A va_list containing one or more values to compare the needle
+///   against to see if there's a match.  The va_list is terminated with a value
+///   of 0.
+///
+/// @return Returns true if the provided needle is the same as one of the other
+/// provided parameters according to the provided comaprison function, false
+/// otherwise.
+bool amongVa64(u64 needle, va_list args) {
+  bool returnValue = false;
+  
+  u64 haystack = va_arg(args, u64);
+  while (haystack != 0) {
+    if (haystack == needle) {
+      returnValue = true;
+      break;
+    }
+    haystack = va_arg(args, u64);
+  }
+  
+  return returnValue;
+}
+
+/// @fn bool amongVa32(u32 needle, va_list args)
+///
+/// @brief See if a value is one of the values in the va_list provided.
+///
+/// @param needle The 32-bit value to search for in the remaining parameters.
+/// @param args A va_list containing one or more values to compare the needle
+///   against to see if there's a match.  The va_list is terminated with a value
+///   of 0.
+///
+/// @return Returns true if the provided needle is the same as one of the other
+/// provided parameters according to the provided comaprison function, false
+/// otherwise.
+bool amongVa32(u32 needle, va_list args) {
+  bool returnValue = false;
+  
+  u32 haystack = va_arg(args, u32);
+  while (haystack != 0) {
+    if (haystack == needle) {
+      returnValue = true;
+      break;
+    }
+    haystack = va_arg(args, u32);
+  }
+  
+  return returnValue;
+}
+
+/// @fn bool amongVa16(u16 needle, va_list args)
+///
+/// @brief See if a value is one of the values in the va_list provided.
+///
+/// @param needle The 16-bit value to search for in the remaining parameters.
+/// @param args A va_list containing one or more values to compare the needle
+///   against to see if there's a match.  The va_list is terminated with a value
+///   of 0.
+///
+/// @return Returns true if the provided needle is the same as one of the other
+/// provided parameters according to the provided comaprison function, false
+/// otherwise.
+bool amongVa16(u16 needle, va_list args) {
+  bool returnValue = false;
+  
+  // 16-bit values get promoted to ints
+  u16 haystack = (u16) va_arg(args, int);
+  while (haystack != 0) {
+    if (haystack == needle) {
+      returnValue = true;
+      break;
+    }
+    haystack = (u16) va_arg(args, int);
+  }
+  
+  return returnValue;
+}
+
+/// @fn bool amongVa8(u8 needle, va_list args)
+///
+/// @brief See if a value is one of the values in the va_list provided.
+///
+/// @param needle The 8-bit value to search for in the remaining parameters.
+/// @param args A va_list containing one or more values to compare the needle
+///   against to see if there's a match.  The va_list is terminated with a value
+///   of 0.
+///
+/// @return Returns true if the provided needle is the same as one of the other
+/// provided parameters according to the provided comaprison function, false
+/// otherwise.
+bool amongVa8(u8 needle, va_list args) {
+  bool returnValue = false;
+  
+  // 8-bit values get promoted to ints
+  u8 haystack = (u8) va_arg(args, int);
+  while (haystack != 0) {
+    if (haystack == needle) {
+      returnValue = true;
+      break;
+    }
+    haystack = (u8) va_arg(args, int);
+  }
+  
+  return returnValue;
+}
+
+/// @fn bool amongVaFloat(float needle, va_list args)
+///
+/// @brief See if a value is one of the values in the va_list provided.
+///
+/// @param needle The float value value to search for in the remaining
+///   parameters.
+/// @param args A va_list containing one or more values to compare the needle
+///   against to see if there's a match.  The va_list is terminated with a value
+///   of 0.
+///
+/// @return Returns true if the provided needle is the same as one of the other
+/// provided parameters according to the provided comaprison function, false
+/// otherwise.
+bool amongVaFloat(float needle, va_list args) {
+  bool returnValue = false;
+  
+  float haystack = (float) va_arg(args, double);
+  while (haystack != 0) {
+    if (haystack == needle) {
+      returnValue = true;
+      break;
+    }
+    haystack = (float) va_arg(args, double);
+  }
+  
+  return returnValue;
+}
+
+/// @fn bool amongVaDouble(double needle, va_list args)
+///
+/// @brief See if a value is one of the values in the va_list provided.
+///
+/// @param needle The double value value to search for in the remaining
+///   parameters.
+/// @param args A va_list containing one or more values to compare the needle
+///   against to see if there's a match.  The va_list is terminated with a value
+///   of 0.
+///
+/// @return Returns true if the provided needle is the same as one of the other
+/// provided parameters according to the provided comaprison function, false
+/// otherwise.
+bool amongVaDouble(double needle, va_list args) {
+  bool returnValue = false;
+  
+  double haystack = va_arg(args, double);
+  while (haystack != 0) {
+    if (haystack == needle) {
+      returnValue = true;
+      break;
+    }
+    haystack = va_arg(args, double);
+  }
+  
+  return returnValue;
+}
+
