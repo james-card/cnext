@@ -151,42 +151,6 @@ static inline char* valueToStringI8(i8 value) {
 static inline char* valueToStringU8(u8 value) {
   return typeU8->toString(&value);
 }
-static inline char* valueToStringLongInt(long int value) {
-  if (sizeof(value) == sizeof(i32)) {
-    return typeI32->toString(&value);
-  } else if (sizeof(value) == sizeof(i64)) {
-    return typeI64->toString(&value);
-  } else {
-    return NULL;
-  }
-}
-static inline char* valueToStringUnsignedLongInt(unsigned long int value) {
-  if (sizeof(value) == sizeof(u32)) {
-    return typeU32->toString(&value);
-  } else if (sizeof(value) == sizeof(u64)) {
-    return typeU64->toString(&value);
-  } else {
-    return NULL;
-  }
-}
-static inline char* valueToStringLongIntP(long int *value) {
-  if (sizeof(*value) == sizeof(i32)) {
-    return typeI32->toString(value);
-  } else if (sizeof(*value) == sizeof(i64)) {
-    return typeI64->toString(value);
-  } else {
-    return NULL;
-  }
-}
-static inline char* valueToStringUnsignedLongIntP(unsigned long int *value) {
-  if (sizeof(*value) == sizeof(u32)) {
-    return typeU32->toString(value);
-  } else if (sizeof(*value) == sizeof(u64)) {
-    return typeU64->toString(value);
-  } else {
-    return NULL;
-  }
-}
 
 #ifdef __cplusplus
 } // extern "C"
@@ -248,11 +212,7 @@ static inline char* valueToStringUnsignedLongIntP(unsigned long int *value) {
   const volatile Vector*:       valueToStringVectorP,         \
   void*:                        valueToStringPointer,         \
   i8:                           valueToStringI8,              \
-  u8:                           valueToStringU8,              \
-  long int:                     valueToStringLongInt,         \
-  long int*:                    valueToStringLongIntP,        \
-  unsigned long int:            valueToStringUnsignedLongInt, \
-  unsigned long int*:           valueToStringUnsignedLongIntP \
+  u8:                           valueToStringU8               \
 
 #define valueToString(value) _Generic((value), \
   TYPE_TO_STRING_GENERIC_CASES(value) \
