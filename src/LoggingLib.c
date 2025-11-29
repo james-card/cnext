@@ -733,7 +733,7 @@ int vprintLog(const char *fileName, const char *functionName, int lineNumber,
 /// function _makeLogHeader.  The contents of [log message] will be defined by
 /// the format string and optional arguments.
 ///
-/// This function is wrapped by a #define (without the leading underscore) that
+/// This function is wrapped by a #define (without the trailing underscore) that
 /// automatically proivdes the fileName, functionName, and lineNumber arguments.
 /// The caller need only provide the logLevel, format string, and optional
 /// parameters.
@@ -782,7 +782,7 @@ int printLog_(const char *fileName, const char *functionName, int lineNumber,
 /// function _makeLogHeader.  The contents of [log message] will be defined by
 /// the data argument.
 ///
-/// This function is wrapped by a #define (without the leading underscore) that
+/// This function is wrapped by a #define (without the trailing underscore) that
 /// automatically proivdes the fileName, functionName, and lineNumber arguments.
 /// The caller need only provide the logLevel, data , and length.
 ///
@@ -1091,7 +1091,7 @@ int vprintBox(const char *fileName, const char *functionName, int lineNumber,
 /// function _makeLogHeader.  The contents of [log message] will be defined by
 /// the format string and optional arguments.
 ///
-/// This function is wrapped by a #define (without the leading underscore) that
+/// This function is wrapped by a #define (without the trailing underscore) that
 /// automatically proivdes the fileName, functionName, and lineNumber arguments.
 /// The caller need only provide the logLevel, format string, and optional
 /// parameters.
@@ -1377,7 +1377,7 @@ int vprintBanner(const char *fileName, const char *functionName, int lineNumber,
 /// the format string and optional arguments and will be expanded using the
 /// ASCII character maps below.
 ///
-/// This function is wrapped by a #define (without the leading underscore) that
+/// This function is wrapped by a #define (without the trailing underscore) that
 /// automatically proivdes the fileName, functionName, and lineNumber arguments.
 /// The caller need only provide the logLevel, format string, and optional
 /// parameters.

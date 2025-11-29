@@ -198,7 +198,7 @@ Vector *vectorCreate_(TypeDescriptor *keyType, TypeDescriptor *valueType,
 /// @param type The type of the value.
 ///
 /// @note This function is wrapped by a define of the same name, minus the
-/// leading underscore.  The type parameter is optional when the define is
+/// trailing underscore.  The type parameter is optional when the define is
 /// used.
 ///
 /// @return Returns a pointer to the modified index on success, NULL on failure.

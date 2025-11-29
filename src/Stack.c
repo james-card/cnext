@@ -64,7 +64,7 @@ Stack *stackCreate(TypeDescriptor *dataType) {
 /// @param type The TypeDescriptor for the data.  This parameter is optional.
 /// @param ... All further arguments are ignored.
 ///
-/// @note This function is wrapped by a #define (without the leading underscore)
+/// @note This function is wrapped by a #define (minus the trailing underscore)
 /// that automatically appends a null when the stack and data are provided and
 /// provides a type if it is provided.
 ///

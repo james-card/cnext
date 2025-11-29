@@ -302,7 +302,7 @@ int updateTreeLinks(HashTable *table, u64 index) {
 /// @param type is the TypeDescriptor used to describe the value provided.
 ///
 /// @note This function is wrapped by a define of the same name, minus the
-/// leading underscore.  The type parameter is optional when the define is
+/// trailing underscore.  The type parameter is optional when the define is
 /// used.
 ///
 /// @return Returns a pointer to the new HashNode created on success, NULL

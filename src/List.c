@@ -95,7 +95,7 @@ List *listCreate_(TypeDescriptor *keyType, bool disableThreadSafety, ...) {
 /// @param type is the TypeDescriptor that describes the value data.
 ///
 /// @note This function is wrapped by a define of the same name, minus the
-/// leading underscore.  The type parameter is optional when the define is
+/// trailing underscore.  The type parameter is optional when the define is
 /// used.
 ///
 /// @return Returns a pointer to the newly-created ListNode on success,
@@ -179,7 +179,7 @@ ListNode *listAddFrontEntry_(List *list, const volatile void *key,
 /// @param type is the TypeDescriptor that describes the value data.
 ///
 /// @note This function is wrapped by a define of the same name, minus the
-/// leading underscore.  The type parameter is optional when the define is
+/// trailing underscore.  The type parameter is optional when the define is
 /// used.
 ///
 /// @return Returns a pointer to the newly-created ListNode on success,
@@ -953,7 +953,7 @@ List *xmlToList(const char *inputData) {
 /// @param ... All further parameters are ignored.
 ///
 /// @note This function is wrapped by a macro of the same name, minus the
-/// leading underscore, that defaults the indent parameter to false.
+/// trailing underscore, that defaults the indent parameter to false.
 ///
 /// @return Returns a C string with the XML representation of the list.
 Bytes listToXml_(const List *list, const char *elementName, bool indent, ...) {

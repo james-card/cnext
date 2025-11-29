@@ -283,7 +283,7 @@ void treeInsertHelp(RedBlackTree *tree, RedBlackNode *z) {
 /// @param type is the TypeDescriptor that describes the value provided.
 ///
 /// @note This function is wrapped by a define of the same name, minus the
-/// leading underscore.  The type parameter is optional when the define is
+/// trailing underscore.  The type parameter is optional when the define is
 /// used.
 ///
 /// @return This function returns a pointer to the newly inserted node

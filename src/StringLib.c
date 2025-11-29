@@ -434,7 +434,7 @@ i64 getFileLength(const char *fullPath) {
 /// @param ... All further parameters are ignored.
 ///
 /// @note This function is wrapped with a macro of the same name, without the
-/// leading underscore, that automatically provieds 0 for the values of start
+/// trailing underscore, that automatically provieds 0 for the values of start
 /// and length.
 ///
 /// @return Returns a Bytes object with the contents read in on success,
