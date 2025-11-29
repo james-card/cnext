@@ -6,6 +6,7 @@ REMOVE      := rm -rf
 ARCHIVE     := ar rcs
 
 OBJ_FILES := \
+    $(OBJ_DIR)/AuxMemory.o \
     $(OBJ_DIR)/Coroutines.o \
     $(OBJ_DIR)/CThreadsMessages.o \
     $(OBJ_DIR)/DataTypes.o \
