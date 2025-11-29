@@ -934,8 +934,9 @@ Type* jsonTo##Type(const char *jsonText, long long int *position) { \
 } // extern "C"
 #endif
 
-// This must come last and must come outside the extern "C" block.
+// These must come last and must come outside the extern "C" block.
 #include "TypeSafeValueToString.h"
+#include "TypeSafeAmong.h"
 
 #endif // DATA_TYPES_H
 
