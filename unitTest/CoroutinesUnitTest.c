@@ -1108,10 +1108,14 @@ bool coroutinesUnitTest(void) {
   // Initialize coroutine system with test callbacks
   void *testStateData = (void *) 0xDEADBEEF;
   Coroutine threadCoroutine;
+  CoroutineConfigOptions coroutineConfigOptions = {
+    .stackSize = COROUTINE_DEFAULT_STACK_SIZE + 512 + 256 + 128 + 64 + 32,
+    .stateData = testStateData,
+    .comutexUnlockCallback = testComutexUnlockCallback,
+    .coconditionSignalCallback = testCoconditionSignalCallback,
+  };
   
-  int result = coroutineConfig(&globalCoroutine, 
-    COROUTINE_DEFAULT_STACK_SIZE + 512 + 256 + 128 + 64 + 32, testStateData,
-    testComutexUnlockCallback, testCoconditionSignalCallback);
+  int result = coroutineConfig(&globalCoroutine, &coroutineConfigOptions);
   if (result != coroutineSuccess) {
     printLog(ERR, "Failed to configure coroutine system: %d\n", result);
     return false;
@@ -1190,9 +1194,7 @@ bool coroutinesUnitTest(void) {
     if (ii == 0) {
       // Test threading support functions if available
       coroutineSetThreadingSupportEnabled(true);
-      result = coroutineConfig(&threadCoroutine, 
-        COROUTINE_DEFAULT_STACK_SIZE + 512 + 256 + 128 + 64 + 32, testStateData,
-        testComutexUnlockCallback, testCoconditionSignalCallback);
+      result = coroutineConfig(&threadCoroutine, &coroutineConfigOptions);
       if (result != coroutineSuccess) {
         printLog(ERR, "Failed to configure coroutine system: %d\n", result);
         return false;
