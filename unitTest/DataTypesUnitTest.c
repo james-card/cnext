@@ -1690,8 +1690,8 @@ bool amongUnitTest(void) {
     return false;
   }
   
-  if (!amongZeroOr(0, 1, 2, 3, 4)) {
-    printLog(ERR, "amongZeroOr(0, 1, 2, 3, 4) returned false!\n");
+  if (!among(0, 0, 1, 2, 3, 4)) {
+    printLog(ERR, "among(0, 0, 1, 2, 3, 4) returned false!\n");
     return false;
   }
   
@@ -1715,8 +1715,8 @@ bool amongUnitTest(void) {
     return false;
   }
   
-  if (!amongZeroOr(0.0, 1.0, 2.0, 3.0, 4.0)) {
-    printLog(ERR, "amongZeroOr(0.0, 1.0, 2.0, 3.0, 4.0) returned false!\n");
+  if (!among(0.0, 0.0, 1.0, 2.0, 3.0, 4.0)) {
+    printLog(ERR, "among(0.0, 0.0, 1.0, 2.0, 3.0, 4.0) returned false!\n");
     return false;
   }
   
@@ -1730,8 +1730,8 @@ bool amongUnitTest(void) {
     return false;
   }
   
-  if (!amongZeroOr('\0', 'a', 'b', 'c', 'd')) {
-    printLog(ERR, "amongZeroOr('\\0', 'a', 'b', 'c', 'd') returned false!\n");
+  if (!among('\0', '\0', 'a', 'b', 'c', 'd')) {
+    printLog(ERR, "among('\\0', '\\0', 'a', 'b', 'c', 'd') returned false!\n");
     return false;
   }
   
@@ -1745,13 +1745,23 @@ bool amongUnitTest(void) {
     return false;
   }
   
-  if (!amongNullOr((char*) NULL, "one", "two", "three", "four")) {
-    printLog(ERR, "amongZeroOr(NULL, \"one\", \"two\", \"three\", \"four\") returned false!\n");
+  if (among((char*) NULL, 'o', 't', 't', 'f')) {
+    printLog(ERR, "among(NULL, 'o, 't', 't', 'f') returned true!\n");
+    return false;
+  }
+  
+  if (!among((char*) NULL, (char*) NULL, "one", "two", "three", "four")) {
+    printLog(ERR, "among(NULL, NULL, \"one\", \"two\", \"three\", \"four\") returned false!\n");
     return false;
   }
   
   if (!among("one", "one", "two", "three", "four")) {
     printLog(ERR, "among(\"one\", \"one\", \"two\", \"three\", \"four\") returned false!\n");
+    return false;
+  }
+  
+  if (!among("one", 'o', 't', 't', 'f')) {
+    printLog(ERR, "among(\"one\", 'o, 't', 't', 'f') returned false!\n");
     return false;
   }
   
@@ -1766,13 +1776,18 @@ bool amongUnitTest(void) {
     return false;
   }
   
-  if (!amongZeroOr(u8Zero, u8One, u8Two, u8Three, u8Four)) {
-    printLog(ERR, "amongZeroOr(u8Zero, u8One, u8Two, u8Three, u8Four) returned false!\n");
+  if (!among(u8Zero, u8Zero, u8One, u8Two, u8Three, u8Four)) {
+    printLog(ERR, "among(u8Zero, u8Zero, u8One, u8Two, u8Three, u8Four) returned false!\n");
     return false;
   }
   
   if (!among(u8One, u8One, u8Two, u8Three, u8Four)) {
     printLog(ERR, "among(u8One, u8One, u8Two, u8Three, u8Four) returned false!\n");
+    return false;
+  }
+  
+  if (!among(u8One, 1, 2, 3, 4)) {
+    printLog(ERR, "among(u8One, 1, 2, 3, 4) returned false!\n");
     return false;
   }
   
@@ -1791,13 +1806,18 @@ bool amongUnitTest(void) {
     return false;
   }
   
-  if (!amongZeroOr(i8Zero, i8One, i8Two, i8Three, i8Four)) {
-    printLog(ERR, "amongZeroOr(i8Zero, i8One, i8Two, i8Three, i8Four) returned false!\n");
+  if (!among(i8Zero, i8Zero, i8One, i8Two, i8Three, i8Four)) {
+    printLog(ERR, "among(i8Zero, i8Zero, i8One, i8Two, i8Three, i8Four) returned false!\n");
     return false;
   }
   
   if (!among(i8One, i8One, i8Two, i8Three, i8Four)) {
     printLog(ERR, "among(i8One, i8One, i8Two, i8Three, i8Four) returned false!\n");
+    return false;
+  }
+  
+  if (!among(i8One, 1, 2, 3, 4)) {
+    printLog(ERR, "among(i8One, 1, 2, 3, 4) returned false!\n");
     return false;
   }
   
@@ -1808,6 +1828,11 @@ bool amongUnitTest(void) {
   
   if (!among(i8NegOne, i8NegOne, i8NegTwo, i8NegThree, i8NegFour)) {
     printLog(ERR, "among(i8NegOne, i8NegOne, i8NegTwo, i8NegThree, i8NegFour) returned false!\n");
+    return false;
+  }
+  
+  if (!among(i8NegOne, -1, -2, -3, -4)) {
+    printLog(ERR, "among(i8NegOne, -1, -2, -3, -4) returned false!\n");
     return false;
   }
   
@@ -1822,13 +1847,18 @@ bool amongUnitTest(void) {
     return false;
   }
   
-  if (!amongZeroOr(u16Zero, u16One, u16Two, u16Three, u16Four)) {
-    printLog(ERR, "amongZeroOr(u16Zero, u16One, u16Two, u16Three, u16Four) returned false!\n");
+  if (!among(u16Zero, u16Zero, u16One, u16Two, u16Three, u16Four)) {
+    printLog(ERR, "among(u16Zero, u16Zero, u16One, u16Two, u16Three, u16Four) returned false!\n");
     return false;
   }
   
   if (!among(u16One, u16One, u16Two, u16Three, u16Four)) {
     printLog(ERR, "among(u16One, u16One, u16Two, u16Three, u16Four) returned false!\n");
+    return false;
+  }
+  
+  if (!among(u16One, 1, 2, 3, 4)) {
+    printLog(ERR, "among(u16One, 1, 2, 3, 4) returned false!\n");
     return false;
   }
   
@@ -1847,13 +1877,18 @@ bool amongUnitTest(void) {
     return false;
   }
   
-  if (!amongZeroOr(i16Zero, i16One, i16Two, i16Three, i16Four)) {
-    printLog(ERR, "amongZeroOr(i16Zero, i16One, i16Two, i16Three, i16Four) returned false!\n");
+  if (!among(i16Zero, i16Zero, i16One, i16Two, i16Three, i16Four)) {
+    printLog(ERR, "among(i16Zero, i16Zero, i16One, i16Two, i16Three, i16Four) returned false!\n");
     return false;
   }
   
   if (!among(i16One, i16One, i16Two, i16Three, i16Four)) {
     printLog(ERR, "among(i16One, i16One, i16Two, i16Three, i16Four) returned false!\n");
+    return false;
+  }
+  
+  if (!among(i16One, 1, 2, 3, 4)) {
+    printLog(ERR, "among(i16One, 1, 2, 3, 4) returned false!\n");
     return false;
   }
   
@@ -1864,6 +1899,11 @@ bool amongUnitTest(void) {
   
   if (!among(i16NegOne, i16NegOne, i16NegTwo, i16NegThree, i16NegFour)) {
     printLog(ERR, "among(i16NegOne, i16NegOne, i16NegTwo, i16NegThree, i16NegFour) returned false!\n");
+    return false;
+  }
+  
+  if (!among(i16NegOne, -1, -2, -3, -4)) {
+    printLog(ERR, "among(i16NegOne, -1, -2, -3, -4) returned false!\n");
     return false;
   }
   
@@ -1878,13 +1918,18 @@ bool amongUnitTest(void) {
     return false;
   }
   
-  if (!amongZeroOr(u32Zero, u32One, u32Two, u32Three, u32Four)) {
-    printLog(ERR, "amongZeroOr(u32Zero, u32One, u32Two, u32Three, u32Four) returned false!\n");
+  if (!among(u32Zero, u32Zero, u32One, u32Two, u32Three, u32Four)) {
+    printLog(ERR, "among(u32Zero, u32Zero, u32One, u32Two, u32Three, u32Four) returned false!\n");
     return false;
   }
   
   if (!among(u32One, u32One, u32Two, u32Three, u32Four)) {
     printLog(ERR, "among(u32One, u32One, u32Two, u32Three, u32Four) returned false!\n");
+    return false;
+  }
+  
+  if (!among(u32One, 1, 2, 3, 4)) {
+    printLog(ERR, "among(u32One, 1, 2, 3, 4) returned false!\n");
     return false;
   }
   
@@ -1903,13 +1948,18 @@ bool amongUnitTest(void) {
     return false;
   }
   
-  if (!amongZeroOr(i32Zero, i32One, i32Two, i32Three, i32Four)) {
-    printLog(ERR, "amongZeroOr(i32Zero, i32One, i32Two, i32Three, i32Four) returned false!\n");
+  if (!among(i32Zero, i32Zero, i32One, i32Two, i32Three, i32Four)) {
+    printLog(ERR, "among(i32Zero, i32Zero, i32One, i32Two, i32Three, i32Four) returned false!\n");
     return false;
   }
   
   if (!among(i32One, i32One, i32Two, i32Three, i32Four)) {
     printLog(ERR, "among(i32One, i32One, i32Two, i32Three, i32Four) returned false!\n");
+    return false;
+  }
+  
+  if (!among(i32One, 1, 2, 3, 4)) {
+    printLog(ERR, "among(i32One, 1, 2, 3, 4) returned false!\n");
     return false;
   }
   
@@ -1920,6 +1970,11 @@ bool amongUnitTest(void) {
   
   if (!among(i32NegOne, i32NegOne, i32NegTwo, i32NegThree, i32NegFour)) {
     printLog(ERR, "among(i32NegOne, i32NegOne, i32NegTwo, i32NegThree, i32NegFour) returned false!\n");
+    return false;
+  }
+  
+  if (!among(i32NegOne, -1, -2, -3, -4)) {
+    printLog(ERR, "among(i32NegOne, -1, -2, -3, -4) returned false!\n");
     return false;
   }
   
@@ -1934,13 +1989,18 @@ bool amongUnitTest(void) {
     return false;
   }
   
-  if (!amongZeroOr(u64Zero, u64One, u64Two, u64Three, u64Four)) {
-    printLog(ERR, "amongZeroOr(u64Zero, u64One, u64Two, u64Three, u64Four) returned false!\n");
+  if (!among(u64Zero, u64Zero, u64One, u64Two, u64Three, u64Four)) {
+    printLog(ERR, "among(u64Zero, u64Zero, u64One, u64Two, u64Three, u64Four) returned false!\n");
     return false;
   }
   
   if (!among(u64One, u64One, u64Two, u64Three, u64Four)) {
     printLog(ERR, "among(u64One, u64One, u64Two, u64Three, u64Four) returned false!\n");
+    return false;
+  }
+  
+  if (!among(u64One, 1, 2, 3, 4)) {
+    printLog(ERR, "among(u64One, 1, 2, 3, 4) returned false!\n");
     return false;
   }
   
@@ -1959,13 +2019,18 @@ bool amongUnitTest(void) {
     return false;
   }
   
-  if (!amongZeroOr(i64Zero, i64One, i64Two, i64Three, i64Four)) {
-    printLog(ERR, "amongZeroOr(i64Zero, i64One, i64Two, i64Three, i64Four) returned false!\n");
+  if (!among(i64Zero, i64Zero, i64One, i64Two, i64Three, i64Four)) {
+    printLog(ERR, "among(i64Zero, i64Zero, i64One, i64Two, i64Three, i64Four) returned false!\n");
     return false;
   }
   
   if (!among(i64One, i64One, i64Two, i64Three, i64Four)) {
     printLog(ERR, "among(i64One, i64One, i64Two, i64Three, i64Four) returned false!\n");
+    return false;
+  }
+  
+  if (!among(i64One, 1, 2, 3, 4)) {
+    printLog(ERR, "among(i64One, 1, 2, 3, 4) returned false!\n");
     return false;
   }
   
@@ -1976,6 +2041,11 @@ bool amongUnitTest(void) {
   
   if (!among(i64NegOne, i64NegOne, i64NegTwo, i64NegThree, i64NegFour)) {
     printLog(ERR, "among(i64NegOne, i64NegOne, i64NegTwo, i64NegThree, i64NegFour) returned false!\n");
+    return false;
+  }
+  
+  if (!among(i64NegOne, -1, -2, -3, -4)) {
+    printLog(ERR, "among(i64NegOne, -1, -2, -3, -4) returned false!\n");
     return false;
   }
   
@@ -1994,13 +2064,18 @@ bool amongUnitTest(void) {
     return false;
   }
   
-  if (!amongZeroOr(floatZero, floatOne, floatTwo, floatThree, floatFour)) {
-    printLog(ERR, "amongZeroOr(floatZero, floatOne, floatTwo, floatThree, floatFour) returned false!\n");
+  if (!among(floatZero, floatZero, floatOne, floatTwo, floatThree, floatFour)) {
+    printLog(ERR, "among(floatZero, floatZero, floatOne, floatTwo, floatThree, floatFour) returned false!\n");
     return false;
   }
   
   if (!among(floatOne, floatOne, floatTwo, floatThree, floatFour)) {
     printLog(ERR, "among(floatOne, floatOne, floatTwo, floatThree, floatFour) returned false!\n");
+    return false;
+  }
+  
+  if (!among(floatOne, 1.0, 2.0, 3.0, 4.0)) {
+    printLog(ERR, "among(floatOne, 1.0, 2.0, 3.0, 4.0) returned false!\n");
     return false;
   }
   
@@ -2011,6 +2086,11 @@ bool amongUnitTest(void) {
   
   if (!among(floatNegOne, floatNegOne, floatNegTwo, floatNegThree, floatNegFour)) {
     printLog(ERR, "among(floatNegOne, floatNegOne, floatNegTwo, floatNegThree, floatNegFour) returned false!\n");
+    return false;
+  }
+  
+  if (!among(floatNegOne, -1.0, -2.0, -3.0, -4.0)) {
+    printLog(ERR, "among(floatNegOne, -1.0, -2.0, -3.0, -4.0) returned false!\n");
     return false;
   }
   
@@ -2029,13 +2109,18 @@ bool amongUnitTest(void) {
     return false;
   }
   
-  if (!amongZeroOr(doubleZero, doubleOne, doubleTwo, doubleThree, doubleFour)) {
-    printLog(ERR, "amongZeroOr(doubleZero, doubleOne, doubleTwo, doubleThree, doubleFour) returned false!\n");
+  if (!among(doubleZero, doubleZero, doubleOne, doubleTwo, doubleThree, doubleFour)) {
+    printLog(ERR, "among(doubleZero, doubleZero, doubleOne, doubleTwo, doubleThree, doubleFour) returned false!\n");
     return false;
   }
   
   if (!among(doubleOne, doubleOne, doubleTwo, doubleThree, doubleFour)) {
     printLog(ERR, "among(doubleOne, doubleOne, doubleTwo, doubleThree, doubleFour) returned false!\n");
+    return false;
+  }
+  
+  if (!among(doubleOne, 1.0, 2.0, 3.0, 4.0)) {
+    printLog(ERR, "among(doubleOne, 1.0, 2.0, 3.0, 4.0) returned false!\n");
     return false;
   }
   
@@ -2049,6 +2134,31 @@ bool amongUnitTest(void) {
     return false;
   }
   
+  if (!among(doubleNegOne, -1.0, -2.0, -3.0, -4.0)) {
+    printLog(ERR, "among(doubleNegOne, -1.0, -2.0, -3.0, -4.0) returned false!\n");
+    return false;
+  }
+  
+  if (among(&i8Zero, 1, 2, 3, 4)) {
+    printLog(ERR, "among(&i8Zero, 1, 2, 3, 4) returned true!\n");
+    return false;
+  }
+  
+  if (!among(&i8One, 1, 2, 3, 4)) {
+    printLog(ERR, "among(&i8One, 1, 2, 3, 4) returned false!\n");
+    return false;
+  }
+  
+  if (among(&u8Zero, 1, 2, 3, 4)) {
+    printLog(ERR, "among(&u8Zero, 1, 2, 3, 4) returned true!\n");
+    return false;
+  }
+  
+  if (!among(&u8One, 1, 2, 3, 4)) {
+    printLog(ERR, "among(&u8One, 1, 2, 3, 4) returned false!\n");
+    return false;
+  }
+  
   u16 *u16Null = NULL;
   
   if (among(u16Null, &u16One, &u16Two, &u16Three, &u16Four)) {
@@ -2056,13 +2166,18 @@ bool amongUnitTest(void) {
     return false;
   }
   
-  if (!amongNullOr(u16Null, &u16One, &u16Two, &u16Three, &u16Four)) {
-    printLog(ERR, "amongNullOr(u16Null, &u16One, &u16Two, &u16Three, &u16Four) returned false!\n");
+  if (!among(u16Null, u16Null, &u16One, &u16Two, &u16Three, &u16Four)) {
+    printLog(ERR, "among(u16Null, u16Null, &u16One, &u16Two, &u16Three, &u16Four) returned false!\n");
     return false;
   }
   
   if (!among(&u16One, &u16One, &u16Two, &u16Three, &u16Four)) {
     printLog(ERR, "among(&u16One, &u16One, &u16Two, &u16Three, &u16Four) returned false!\n");
+    return false;
+  }
+  
+  if (!among(&u16One, 1, 2, 3, 4)) {
+    printLog(ERR, "among(&u16One, 1, 2, 3, 4) returned false!\n");
     return false;
   }
   
@@ -2073,13 +2188,18 @@ bool amongUnitTest(void) {
     return false;
   }
   
-  if (!amongNullOr(i16Null, &i16One, &i16Two, &i16Three, &i16Four)) {
-    printLog(ERR, "amongNullOr(i16Null, &i16One, &i16Two, &i16Three, &i16Four) returned false!\n");
+  if (!among(i16Null, i16Null, &i16One, &i16Two, &i16Three, &i16Four)) {
+    printLog(ERR, "among(i16Null, i16Null, &i16One, &i16Two, &i16Three, &i16Four) returned false!\n");
     return false;
   }
   
   if (!among(&i16One, &i16One, &i16Two, &i16Three, &i16Four)) {
     printLog(ERR, "among(&i16One, &i16One, &i16Two, &i16Three, &i16Four) returned false!\n");
+    return false;
+  }
+  
+  if (!among(&i16One, 1, 2, 3, 4)) {
+    printLog(ERR, "among(&i16One, 1, 2, 3, 4) returned false!\n");
     return false;
   }
   
@@ -2093,6 +2213,11 @@ bool amongUnitTest(void) {
     return false;
   }
   
+  if (!among(&i16NegOne, -1, -2, -3, -4)) {
+    printLog(ERR, "among(&i16NegOne, -1, -2, -3, -4) returned false!\n");
+    return false;
+  }
+  
   u32 *u32Null = NULL;
   
   if (among(u32Null, &u32One, &u32Two, &u32Three, &u32Four)) {
@@ -2100,13 +2225,18 @@ bool amongUnitTest(void) {
     return false;
   }
   
-  if (!amongNullOr(u32Null, &u32One, &u32Two, &u32Three, &u32Four)) {
-    printLog(ERR, "amongNullOr(u32Null, &u32One, &u32Two, &u32Three, &u32Four) returned false!\n");
+  if (!among(u32Null, u32Null, &u32One, &u32Two, &u32Three, &u32Four)) {
+    printLog(ERR, "among(u32Null, u32Null, &u32One, &u32Two, &u32Three, &u32Four) returned false!\n");
     return false;
   }
   
   if (!among(&u32One, &u32One, &u32Two, &u32Three, &u32Four)) {
     printLog(ERR, "among(&u32One, &u32One, &u32Two, &u32Three, &u32Four) returned false!\n");
+    return false;
+  }
+  
+  if (!among(&u32One, 1, 2, 3, 4)) {
+    printLog(ERR, "among(&u32One, 1, 2, 3, 4) returned false!\n");
     return false;
   }
   
@@ -2117,13 +2247,18 @@ bool amongUnitTest(void) {
     return false;
   }
   
-  if (!amongNullOr(i32Null, &i32One, &i32Two, &i32Three, &i32Four)) {
-    printLog(ERR, "amongNullOr(i32Null, &i32One, &i32Two, &i32Three, &i32Four) returned false!\n");
+  if (!among(i32Null, i32Null, &i32One, &i32Two, &i32Three, &i32Four)) {
+    printLog(ERR, "among(i32Null, i32Null, &i32One, &i32Two, &i32Three, &i32Four) returned false!\n");
     return false;
   }
   
   if (!among(&i32One, &i32One, &i32Two, &i32Three, &i32Four)) {
     printLog(ERR, "among(&i32One, &i32One, &i32Two, &i32Three, &i32Four) returned false!\n");
+    return false;
+  }
+  
+  if (!among(&i32One, 1, 2, 3, 4)) {
+    printLog(ERR, "among(&i32One, 1, 2, 3, 4) returned false!\n");
     return false;
   }
   
@@ -2137,6 +2272,11 @@ bool amongUnitTest(void) {
     return false;
   }
   
+  if (!among(&i32NegOne, -1, -2, -3, -4)) {
+    printLog(ERR, "among(&i32NegOne, -1, -2, -3, -4) returned false!\n");
+    return false;
+  }
+  
   u64 *u64Null = NULL;
   
   if (among(u64Null, &u64One, &u64Two, &u64Three, &u64Four)) {
@@ -2144,13 +2284,18 @@ bool amongUnitTest(void) {
     return false;
   }
   
-  if (!amongNullOr(u64Null, &u64One, &u64Two, &u64Three, &u64Four)) {
-    printLog(ERR, "amongNullOr(u64Null, &u64One, &u64Two, &u64Three, &u64Four) returned false!\n");
+  if (!among(u64Null, u64Null, &u64One, &u64Two, &u64Three, &u64Four)) {
+    printLog(ERR, "among(u64Null, u64Null, &u64One, &u64Two, &u64Three, &u64Four) returned false!\n");
     return false;
   }
   
   if (!among(&u64One, &u64One, &u64Two, &u64Three, &u64Four)) {
     printLog(ERR, "among(&u64One, &u64One, &u64Two, &u64Three, &u64Four) returned false!\n");
+    return false;
+  }
+  
+  if (!among(&u64One, 1, 2, 3, 4)) {
+    printLog(ERR, "among(&u64One, 1, 2, 3, 4) returned false!\n");
     return false;
   }
   
@@ -2161,13 +2306,18 @@ bool amongUnitTest(void) {
     return false;
   }
   
-  if (!amongNullOr(i64Null, &i64One, &i64Two, &i64Three, &i64Four)) {
-    printLog(ERR, "amongZeroOr(i64Null, &i64One, &i64Two, &i64Three, &i64Four) returned false!\n");
+  if (!among(i64Null, i64Null, &i64One, &i64Two, &i64Three, &i64Four)) {
+    printLog(ERR, "among(i64Null, i64Null, &i64One, &i64Two, &i64Three, &i64Four) returned false!\n");
     return false;
   }
   
   if (!among(&i64One, &i64One, &i64Two, &i64Three, &i64Four)) {
     printLog(ERR, "among(&i64One, &i64One, &i64Two, &i64Three, &i64Four) returned false!\n");
+    return false;
+  }
+  
+  if (!among(&i64One, 1, 2, 3, 4)) {
+    printLog(ERR, "among(&i64One, 1, 2, 3, 4) returned false!\n");
     return false;
   }
   
@@ -2181,6 +2331,11 @@ bool amongUnitTest(void) {
     return false;
   }
   
+  if (!among(&i64NegOne, -1, -2, -3, -4)) {
+    printLog(ERR, "among(&i64NegOne, -1, -2, -3, -4) returned false!\n");
+    return false;
+  }
+  
   float *floatNull = NULL;
   
   if (among(floatNull, &floatOne, &floatTwo, &floatThree, &floatFour)) {
@@ -2188,13 +2343,18 @@ bool amongUnitTest(void) {
     return false;
   }
   
-  if (!amongNullOr(floatNull, &floatOne, &floatTwo, &floatThree, &floatFour)) {
-    printLog(ERR, "amongNullOr(floatNull, &floatOne, &floatTwo, &floatThree, &floatFour) returned false!\n");
+  if (!among(floatNull, floatNull, &floatOne, &floatTwo, &floatThree, &floatFour)) {
+    printLog(ERR, "among(floatNull, floatNull, &floatOne, &floatTwo, &floatThree, &floatFour) returned false!\n");
     return false;
   }
   
   if (!among(&floatOne, &floatOne, &floatTwo, &floatThree, &floatFour)) {
     printLog(ERR, "among(&floatOne, &floatOne, &floatTwo, &floatThree, &floatFour) returned false!\n");
+    return false;
+  }
+  
+  if (!among(&floatOne, 1.0, 2.0, 3.0, 4.0)) {
+    printLog(ERR, "among(&floatOne, 1.0, 2.0, 3.0, 4.0) returned false!\n");
     return false;
   }
   
@@ -2208,6 +2368,11 @@ bool amongUnitTest(void) {
     return false;
   }
   
+  if (!among(&floatNegOne, -1.0, -2.0, -3.0, -4.0)) {
+    printLog(ERR, "among(&floatNegOne, -1.0, -2.0, -3.0, -4.0) returned false!\n");
+    return false;
+  }
+  
   double *doubleNull = NULL;
   
   if (among(doubleNull, &doubleOne, &doubleTwo, &doubleThree, &doubleFour)) {
@@ -2215,13 +2380,13 @@ bool amongUnitTest(void) {
     return false;
   }
   
-  if (!amongNullOr(doubleNull, &doubleOne, &doubleTwo, &doubleThree, &doubleFour)) {
-    printLog(ERR, "amongNullOr(doubleNull, &doubleOne, &doubleTwo, &doubleThree, &doubleFour) returned false!\n");
+  if (!among(doubleNull, doubleNull, &doubleOne, &doubleTwo, &doubleThree, &doubleFour)) {
+    printLog(ERR, "among(doubleNull, doubleNull, &doubleOne, &doubleTwo, &doubleThree, &doubleFour) returned false!\n");
     return false;
   }
   
-  if (!among(&doubleOne, &doubleOne, &doubleTwo, &doubleThree, &doubleFour)) {
-    printLog(ERR, "among(&doubleOne, &doubleOne, &doubleTwo, &doubleThree, &doubleFour) returned false!\n");
+  if (!among(&doubleOne, 1.0, 2.0, 3.0, 4.0)) {
+    printLog(ERR, "among(&doubleOne, 1.0, 2.0, 3.0, 4.0) returned false!\n");
     return false;
   }
   
@@ -2232,6 +2397,11 @@ bool amongUnitTest(void) {
   
   if (!among(&doubleNegOne, &doubleNegOne, &doubleNegTwo, &doubleNegThree, &doubleNegFour)) {
     printLog(ERR, "among(&doubleNegOne, &doubleNegOne, &doubleNegTwo, &doubleNegThree, &doubleNegFour) returned false!\n");
+    return false;
+  }
+  
+  if (!among(&doubleNegOne, -1.0, -2.0, -3.0, -4.0)) {
+    printLog(ERR, "among(&doubleNegOne, -1.0, -2.0, -3.0, -4.0) returned false!\n");
     return false;
   }
   
@@ -2255,8 +2425,8 @@ bool amongUnitTest(void) {
     return false;
   }
   
-  if (!amongNullOr(bytesNull, bytesOne, bytesTwo, bytesThree, bytesFour)) {
-    printLog(ERR, "amongNullOr(bytesNull, bytesOne, bytesTwo, bytesThree, bytesFour) returned false!\n");
+  if (!among(bytesNull, bytesNull, bytesOne, bytesTwo, bytesThree, bytesFour)) {
+    printLog(ERR, "among(bytesNull, bytesNull, bytesOne, bytesTwo, bytesThree, bytesFour) returned false!\n");
     return false;
   }
   
