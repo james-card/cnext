@@ -6576,14 +6576,15 @@ bool strtobool(const char *str, char **endptr) {
 
 /// @fn bool amongVaPointer(
 ///   int (*compare)(const volatile void*, const volatile void*),
-///   const volatile void *needle, va_list args)
+///   const volatile void *needle, const volatile void *haystack, va_list args)
 ///
-/// @brief See if a value is one of the values in the va_list provided.
+/// @brief See if a value is one of the haystack values provided.
 ///
 /// @param compare A compararison function that returns 0 if the two parameters
 ///   provided to it are equal.
 /// @param needle A pointer to the value to search for in the remaining
 ///   parameters.
+/// @param needle A pointer to the first value to compare against.
 /// @param args A va_list containing one or more values to compare the needle
 ///   against to see if there's a match.  The va_list is NULL terminated.
 ///
@@ -6592,138 +6593,32 @@ bool strtobool(const char *str, char **endptr) {
 /// otherwise.
 bool amongVaPointer(
   int (*compare)(const volatile void*, const volatile void*),
-  const volatile void *needle, va_list args
+  const volatile void *needle, const volatile void *haystack, va_list args
 ) {
-  bool returnValue = false;
+  bool returnValue = true;
   
-  const void *haystack = va_arg(args, void*);
-  while (haystack != NULL) {
-    if (compare(haystack, needle) == 0) {
-      returnValue = true;
-      break;
-    }
+  if (compare(haystack, needle) != 0) {
+    returnValue = false;
     haystack = va_arg(args, void*);
-  }
-  
-  return returnValue;
-}
-
-/// @fn bool amongVa64(u64 needle, va_list args)
-///
-/// @brief See if a value is one of the values in the va_list provided.
-///
-/// @param needle The 64-bit value to search for in the remaining parameters.
-/// @param args A va_list containing one or more values to compare the needle
-///   against to see if there's a match.  The va_list is terminated with a value
-///   of 0.
-///
-/// @return Returns true if the provided needle is the same as one of the other
-/// provided parameters according to the provided comaprison function, false
-/// otherwise.
-bool amongVa64(u64 needle, va_list args) {
-  bool returnValue = false;
-  
-  u64 haystack = va_arg(args, u64);
-  while (haystack != 0) {
-    if (haystack == needle) {
-      returnValue = true;
-      break;
+    while (haystack != NULL) {
+      if (compare(haystack, needle) == 0) {
+        returnValue = true;
+        break;
+      }
+      haystack = va_arg(args, void*);
     }
-    haystack = va_arg(args, u64);
   }
   
   return returnValue;
 }
 
-/// @fn bool amongVa32(u32 needle, va_list args)
+/// @fn bool amongVaFloat(float needle, float haystack, va_list args)
 ///
-/// @brief See if a value is one of the values in the va_list provided.
-///
-/// @param needle The 32-bit value to search for in the remaining parameters.
-/// @param args A va_list containing one or more values to compare the needle
-///   against to see if there's a match.  The va_list is terminated with a value
-///   of 0.
-///
-/// @return Returns true if the provided needle is the same as one of the other
-/// provided parameters according to the provided comaprison function, false
-/// otherwise.
-bool amongVa32(u32 needle, va_list args) {
-  bool returnValue = false;
-  
-  u32 haystack = va_arg(args, u32);
-  while (haystack != 0) {
-    if (haystack == needle) {
-      returnValue = true;
-      break;
-    }
-    haystack = va_arg(args, u32);
-  }
-  
-  return returnValue;
-}
-
-/// @fn bool amongVa16(u16 needle, va_list args)
-///
-/// @brief See if a value is one of the values in the va_list provided.
-///
-/// @param needle The 16-bit value to search for in the remaining parameters.
-/// @param args A va_list containing one or more values to compare the needle
-///   against to see if there's a match.  The va_list is terminated with a value
-///   of 0.
-///
-/// @return Returns true if the provided needle is the same as one of the other
-/// provided parameters according to the provided comaprison function, false
-/// otherwise.
-bool amongVa16(u16 needle, va_list args) {
-  bool returnValue = false;
-  
-  // 16-bit values get promoted to ints
-  u16 haystack = (u16) va_arg(args, int);
-  while (haystack != 0) {
-    if (haystack == needle) {
-      returnValue = true;
-      break;
-    }
-    haystack = (u16) va_arg(args, int);
-  }
-  
-  return returnValue;
-}
-
-/// @fn bool amongVa8(u8 needle, va_list args)
-///
-/// @brief See if a value is one of the values in the va_list provided.
-///
-/// @param needle The 8-bit value to search for in the remaining parameters.
-/// @param args A va_list containing one or more values to compare the needle
-///   against to see if there's a match.  The va_list is terminated with a value
-///   of 0.
-///
-/// @return Returns true if the provided needle is the same as one of the other
-/// provided parameters according to the provided comaprison function, false
-/// otherwise.
-bool amongVa8(u8 needle, va_list args) {
-  bool returnValue = false;
-  
-  // 8-bit values get promoted to ints
-  u8 haystack = (u8) va_arg(args, int);
-  while (haystack != 0) {
-    if (haystack == needle) {
-      returnValue = true;
-      break;
-    }
-    haystack = (u8) va_arg(args, int);
-  }
-  
-  return returnValue;
-}
-
-/// @fn bool amongVaFloat(float needle, va_list args)
-///
-/// @brief See if a value is one of the values in the va_list provided.
+/// @brief See if a value is one of the haystack values provided.
 ///
 /// @param needle The float value value to search for in the remaining
 ///   parameters.
+/// @param haystack The first float value to compare against.
 /// @param args A va_list containing one or more values to compare the needle
 ///   against to see if there's a match.  The va_list is terminated with a value
 ///   of 0.
@@ -6731,27 +6626,31 @@ bool amongVa8(u8 needle, va_list args) {
 /// @return Returns true if the provided needle is the same as one of the other
 /// provided parameters according to the provided comaprison function, false
 /// otherwise.
-bool amongVaFloat(float needle, va_list args) {
-  bool returnValue = false;
+bool amongVaFloat(float needle, float haystack, va_list args) {
+  bool returnValue = true;
   
-  float haystack = (float) va_arg(args, double);
-  while (haystack != 0) {
-    if (haystack == needle) {
-      returnValue = true;
-      break;
-    }
+  if (haystack != needle) {
+    returnValue = false;
     haystack = (float) va_arg(args, double);
+    while (haystack != 0) {
+      if (haystack == needle) {
+        returnValue = true;
+        break;
+      }
+      haystack = (float) va_arg(args, double);
+    }
   }
   
   return returnValue;
 }
 
-/// @fn bool amongVaDouble(double needle, va_list args)
+/// @fn bool amongVaDouble(double needle, double haystack, va_list args)
 ///
-/// @brief See if a value is one of the values in the va_list provided.
+/// @brief See if a value is one of the haystack values provided.
 ///
 /// @param needle The double value value to search for in the remaining
 ///   parameters.
+/// @param haystack The first double value to compare against.
 /// @param args A va_list containing one or more values to compare the needle
 ///   against to see if there's a match.  The va_list is terminated with a value
 ///   of 0.
@@ -6759,16 +6658,422 @@ bool amongVaFloat(float needle, va_list args) {
 /// @return Returns true if the provided needle is the same as one of the other
 /// provided parameters according to the provided comaprison function, false
 /// otherwise.
-bool amongVaDouble(double needle, va_list args) {
-  bool returnValue = false;
+bool amongVaDouble(double needle, double haystack, va_list args) {
+  bool returnValue = true;
   
-  double haystack = va_arg(args, double);
-  while (haystack != 0) {
-    if (haystack == needle) {
-      returnValue = true;
-      break;
-    }
+  if (haystack != needle) {
+    returnValue = false;
     haystack = va_arg(args, double);
+    while (haystack != 0) {
+      if (haystack == needle) {
+        returnValue = true;
+        break;
+      }
+      haystack = va_arg(args, double);
+    }
+  }
+  
+  return returnValue;
+}
+
+/// @fn bool amongVaChar(unsigned char needle, unsigned char haystack, va_list args)
+///
+/// @brief See if a value is one of the haystack values provided.
+///
+/// @param needle The char value to search for in the remaining parameters.
+/// @param haystack The first char value to compare against.
+/// @param args A va_list containing one or more values to compare the needle
+///   against to see if there's a match.  The va_list is terminated with a value
+///   of 0.
+///
+/// @return Returns true if the provided needle is the same as one of the other
+/// provided parameters according to the provided comaprison function, false
+/// otherwise.
+bool amongVaChar(unsigned char needle, unsigned char haystack, va_list args) {
+  bool returnValue = true;
+  
+  if (haystack != needle) {
+    returnValue = false;
+    haystack = (unsigned char) va_arg(args, unsigned int);
+    while (haystack != 0) {
+      if (haystack == needle) {
+        returnValue = true;
+        break;
+      }
+      haystack = (unsigned char) va_arg(args, unsigned int);
+    }
+  }
+  
+  return returnValue;
+}
+
+/// @fn bool amongVaShort(unsigned short needle, unsigned short haystack, va_list args)
+///
+/// @brief See if a value is one of the haystack values provided.
+///
+/// @param needle The short value to search for in the remaining parameters.
+/// @param haystack The first short value to compare against.
+/// @param args A va_list containing one or more values to compare the needle
+///   against to see if there's a match.  The va_list is terminated with a value
+///   of 0.
+///
+/// @return Returns true if the provided needle is the same as one of the other
+/// provided parameters according to the provided comaprison function, false
+/// otherwise.
+bool amongVaShort(unsigned short needle, unsigned short haystack, va_list args) {
+  bool returnValue = true;
+  
+  if (haystack != needle) {
+    returnValue = false;
+    haystack = (unsigned short) va_arg(args, unsigned int);
+    while (haystack != 0) {
+      if (haystack == needle) {
+        returnValue = true;
+        break;
+      }
+      haystack = (unsigned short) va_arg(args, unsigned int);
+    }
+  }
+  
+  return returnValue;
+}
+
+/// @fn bool amongVaInt(unsigned int needle, unsigned int haystack, va_list args)
+///
+/// @brief See if a value is one of the haystack values provided.
+///
+/// @param needle The int value to search for in the remaining parameters.
+/// @param haystack The first int value to compare against.
+/// @param args A va_list containing one or more values to compare the needle
+///   against to see if there's a match.  The va_list is terminated with a value
+///   of 0.
+///
+/// @return Returns true if the provided needle is the same as one of the other
+/// provided parameters according to the provided comaprison function, false
+/// otherwise.
+bool amongVaInt(unsigned int needle, unsigned int haystack, va_list args) {
+  bool returnValue = true;
+  
+  if (haystack != needle) {
+    returnValue = false;
+    haystack = va_arg(args, unsigned int);
+    while (haystack != 0) {
+      if (haystack == needle) {
+        returnValue = true;
+        break;
+      }
+      haystack = va_arg(args, unsigned int);
+    }
+  }
+  
+  return returnValue;
+}
+
+/// @fn bool amongVaLong(unsigned long needle, unsigned long haystack, va_list args)
+///
+/// @brief See if a value is one of the haystack values provided.
+///
+/// @param needle The long value to search for in the remaining parameters.
+/// @param haystack The first long value to compare against.
+/// @param args A va_list containing one or more values to compare the needle
+///   against to see if there's a match.  The va_list is terminated with a value
+///   of 0.
+///
+/// @return Returns true if the provided needle is the same as one of the other
+/// provided parameters according to the provided comaprison function, false
+/// otherwise.
+bool amongVaLong(unsigned long needle, unsigned long haystack, va_list args) {
+  bool returnValue = true;
+  
+  if (haystack != needle) {
+    returnValue = false;
+    haystack = va_arg(args, unsigned long);
+    while (haystack != 0) {
+      if (haystack == needle) {
+        returnValue = true;
+        break;
+      }
+      haystack = va_arg(args, unsigned long);
+    }
+  }
+  
+  return returnValue;
+}
+
+/// @fn bool amongVaLonglong(unsigned long long needle, unsigned long long haystack, va_list args)
+///
+/// @brief See if a value is one of the haystack values provided.
+///
+/// @param needle The long long value to search for in the remaining parameters.
+/// @param haystack The first long long value to compare against.
+/// @param args A va_list containing one or more values to compare the needle
+///   against to see if there's a match.  The va_list is terminated with a value
+///   of 0.
+///
+/// @return Returns true if the provided needle is the same as one of the other
+/// provided parameters according to the provided comaprison function, false
+/// otherwise.
+bool amongVaLonglong(unsigned long long needle, unsigned long long haystack, va_list args) {
+  bool returnValue = true;
+  
+  if (haystack != needle) {
+    returnValue = false;
+    haystack = va_arg(args, unsigned long long);
+    while (haystack != 0) {
+      if (haystack == needle) {
+        returnValue = true;
+        break;
+      }
+      haystack = va_arg(args, unsigned long long);
+    }
+  }
+  
+  return returnValue;
+}
+
+int shortCompare(
+  const volatile void *valueA,
+  const volatile void *valueB
+) {
+  int returnValue = 0;
+  if (valueA == NULL) {
+    printLog(WARN, "valueA is NULL.\n");
+    returnValue--;
+  }
+  if (valueB == NULL) {
+    printLog(WARN, "valueB is NULL.\n");
+    returnValue++;
+  }
+  if ((valueA == NULL) || (valueB == NULL)) {
+    return returnValue;
+  }
+  
+  short shortValueA = *((short*) valueA);
+  short shortValueB = *((short*) valueB);
+  
+  if (shortValueA < shortValueB) {
+    returnValue = -1;
+  } else if (shortValueA > shortValueB) {
+    returnValue = 1;
+  } else { // shortValueA == shortValueB
+    returnValue = 0;
+  }
+  
+  return returnValue;
+}
+
+int intCompare(
+  const volatile void *valueA,
+  const volatile void *valueB
+) {
+  int returnValue = 0;
+  if (valueA == NULL) {
+    printLog(WARN, "valueA is NULL.\n");
+    returnValue--;
+  }
+  if (valueB == NULL) {
+    printLog(WARN, "valueB is NULL.\n");
+    returnValue++;
+  }
+  if ((valueA == NULL) || (valueB == NULL)) {
+    return returnValue;
+  }
+  
+  int intValueA = *((int*) valueA);
+  int intValueB = *((int*) valueB);
+  
+  if (intValueA < intValueB) {
+    returnValue = -1;
+  } else if (intValueA > intValueB) {
+    returnValue = 1;
+  } else { // intValueA == intValueB
+    returnValue = 0;
+  }
+  
+  return returnValue;
+}
+
+int longCompare(
+  const volatile void *valueA,
+  const volatile void *valueB
+) {
+  int returnValue = 0;
+  if (valueA == NULL) {
+    printLog(WARN, "valueA is NULL.\n");
+    returnValue--;
+  }
+  if (valueB == NULL) {
+    printLog(WARN, "valueB is NULL.\n");
+    returnValue++;
+  }
+  if ((valueA == NULL) || (valueB == NULL)) {
+    return returnValue;
+  }
+  
+  long longValueA = *((long*) valueA);
+  long longValueB = *((long*) valueB);
+  
+  if (longValueA < longValueB) {
+    returnValue = -1;
+  } else if (longValueA > longValueB) {
+    returnValue = 1;
+  } else { // longValueA == longValueB
+    returnValue = 0;
+  }
+  
+  return returnValue;
+}
+
+int longlongCompare(
+  const volatile void *valueA,
+  const volatile void *valueB
+) {
+  int returnValue = 0;
+  if (valueA == NULL) {
+    printLog(WARN, "valueA is NULL.\n");
+    returnValue--;
+  }
+  if (valueB == NULL) {
+    printLog(WARN, "valueB is NULL.\n");
+    returnValue++;
+  }
+  if ((valueA == NULL) || (valueB == NULL)) {
+    return returnValue;
+  }
+  
+  long long longlongValueA = *((long long*) valueA);
+  long long longlongValueB = *((long long*) valueB);
+  
+  if (longlongValueA < longlongValueB) {
+    returnValue = -1;
+  } else if (longlongValueA > longlongValueB) {
+    returnValue = 1;
+  } else { // longlongValueA == longlongValueB
+    returnValue = 0;
+  }
+  
+  return returnValue;
+}
+
+int ushortCompare(
+  const volatile void *valueA,
+  const volatile void *valueB
+) {
+  int returnValue = 0;
+  if (valueA == NULL) {
+    printLog(WARN, "valueA is NULL.\n");
+    returnValue--;
+  }
+  if (valueB == NULL) {
+    printLog(WARN, "valueB is NULL.\n");
+    returnValue++;
+  }
+  if ((valueA == NULL) || (valueB == NULL)) {
+    return returnValue;
+  }
+  
+  unsigned short ushortValueA = *((unsigned short*) valueA);
+  unsigned short ushortValueB = *((unsigned short*) valueB);
+  
+  if (ushortValueA < ushortValueB) {
+    returnValue = -1;
+  } else if (ushortValueA > ushortValueB) {
+    returnValue = 1;
+  } else { // ushortValueA == ushortValueB
+    returnValue = 0;
+  }
+  
+  return returnValue;
+}
+
+int uintCompare(
+  const volatile void *valueA,
+  const volatile void *valueB
+) {
+  int returnValue = 0;
+  if (valueA == NULL) {
+    printLog(WARN, "valueA is NULL.\n");
+    returnValue--;
+  }
+  if (valueB == NULL) {
+    printLog(WARN, "valueB is NULL.\n");
+    returnValue++;
+  }
+  if ((valueA == NULL) || (valueB == NULL)) {
+    return returnValue;
+  }
+  
+  unsigned int uintValueA = *((unsigned int*) valueA);
+  unsigned int uintValueB = *((unsigned int*) valueB);
+  
+  if (uintValueA < uintValueB) {
+    returnValue = -1;
+  } else if (uintValueA > uintValueB) {
+    returnValue = 1;
+  } else { // uintValueA == uintValueB
+    returnValue = 0;
+  }
+  
+  return returnValue;
+}
+
+int ulongCompare(
+  const volatile void *valueA,
+  const volatile void *valueB
+) {
+  int returnValue = 0;
+  if (valueA == NULL) {
+    printLog(WARN, "valueA is NULL.\n");
+    returnValue--;
+  }
+  if (valueB == NULL) {
+    printLog(WARN, "valueB is NULL.\n");
+    returnValue++;
+  }
+  if ((valueA == NULL) || (valueB == NULL)) {
+    return returnValue;
+  }
+  
+  unsigned long ulongValueA = *((unsigned long*) valueA);
+  unsigned long ulongValueB = *((unsigned long*) valueB);
+  
+  if (ulongValueA < ulongValueB) {
+    returnValue = -1;
+  } else if (ulongValueA > ulongValueB) {
+    returnValue = 1;
+  } else { // ulongValueA == ulongValueB
+    returnValue = 0;
+  }
+  
+  return returnValue;
+}
+
+int ulonglongCompare(
+  const volatile void *valueA,
+  const volatile void *valueB
+) {
+  int returnValue = 0;
+  if (valueA == NULL) {
+    printLog(WARN, "valueA is NULL.\n");
+    returnValue--;
+  }
+  if (valueB == NULL) {
+    printLog(WARN, "valueB is NULL.\n");
+    returnValue++;
+  }
+  if ((valueA == NULL) || (valueB == NULL)) {
+    return returnValue;
+  }
+  
+  unsigned long long ulonglongValueA = *((unsigned long*) valueA);
+  unsigned long long ulonglongValueB = *((unsigned long*) valueB);
+  
+  if (ulonglongValueA < ulonglongValueB) {
+    returnValue = -1;
+  } else if (ulonglongValueA > ulonglongValueB) {
+    returnValue = 1;
+  } else { // ulonglongValueA == ulonglongValueB
+    returnValue = 0;
   }
   
   return returnValue;
