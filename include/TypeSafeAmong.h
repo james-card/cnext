@@ -180,14 +180,21 @@ int ulonglongCompare(const volatile void *valueA, const volatile void *valueB);
 #endif // __cplusplus
 
 // Handle strings and Bytes specially
-static inline bool amongString(const volatile char *needle, const volatile char *haystack, ...) {
+static inline bool amongStringString(const volatile char *needle, const volatile char *haystack, ...) {
   va_list args;
   va_start(args, haystack);
   bool returnValue = amongVaPointer(typeString->compare, needle, haystack, args);
   va_end(args);
   return returnValue;
 }
-static inline bool amongBytes(const volatile Bytes needle, const volatile Bytes haystack, ...) {
+static inline bool amongBytesString(const volatile Bytes needle, const volatile char *haystack, ...) {
+  va_list args;
+  va_start(args, haystack);
+  bool returnValue = amongVaPointer(typeString->compare, needle, haystack, args);
+  va_end(args);
+  return returnValue;
+}
+static inline bool amongBytesBytes(const volatile Bytes needle, const volatile Bytes haystack, ...) {
   va_list args;
   va_start(args, haystack);
   bool returnValue = amongVaPointer(typeBytes->compare, needle, haystack, args);
@@ -309,8 +316,8 @@ AMONG_POINTER(double, typeDouble->compare, DoublePDoubleP)
   long:                               amongICharPLong,           \
   long long:                          amongICharPLonglong,       \
                                                                  \
-  char*:                              amongString,               \
-  const volatile char*:               amongString,               \
+  char*:                              amongStringString,         \
+  const volatile char*:               amongStringString,         \
                                                                  \
   default:                            amongICharPInt             \
   )
@@ -330,8 +337,8 @@ AMONG_POINTER(double, typeDouble->compare, DoublePDoubleP)
   long:                               amongCharPLong,            \
   long long:                          amongCharPLonglong,        \
                                                                  \
-  char*:                              amongString,               \
-  const volatile char*:               amongString,               \
+  char*:                              amongStringString,         \
+  const volatile char*:               amongStringString,         \
                                                                  \
   default:                            amongCharPInt              \
   )
@@ -352,8 +359,10 @@ AMONG_POINTER(double, typeDouble->compare, DoublePDoubleP)
   long:                               amongUCharPLong,           \
   long long:                          amongUCharPLonglong,       \
                                                                  \
-  unsigned char*:                     amongBytes,                \
-  const volatile unsigned char*:      amongBytes,                \
+  char*:                              amongBytesString,          \
+  const volatile char*:               amongBytesString,          \
+  unsigned char*:                     amongBytesBytes,           \
+  const volatile unsigned char*:      amongBytesBytes,           \
                                                                  \
   default:                            amongUCharPInt             \
   )
@@ -616,6 +625,13 @@ AMONG_POINTER(double, typeDouble->compare, DoublePDoubleP)
 
 // Handle strings and Bytes specially
 static inline bool among_(const volatile char *needle, const volatile char *haystack, ...) {
+  va_list args;
+  va_start(args, haystack);
+  bool returnValue = amongVaPointer(typeString->compare, needle, haystack, args);
+  va_end(args);
+  return returnValue;
+}
+static inline bool among_(const volatile Bytes needle, const volatile char *haystack, ...) {
   va_list args;
   va_start(args, haystack);
   bool returnValue = amongVaPointer(typeString->compare, needle, haystack, args);

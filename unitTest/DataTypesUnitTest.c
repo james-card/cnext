@@ -2435,6 +2435,11 @@ bool amongUnitTest(void) {
     return false;
   }
   
+  if (!among(bytesOne, "one", "two", "three", "four")) {
+    printLog(ERR, "among(bytesOne, \"one\", \"two\", \"three\", \"four\") returned false!\n");
+    return false;
+  }
+  
   scopeEnd();
   return true;
 }
