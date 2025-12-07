@@ -6831,6 +6831,14 @@ bool amongVaLonglong(unsigned long long needle, unsigned long long haystack, va_
   return returnValue;
 }
 
+/// @fn int shortCompare(const volatile void *valueA, const volatile void *valueB)
+///
+/// @brief Compare two short values.
+///
+/// @param valueA, valueB are pointers to the values to compare.
+///
+/// @return Returns -1 if *valueA < *valueB, 0 if *valueA == *valueB,
+///   1 if *valueA > *valueB.
 int shortCompare(
   const volatile void *valueA,
   const volatile void *valueB
@@ -6862,6 +6870,14 @@ int shortCompare(
   return returnValue;
 }
 
+/// @fn int intCompare(const volatile void *valueA, const volatile void *valueB)
+///
+/// @brief Compare two int values.
+///
+/// @param valueA, valueB are pointers to the values to compare.
+///
+/// @return Returns -1 if *valueA < *valueB, 0 if *valueA == *valueB,
+///   1 if *valueA > *valueB.
 int intCompare(
   const volatile void *valueA,
   const volatile void *valueB
@@ -6893,6 +6909,14 @@ int intCompare(
   return returnValue;
 }
 
+/// @fn int longCompare(const volatile void *valueA, const volatile void *valueB)
+///
+/// @brief Compare two long values.
+///
+/// @param valueA, valueB are pointers to the values to compare.
+///
+/// @return Returns -1 if *valueA < *valueB, 0 if *valueA == *valueB,
+///   1 if *valueA > *valueB.
 int longCompare(
   const volatile void *valueA,
   const volatile void *valueB
@@ -6924,6 +6948,14 @@ int longCompare(
   return returnValue;
 }
 
+/// @fn int longlongCompare(const volatile void *valueA, const volatile void *valueB)
+///
+/// @brief Compare two long long values.
+///
+/// @param valueA, valueB are pointers to the values to compare.
+///
+/// @return Returns -1 if *valueA < *valueB, 0 if *valueA == *valueB,
+///   1 if *valueA > *valueB.
 int longlongCompare(
   const volatile void *valueA,
   const volatile void *valueB
@@ -6955,6 +6987,14 @@ int longlongCompare(
   return returnValue;
 }
 
+/// @fn int ushortCompare(const volatile void *valueA, const volatile void *valueB)
+///
+/// @brief Compare two unsigned short values.
+///
+/// @param valueA, valueB are pointers to the values to compare.
+///
+/// @return Returns -1 if *valueA < *valueB, 0 if *valueA == *valueB,
+///   1 if *valueA > *valueB.
 int ushortCompare(
   const volatile void *valueA,
   const volatile void *valueB
@@ -6986,6 +7026,14 @@ int ushortCompare(
   return returnValue;
 }
 
+/// @fn int uintCompare(const volatile void *valueA, const volatile void *valueB)
+///
+/// @brief Compare two unsigned int values.
+///
+/// @param valueA, valueB are pointers to the values to compare.
+///
+/// @return Returns -1 if *valueA < *valueB, 0 if *valueA == *valueB,
+///   1 if *valueA > *valueB.
 int uintCompare(
   const volatile void *valueA,
   const volatile void *valueB
@@ -7017,6 +7065,14 @@ int uintCompare(
   return returnValue;
 }
 
+/// @fn int ulongCompare(const volatile void *valueA, const volatile void *valueB)
+///
+/// @brief Compare two unsigned long values.
+///
+/// @param valueA, valueB are pointers to the values to compare.
+///
+/// @return Returns -1 if *valueA < *valueB, 0 if *valueA == *valueB,
+///   1 if *valueA > *valueB.
 int ulongCompare(
   const volatile void *valueA,
   const volatile void *valueB
@@ -7048,6 +7104,14 @@ int ulongCompare(
   return returnValue;
 }
 
+/// @fn int ulonglongCompare(const volatile void *valueA, const volatile void *valueB)
+///
+/// @brief Compare two unsigned long long values.
+///
+/// @param valueA, valueB are pointers to the values to compare.
+///
+/// @return Returns -1 if *valueA < *valueB, 0 if *valueA == *valueB,
+///   1 if *valueA > *valueB.
 int ulonglongCompare(
   const volatile void *valueA,
   const volatile void *valueB
