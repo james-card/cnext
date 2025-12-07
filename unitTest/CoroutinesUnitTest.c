@@ -73,7 +73,7 @@ void *yieldingCoroutineFunction(void *arg) {
   printLog(DEBUG, "Yielding coroutine function called with value: %ld\n", 
     (long int) value);
   
-  void *yieldResult = coroutineYield((void *) (value + 1));
+  void *yieldResult = coroutineYield((void *) (value + 1), 0);
   printLog(DEBUG, "Yielding coroutine resumed with: %ld\n", 
     (long int) ((intptr_t) yieldResult));
   
@@ -103,7 +103,7 @@ void *mutexTestCoroutineFunction(void *arg) {
   }
   
   printLog(DEBUG, "Mutex test coroutine acquired lock, yielding\n");
-  coroutineYield(NULL);
+  coroutineYield(NULL, 0);
   
   printLog(DEBUG, "Mutex test coroutine unlocking mutex\n");
   result = comutexUnlock(mutex);
@@ -520,7 +520,7 @@ bool testCoroutineNullParameters(void) {
   
   // Test coroutineResume with NULL coroutine
   void *resumeResult = coroutineResume(NULL, NULL);
-  if (resumeResult != COROUTINE_NOT_RESUMABLE) {
+  if ((resumeResult != COROUTINE_ERROR) || (coroutineResumable((coro_t) NULL))) {
     printLog(ERR, "coroutineResume should return COROUTINE_NOT_RESUMABLE "
       "for NULL coroutine\n");
     return false;
@@ -727,7 +727,7 @@ bool testComutexTimedFunctionality(void) {
   }
   
   void *resumeResult = coroutineResume(coroutine, NULL);
-  while (resumeResult == COROUTINE_TIMEDWAIT) {
+  while (coroutineState(coroutine) == COROUTINE_STATE_TIMEDWAIT) {
     resumeResult = coroutineResume(coroutine, NULL);
   }
   if (resumeResult != NULL) {
@@ -868,7 +868,7 @@ bool testCoconditionBasicFunctionality(void) {
   
   // Resume coroutine to start waiting
   void *resumeResult = coroutineResume(coroutine, NULL);
-  if (resumeResult == COROUTINE_NOT_RESUMABLE) {
+  if (!coroutineResumable(coroutine)) {
     printLog(ERR, "Condition test coroutine should be waiting\n");
     coconditionDestroy(&condition);
     return false;
@@ -926,7 +926,7 @@ bool testCoconditionTimedFunctionality(void) {
   }
   
   void *resumeResult = coroutineResume(coroutine, NULL);
-  while (resumeResult == COROUTINE_TIMEDWAIT) {
+  while (coroutineState(coroutine) == COROUTINE_STATE_TIMEDWAIT) {
     resumeResult = coroutineResume(coroutine, NULL);
   }
   if (resumeResult != NULL) {
@@ -1060,8 +1060,8 @@ bool testCoroutineTermination(void) {
   }
   
   // Resume to yield point
-  void *resumeResult = coroutineResume(coroutine, NULL);
-  if (resumeResult == COROUTINE_NOT_RESUMABLE) {
+  coroutineResume(coroutine, NULL);
+  if (!coroutineResumable(coroutine)) {
     printLog(ERR, "Coroutine should be resumable after yield\n");
     return false;
   }
