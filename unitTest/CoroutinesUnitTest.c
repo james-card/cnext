@@ -14,6 +14,7 @@
 #include "Coroutines.h"
 #include "CoroutineSync.h"
 #include "LoggingLib.h"
+#include "OsApi.h"
 
 // Test helper variables
 static bool testCallbackCalled = false;
@@ -1090,6 +1091,244 @@ bool testCoroutineTermination(void) {
   return true;
 }
 
+/// @fn void* lockingCoroutine(void *args)
+///
+/// @brief Coroutine that will lock all of the passed in mutexes, yielding
+/// after each lock.
+///
+/// @param args A null-terminated array of Comutex objects, cast to a void*.
+///
+/// @return This function returns NULL on completion.
+void* lockingCoroutine(void *args) {
+  Comutex **mutexes = (Comutex**) args;
+  
+  for (int ii = 0; mutexes[ii] != NULL; ii++) {
+    int rv = comutexLock(mutexes[ii]);
+    if (rv != coroutineSuccess) {
+      printLog(ERR, "comutexLock retunred status %d!\n", rv);
+      // Signal to the caller that we've hit an error by returning non-NULL.
+      return COROUTINE_ERROR;
+    }
+    coroutineYield(NULL, 0);
+  }
+  
+  return NULL;
+}
+
+/// @fn void* timedLockingCoroutine(void *args)
+///
+/// @brief Coroutine that will wait for up to 60 seconds to lock all of the
+/// passed in mutexes, yielding after each lock.
+///
+/// @param args A null-terminated array of Comutex objects, cast to a void*.
+///
+/// @return This function returns NULL on completion.
+void* timedLockingCoroutine(void *args) {
+  Comutex **mutexes = (Comutex**) args;
+  struct timespec ts;
+  timespec_get(&ts, TIME_UTC);
+  ts.tv_sec += 3;
+  
+  int numLocked = 0;
+  for (int ii = 0; mutexes[ii] != NULL; ii++) {
+    int rv = comutexTimedLock(mutexes[ii], &ts);
+    if (rv == coroutineSuccess) {
+      numLocked++;
+    } else {
+      if (rv != coroutineTimedout) {
+        printLog(ERR, "comutexTimedLock returned status %d\n", rv);
+        // Signal to the caller that we've hit an error by returning non-NULL.
+        return COROUTINE_ERROR;
+      }
+      //  We're done
+      break;
+    }
+    coroutineYield(NULL, 0);
+  }
+  
+  for (int ii = 0; ii < numLocked; ii++) {
+    comutexUnlock(mutexes[ii]);
+  }
+  
+  return NULL;
+}
+
+/// @fn bool testCoroutineDeadlock(void)
+///
+/// @brief Test that we can cause and properly detect deadlock, then terminate
+/// the offending coroutines and validate that a non-deadlock situation is not
+/// mis-detected as deadlock.
+///
+/// @return Returns true if all the test cases pass, false if not.
+bool testCoroutineDeadlock(void) {
+  Coroutine *coroutineA = NULL;
+  Coroutine *coroutineB = NULL;
+  
+  Comutex comutexA;
+  Comutex comutexB;
+  
+  comutexInit(&comutexA, comutexPlain | comutexTimed);
+  comutexInit(&comutexB, comutexPlain | comutexTimed);
+  
+  Comutex *forwardList[] = {
+    &comutexA,
+    &comutexB,
+    NULL,
+  };
+  
+  Comutex *reverseList[] = {
+    &comutexB,
+    &comutexA,
+    NULL,
+  };
+  
+  int rv = coroutineCreate(&coroutineA, lockingCoroutine, forwardList);
+  if (rv != coroutineSuccess) {
+    printLog(ERR, "coroutineCreate for coroutine A returned status %d\n", rv);
+    return false;
+  }
+  printLog(INFO, "coroutineA = %p\n", coroutineA);
+  coroutineSetId(coroutineA, 0);
+  
+  coroutineCreate(&coroutineB, lockingCoroutine, reverseList);
+  if (rv != coroutineSuccess) {
+    printLog(ERR, "coroutineCreate for coroutine B returned status %d\n", rv);
+    return false;
+  }
+  printLog(INFO, "coroutineB = %p\n", coroutineB);
+  coroutineSetId(coroutineB, 1);
+  
+  Coroutine *coroutines[] = {
+    coroutineA,
+    coroutineB,
+  };
+  
+  for (int ii = 0; ii < 4; ii++) {
+    void *resumeStatus = coroutineResume(coroutines[ii & 1], NULL);
+    if (resumeStatus != NULL) {
+      printLog(ERR, "Resuming coroutine %d (%p) returned %p\n",
+        (ii & 1), coroutines[ii & 1], resumeStatus);
+      printLog(ERR, "coroutineCorrupted = %s\n",
+        boolNames[coroutineCorrupted(coroutines[ii & 1])]);
+      printLog(ERR, "coroutineResumable = %s\n",
+        boolNames[coroutineResumable(coroutines[ii & 1])]);
+      return false;
+    }
+  }
+  
+  if (!coroutineDeadlocked(coroutineA)) {
+    printLog(ERR, "coroutineA not deadlocked as expected!\n");
+    return false;
+  }
+  printLog(INFO, "coroutineA is deadlocked as expected\n");
+  
+  if (!coroutineDeadlocked(coroutineB)) {
+    printLog(ERR, "coroutineB not deadlocked as expected!\n");
+    return false;
+  }
+  printLog(INFO, "coroutineB is deadlocked as expected\n");
+  
+  if (coroutineTerminate(coroutineA, forwardList) != coroutineSuccess) {
+    printLog(ERR, "Could not terminate coroutineA!\n");
+    return false;
+  }
+  printLog(INFO, "Terminated coroutineA\n");
+  
+  if (coroutineTerminate(coroutineB, reverseList) != coroutineSuccess) {
+    printLog(ERR, "Could not terminate coroutineB!\n");
+    return false;
+  }
+  printLog(INFO, "Terminated coroutineB\n");
+  
+  coroutineCreate(&coroutineA, lockingCoroutine, forwardList);
+  coroutineSetId(coroutineA, 0);
+  coroutines[0] = coroutineA;
+  coroutineCreate(&coroutineB, timedLockingCoroutine, reverseList);
+  coroutineSetId(coroutineB, 1);
+  coroutines[1] = coroutineB;
+  
+  for (int ii = 0; ii < 4; ii++) {
+    void *resumeStatus = coroutineResume(coroutines[ii & 1], NULL);
+    if (resumeStatus != NULL) {
+      printLog(ERR, "Resuming coroutine %d (%p) returned %p\n",
+        (ii & 1), coroutines[ii & 1], resumeStatus);
+      printLog(ERR, "coroutineCorrupted = %s\n",
+        boolNames[coroutineCorrupted(coroutines[ii & 1])]);
+      printLog(ERR, "coroutineResumable = %s\n",
+        boolNames[coroutineResumable(coroutines[ii & 1])]);
+      return false;
+    }
+  }
+  
+  if (coroutineDeadlocked(coroutineA)) {
+    printLog(ERR, "coroutineA was unexpectedly deadlocked!\n");
+    return false;
+  }
+  printLog(INFO, "coroutineA is not deadlocked as expected\n");
+  
+  if (coroutineDeadlocked(coroutineB)) {
+    printLog(ERR, "coroutineB was unexpectedly deadlocked!\n");
+    return false;
+  }
+  printLog(INFO, "coroutineB is not deadlocked as expected\n");
+  
+  int64_t startTime = getElapsedMicroseconds(0);
+  while (getElapsedMicroseconds(startTime) < 5000000) {
+    for (int ii = 0; ii < 2; ii++) {
+      if (coroutineResumable(coroutines[ii])) {
+        void *resumeStatus = coroutineResume(coroutines[ii], NULL);
+        if (resumeStatus != NULL) {
+          printLog(ERR, "Resuming coroutine %d (%p) returned %p\n",
+            (ii & 1), coroutines[ii & 1], resumeStatus);
+          printLog(ERR, "coroutineCorrupted = %s\n",
+            boolNames[coroutineCorrupted(coroutines[ii & 1])]);
+          printLog(ERR, "coroutineResumable = %s\n",
+            boolNames[coroutineResumable(coroutines[ii & 1])]);
+          return false;
+        }
+      }
+    }
+  }
+  
+  if (coroutineDeadlocked(coroutineA)) {
+    printLog(ERR, "coroutineA was unexpectedly deadlocked!\n");
+    return false;
+  }
+  printLog(INFO, "coroutineA is not deadlocked as expected\n");
+  
+  if (coroutineDeadlocked(coroutineB)) {
+    printLog(ERR, "coroutineB was unexpectedly deadlocked!\n");
+    return false;
+  }
+  printLog(INFO, "coroutineB is not deadlocked as expected\n");
+  
+  if (coroutineRunning(coroutineA)) {
+    printLog(ERR, "coroutineA was unexpectedly running!\n");
+    return false;
+  }
+  printLog(INFO, "coroutineA is still running as expected\n");
+  
+  if (coroutineRunning(coroutineB)) {
+    printLog(ERR, "coroutineB was unexpectedly running!\n");
+    return false;
+  }
+  printLog(INFO, "coroutineB is NOT running as expected\n");
+  
+  if (comutexA.coroutine != coroutineA) {
+    printLog(ERR, "comutexA's locking coroutine was not coroutineA as expected!\n");
+    return false;
+  }
+  printLog(INFO, "comutexA is owned by coroutineA as expected\n");
+  
+  if (comutexB.coroutine != coroutineA) {
+    printLog(ERR, "comutexB's locking coroutine was not coroutineA as expected!\n");
+    return false;
+  }
+  printLog(INFO, "comutexB is owned by coroutineA as expected\n");
+  
+  return true;
+}
+
 /// @var globalCoroutine
 ///
 /// @brief The coroutine that will hold the state for the root coroutine.  This
@@ -1170,6 +1409,10 @@ bool coroutinesUnitTest(void) {
     }
     
     if (!testCoroutineTermination()) {
+      allTestsPassed = false;
+    }
+    
+    if (!testCoroutineDeadlock()) {
       allTestsPassed = false;
     }
     
