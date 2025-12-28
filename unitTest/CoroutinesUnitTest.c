@@ -1362,7 +1362,7 @@ bool coroutinesUnitTest(void) {
   
   bool allTestsPassed = true;
   
-  for (int ii = 0; ii < 2; ii++) {
+  for (int ii = 0; ii < 3; ii++) {
     // Run all test functions
     if (!testCoroutineBasicFunctionality()) {
       allTestsPassed = false;
@@ -1434,19 +1434,16 @@ bool coroutinesUnitTest(void) {
     }
     
 #ifdef THREAD_SAFE_COROUTINES
-    if (ii == 0) {
-      // Test threading support functions if available
-      coroutineSetThreadingSupportEnabled(true);
-      result = coroutineConfig(&threadCoroutine, &coroutineConfigOptions);
-      if (result != coroutineSuccess) {
-        printLog(ERR, "Failed to configure coroutine system: %d\n", result);
-        return false;
-      }
-    }
-#else
-    // Terminate the run early.
-    break;
+    // Test threading support functions if available
+    coroutineSetThreadingSupportEnabled(true);
 #endif
+    
+    // coroutineConfig should reset the state of everything and let us go again.
+    result = coroutineConfig(&threadCoroutine, &coroutineConfigOptions);
+    if (result != coroutineSuccess) {
+      printLog(ERR, "Failed to configure coroutine system: %d\n", result);
+      return false;
+    }
   }
   
 #ifdef THREAD_SAFE_COROUTINES
