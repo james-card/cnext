@@ -1350,6 +1350,7 @@ bool coroutinesUnitTest(void) {
   CoroutineConfigOptions coroutineConfigOptions = {
     .stackSize = COROUTINE_DEFAULT_STACK_SIZE + 512 + 256 + 128 + 64 + 32,
     .stateData = testStateData,
+    .coroutineYieldCallback = NULL,
     .comutexUnlockCallback = testComutexUnlockCallback,
     .coconditionSignalCallback = testCoconditionSignalCallback,
   };
@@ -1478,6 +1479,12 @@ bool coroutinesUnitTest(void) {
   // Restore original state
   coroutineSetThreadingSupportEnabled(originalState);
 #endif
+  
+  result = coroutineConfig(&globalCoroutine, &coroutineConfigOptions);
+  if (result != coroutineSuccess) {
+    printLog(ERR, "Failed to set final coroutine config: %d\n", result);
+    return false;
+  }
   
   if (allTestsPassed) {
     printLog(DEBUG, "All coroutines unit tests PASSED\n");
