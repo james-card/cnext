@@ -114,11 +114,19 @@ typedef enum CoroutineState {
 /// @brief Function signature that can be used as a coroutine.
 typedef void* (*CoroutineFunction)(void *arg);
 
+/// @typedef CoroutineResumeCallback
+///
+/// @brief Function signature that can be used as a callback when a coroutine
+/// resumes.
+typedef void* (*CoroutineResumeCallback)(
+  void *stateData, Coroutine *coroutine, void *arg);
+
 /// @typedef CoroutineYieldCallback
 ///
 /// @brief Function signature that can be used as a callback when a coroutine
 /// yields.
-typedef void (*CoroutineYieldCallback)(void *stateData, Coroutine *coroutine);
+typedef void* (*CoroutineYieldCallback)(
+  void *stateData, Coroutine *coroutine, void *arg);
 
 /// @typedef ComutexUnlockCallback
 ///
@@ -157,7 +165,7 @@ typedef union CoroutineFuncData {
 ///
 /// @param guard1 A well-known value to check for state corruption (stack
 ///   overflow).
-/// @param nextInList Pointer to the next Coroutine in the list.
+/// @param nextInStack Pointer to the next Coroutine in the list.
 /// @param context The jmp_buf to hold the context of the coroutine.
 /// @param priv Any private context for the Coroutine.
 /// @param state The state of the coroutine.  (See enum above.)
@@ -180,7 +188,7 @@ typedef union CoroutineFuncData {
 ///   overflow).
 typedef struct Coroutine {
   uint32_t guard1;
-  struct Coroutine *nextInList;
+  struct Coroutine *nextInStack;
   jmp_buf context;
   void *priv;
   CoroutineState state;
@@ -196,28 +204,31 @@ typedef struct Coroutine {
   uint32_t guard2;
 } Coroutine, coro_s, *coro_t;
 
-/// @struct CoroutineConfigOptions
+/// @struct CoroutinesConfigOptions
 ///
-/// @brief Configuration options for coroutineConfig().
+/// @brief Configuration options for coroutinesConfig().
 ///
 /// @param stackSize The desired minimum size, in bytes, of each coroutine's
 ///   stack.  Actual size will be slightly larger than this.  If this value is
 ///   < COROUTINE_STACK_CHUNK_SIZE, COROUTINE_DEFAULT_STACK_SIZE will be used.
 /// @param stateData A pointer to arbitrary state data that will be passed to
 ///   the callbacks.  This parameter is optional and may be NULL.
-/// @param coroutineYieldCallback A function to call when a coroutine yields.
+/// @param resumeCallback A function to call when a coroutine resumes.  This
+///   parameter is optional and may be NULL.
+/// @param yieldCallback A function to call when a coroutine yields.  This
+///   parameter is optional and may be NULL.
+/// @param unlockCallback A function to call when a comutex is unlocked.  This
+///   parameter is optional and may be NULL.
+/// @param signalCallback A function to call when a cocondition is signaled.
 ///   This parameter is optional and may be NULL.
-/// @param comutexUnlockCallback A function to call when a comutex is unlocked.
-///   This parameter is optional and may be NULL.
-/// @param coconditionSignalCallback A function to call when a cocondition is
-///   signalled.  This parameter is optional and may be NULL.
-typedef struct CoroutineConfigOptions {
+typedef struct CoroutinesConfigOptions {
   uintptr_t stackSize;
   void *stateData;
-  CoroutineYieldCallback coroutineYieldCallback;
-  ComutexUnlockCallback comutexUnlockCallback;
-  CoconditionSignalCallback coconditionSignalCallback;
-} CoroutineConfigOptions;
+  CoroutineResumeCallback resumeCallback;
+  CoroutineYieldCallback yieldCallback;
+  ComutexUnlockCallback unlockCallback;
+  CoconditionSignalCallback signalCallback;
+} CoroutinesConfigOptions;
 
 // Support functions
 int64_t coroutineGetNanoseconds(const struct timespec *ts);
@@ -232,7 +243,7 @@ int64_t coroutineGetNanoseconds(const struct timespec *ts);
 /// @return Returns false when the coroutine has run to completion or when it is
 /// blocked inside coroutineResume() and true otherwise.
 #define coroutineResumable(coroutinePointer) \
-  (((coroutinePointer) != NULL) && ((coroutinePointer)->nextInList == NULL))
+  (((coroutinePointer) != NULL) && ((coroutinePointer)->nextInStack == NULL))
 
 /// @def coroutineFinished(coroutinePointer)
 ///
@@ -284,13 +295,16 @@ int64_t coroutineGetNanoseconds(const struct timespec *ts);
   coroutineContext(getRunningCoroutine())
 
 // Coroutine function prototypes.  Doxygen inline in source file.
-int coroutineConfig(Coroutine *first, CoroutineConfigOptions *options);
+int coroutinesConfig(Coroutine *first, CoroutinesConfigOptions *options);
 Coroutine* coroutineInit(Coroutine *userCoroutine,
   CoroutineFunction func, void *arg);
 int coroutineCreate(Coroutine **coroutine, CoroutineFunction func, void *arg);
 void* coroutineResume(Coroutine *targetCoroutine, void *arg);
 void* coroutineYield_(void *arg, CoroutineState state);
 #define coroutineYield(arg, state) coroutineYield_(arg, (CoroutineState) state)
+void* coroutineYieldTo_(Coroutine *to, void *arg, CoroutineState state);
+#define coroutineYieldTo(to, arg, state) \
+  coroutineYieldTo_(to, arg, (CoroutineState) state)
 int coroutineSetContext(Coroutine *coroutine, void *context);
 void* coroutineContext(Coroutine *coroutine);
 CoroutineState coroutineState(Coroutine *coroutine);
@@ -298,7 +312,8 @@ CoroutineState coroutineState(Coroutine *coroutine);
 void coroutineSetThreadingSupportEnabled(bool state);
 bool coroutineThreadingSupportEnabled();
 #endif
-int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes);
+int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes,
+  bool keepMessageQueue);
 Coroutine* getRunningCoroutine(void);
 bool coroutineDeadlocked(Coroutine *coroutine);
 

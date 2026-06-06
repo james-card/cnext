@@ -1067,7 +1067,7 @@ bool testCoroutineTermination(void) {
   }
   
   // Terminate the coroutine
-  result = coroutineTerminate(coroutine, NULL);
+  result = coroutineTerminate(coroutine, NULL, false);
   if (result != coroutineSuccess) {
     printLog(ERR, "Failed to terminate coroutine: %d\n", result);
     return false;
@@ -1080,7 +1080,7 @@ bool testCoroutineTermination(void) {
   }
   
   // Test terminating NULL coroutine
-  result = coroutineTerminate(NULL, NULL);
+  result = coroutineTerminate(NULL, NULL, false);
   if (result == coroutineSuccess) {
     printLog(ERR, "coroutineTerminate should fail with NULL coroutine\n");
     return false;
@@ -1227,13 +1227,13 @@ bool testCoroutineDeadlock(void) {
   }
   printLog(INFO, "coroutineB is deadlocked as expected\n");
   
-  if (coroutineTerminate(coroutineA, forwardList) != coroutineSuccess) {
+  if (coroutineTerminate(coroutineA, forwardList, false) != coroutineSuccess) {
     printLog(ERR, "Could not terminate coroutineA!\n");
     return false;
   }
   printLog(INFO, "Terminated coroutineA\n");
   
-  if (coroutineTerminate(coroutineB, reverseList) != coroutineSuccess) {
+  if (coroutineTerminate(coroutineB, reverseList, false) != coroutineSuccess) {
     printLog(ERR, "Could not terminate coroutineB!\n");
     return false;
   }
@@ -1346,15 +1346,16 @@ bool coroutinesUnitTest(void) {
   // Initialize coroutine system with test callbacks
   void *testStateData = (void *) 0xDEADBEEF;
   Coroutine threadCoroutine;
-  CoroutineConfigOptions coroutineConfigOptions = {
+  CoroutinesConfigOptions coroutinesConfigOptions = {
     .stackSize = COROUTINE_DEFAULT_STACK_SIZE + 512 + 256 + 128 + 64 + 32,
     .stateData = testStateData,
-    .coroutineYieldCallback = NULL,
-    .comutexUnlockCallback = testComutexUnlockCallback,
-    .coconditionSignalCallback = testCoconditionSignalCallback,
+    .resumeCallback = NULL,
+    .yieldCallback = NULL,
+    .unlockCallback = testComutexUnlockCallback,
+    .signalCallback = testCoconditionSignalCallback,
   };
   
-  int result = coroutineConfig(&globalCoroutine, &coroutineConfigOptions);
+  int result = coroutinesConfig(&globalCoroutine, &coroutinesConfigOptions);
   if (result != coroutineSuccess) {
     printLog(ERR, "Failed to configure coroutine system: %d\n", result);
     return false;
@@ -1438,8 +1439,8 @@ bool coroutinesUnitTest(void) {
     coroutineSetThreadingSupportEnabled(true);
 #endif
     
-    // coroutineConfig should reset the state of everything and let us go again.
-    result = coroutineConfig(&threadCoroutine, &coroutineConfigOptions);
+    // coroutinesConfig should reset the state of everything and let us go again.
+    result = coroutinesConfig(&threadCoroutine, &coroutinesConfigOptions);
     if (result != coroutineSuccess) {
       printLog(ERR, "Failed to configure coroutine system: %d\n", result);
       return false;
@@ -1479,7 +1480,7 @@ bool coroutinesUnitTest(void) {
   coroutineSetThreadingSupportEnabled(originalState);
 #endif
   
-  result = coroutineConfig(&globalCoroutine, &coroutineConfigOptions);
+  result = coroutinesConfig(&globalCoroutine, &coroutinesConfigOptions);
   if (result != coroutineSuccess) {
     printLog(ERR, "Failed to set final coroutine config: %d\n", result);
     return false;

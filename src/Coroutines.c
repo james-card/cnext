@@ -34,8 +34,8 @@
  * explanation.
  *
  * This approach makes use of two stacks:  A stack of running coroutines and a
- * stack of idle coroutines.  Prior to coroutineConfig being called, both stacks
- * are empty.  coroutineConfig initializes the running stack to the Coroutine
+ * stack of idle coroutines.  Prior to coroutinesConfig being called, both stacks
+ * are empty.  coroutinesConfig initializes the running stack to the Coroutine
  * passed in and sets the stack size that is to be used, but leaves the idle
  * stack alone.  The idle stack is not modified until the first call to
  * coroutineInit is made.  From that point on, there is always at least one
@@ -45,7 +45,7 @@
  * there is anything available.  The only time there won't be anything available
  * is on the first time this function is called (per thread).  If nothing is
  * available, coroutineAllocateStack is called with the stack size that was
- * provided to coroutineConfig.  This will allocate the remainder of the stack
+ * provided to coroutinesConfig.  This will allocate the remainder of the stack
  * for the main function, allocate a Coroutine structure, push a pointer to it
  * onto the idle stack, and then resume execution in coroutineInit.  If a
  * Coroutine is available when coroutineInit does its check, it simply pops
@@ -109,11 +109,11 @@
  * is achieved by recursively calling a function with a character buffer, which
  * means that the memory in those stacks will be touched during this process.
  * Effectively, the first time that coroutineInit is called, a little over 2X
- * the stack size provided to coroutineConfig is touched.  This can result in
+ * the stack size provided to coroutinesConfig is touched.  This can result in
  * a nasty surprise (i.e. a crash) in severely memory-constrained environments.
  *
  * One requirement of this system is that all the stacks must be the same size.
- * The stack size provided to coroutineConfig cannot be changed once the first
+ * The stack size provided to coroutinesConfig cannot be changed once the first
  * Coroutine has been created with coroutineInit.  This is because the size
  * of a stack for a Coroutine is actually provided to coroutineAllocateStack on
  * the call prior to the call that returns a usable Coroutine.  It would be very
@@ -190,6 +190,11 @@ static int _globalStackSize = COROUTINE_DEFAULT_STACK_SIZE;
 /// @brief Global state data provided to the global callbacks.
 static void *_globalStateData = NULL;
 
+/// @var static CoroutineResumeCallback _globalCoroutineResumeCallback
+///
+/// @brief Global callback to call when a comutex is unlocked.
+static CoroutineResumeCallback _globalCoroutineResumeCallback = NULL;
+
 /// @var static CoroutineYieldCallback _globalCoroutineYieldCallback
 ///
 /// @brief Global callback to call when a comutex is unlocked.
@@ -237,7 +242,7 @@ int64_t coroutineGetNanoseconds(const struct timespec *ts) {
 /// @param Returns the previous head of the list.
 void coroutineGlobalPush(Coroutine** list, Coroutine* coroutine) {
   if ((list != NULL) && (coroutine != NULL)) {
-    coroutine->nextInList = *list;
+    coroutine->nextInStack = *list;
     *list = coroutine;
   }
 }
@@ -254,8 +259,53 @@ Coroutine* coroutineGlobalPop(Coroutine** list) {
 
   if (list != NULL) {
     coroutine = *list;
-    *list = coroutine->nextInList;
-    coroutine->nextInList = NULL;
+    *list = coroutine->nextInStack;
+    coroutine->nextInStack = NULL;
+  }
+
+  return coroutine;
+}
+
+/// @fn Coroutine* coroutineGlobalPopAndReplace(
+///   Coroutine** list, Coroutine *newHead)
+///
+/// @brief Pop a coroutine from a global list and replace it.
+///
+/// @param list The Coroutine list to pop from.
+/// @param newHead The new Coroutine to put at the top of the list.
+///
+/// @return Returns a pointer to the previous top of the list on success,
+/// NULL on failure.
+Coroutine* coroutineGlobalPopAndReplace(Coroutine** list, Coroutine *newHead) {
+  Coroutine *coroutine = NULL;
+
+  if (list != NULL) {
+    coroutine = *list;
+
+    if (newHead != NULL) {
+      if (coroutine->nextInStack == newHead) {
+        // The expected usual case.
+        *list = coroutine->nextInStack;
+      } else {
+        Coroutine **prev = &coroutine->nextInStack;
+        Coroutine *cur = coroutine->nextInStack;
+        while ((cur != NULL) && (cur != newHead)) {
+          prev = &cur->nextInStack;
+          cur = cur->nextInStack;
+        }
+        if (cur != NULL) {
+          *prev = cur->nextInStack;
+          cur->nextInStack = coroutine->nextInStack;
+          *list = cur;
+        } else {
+          *list = coroutine->nextInStack;
+        }
+      }
+    } else {
+      *list = coroutine->nextInStack;
+    }
+
+    coroutine->nextInStack = NULL;
   }
 
   return coroutine;
@@ -306,9 +356,14 @@ ZEROINIT(static tss_t _tssStackSize);
 /// @brief Thread-specific state data provided to the thread-specific callbacks.
 ZEROINIT(static tss_t _tssStateData);
 
+/// @var static tss_t _tssCoroutineResumeCallback
+///
+/// @brief Thread-specific callback to call right after a coroutine is resumed.
+ZEROINIT(static tss_t _tssCoroutineResumeCallback);
+
 /// @var static tss_t _tssCoroutineYieldCallback
 ///
-/// @brief Thread-specific callback to call when a cocondition is signalled.
+/// @brief Thread-specific callback to call right before a coroutine yields.
 ZEROINIT(static tss_t _tssCoroutineYieldCallback);
 
 /// @var static tss_t _tssComutexUnlockCallback
@@ -468,7 +523,7 @@ bool coroutineInitializeThreadMetadata(Coroutine *first) {
 /// @param Returns the previous head of the list.
 void coroutineTssPush(tss_t* list, Coroutine* coroutine) {
   if ((list != NULL) && (coroutine != NULL)) {
-    coroutine->nextInList = (Coroutine*) tss_get(*list);
+    coroutine->nextInStack = (Coroutine*) tss_get(*list);
     tss_set(*list, coroutine);
   }
 }
@@ -485,8 +540,52 @@ Coroutine* coroutineTssPop(tss_t* list) {
 
   if (list != NULL) {
     coroutine = (Coroutine*) tss_get(*list);
-    tss_set(*list, coroutine->nextInList);
-    coroutine->nextInList = NULL;
+    tss_set(*list, coroutine->nextInStack);
+    coroutine->nextInStack = NULL;
+  }
+
+  return coroutine;
+}
+
+/// @fn Coroutine* coroutineTssPopAndReplace(tss_t* list, Coroutine *newHead)
+///
+/// @brief Pop a coroutine from a thread-specific storage list and replace it.
+///
+/// @param list The Coroutine list to pop from.
+/// @param newHead The new Coroutine to put at the top of the list.
+///
+/// @return Returns a pointer to the previous top of the list on success,
+/// NULL on failure.
+Coroutine* coroutineTssPopAndReplace(tss_t* list, Coroutine *newHead) {
+  Coroutine *coroutine = NULL;
+
+  if (list != NULL) {
+    coroutine = (Coroutine*) tss_get(*list);
+
+    if (newHead != NULL) {
+      if (coroutine->nextInStack == newHead) {
+        // The expected usual case.
+        tss_set(*list, coroutine->nextInStack);
+      } else {
+        Coroutine **prev = &coroutine->nextInStack;
+        Coroutine *cur = coroutine->nextInStack;
+        while ((cur != NULL) && (cur != newHead)) {
+          prev = &cur->nextInStack;
+          cur = cur->nextInStack;
+        }
+        if (cur != NULL) {
+          *prev = cur->nextInStack;
+          cur->nextInStack = coroutine->nextInStack;
+          tss_set(*list, cur);
+        } else {
+          tss_set(*list, coroutine->nextInStack);
+        }
+      }
+    } else {
+      tss_set(*list, coroutine->nextInStack);
+    }
+
+    coroutine->nextInStack = NULL;
   }
 
   return coroutine;
@@ -542,6 +641,23 @@ Coroutine* coroutineTssPop(tss_t* list) {
 
 #define coroutinePopRunning() \
   coroutineGlobalPop(&_globalRunning);
+
+#endif // THREAD_SAFE_COROUTINES coroutinePopRunning
+
+/// @def coroutinePopRunningAndReplace
+///
+/// @brief Pop a specific coroutine from the appropriate running stack.
+#ifdef THREAD_SAFE_COROUTINES
+
+#define coroutinePopRunningAndReplace(newHead) \
+  ((_coroutineThreadingSupportEnabled) \
+  ? coroutineTssPopAndReplace(&_tssRunning, newHead) \
+  : coroutineGlobalPopAndReplace(&_globalRunning, newHead))
+
+#else
+
+#define coroutinePopRunningAndReplace(newHead) \
+  coroutineGlobalPopAndReplace(&_globalRunning, newHead);
 
 #endif // THREAD_SAFE_COROUTINES coroutinePopRunning
 
@@ -675,6 +791,81 @@ void* coroutineResume(Coroutine *targetCoroutine, void *arg) {
   return COROUTINE_ERROR;
 }
 
+/// @fn void* callCoroutineResumeCallback(Coroutine *running, void *arg)
+///
+/// @brief Call the set CoroutineResumeCallback if there is one.
+///
+/// @param running A pointer to the Coroutine currently running.
+/// @param arg The arg pointer that was passed into coroutineResume.
+///
+/// @return Returns the value returned by the callback if there is one, arg
+/// otherwise.
+void* callCoroutineResumeCallback(Coroutine *running, void *arg) {
+  CoroutineResumeCallback coroutineResumeCallback
+    = _globalCoroutineResumeCallback;
+#ifdef THREAD_SAFE_COROUTINES
+  if (_coroutineThreadingSupportEnabled) {
+    // No need to call coroutineSetupThreadMetadata or
+    // coroutineInitializeThreadMetadata this time since we did that above.
+    CoroutineResumeCallback *possibleCallback
+      = (CoroutineResumeCallback*) tss_get(_tssCoroutineResumeCallback);
+    if (possibleCallback != NULL) {
+      coroutineResumeCallback = *possibleCallback;
+    }
+  }
+#endif
+  if (coroutineResumeCallback != NULL) {
+    // coroutineResume is in the critical path of everything, so we only want to
+    // get the state data if there's a function to call.
+    void *stateData = _globalStateData;
+#ifdef THREAD_SAFE_COROUTINES
+    if (_coroutineThreadingSupportEnabled) {
+      stateData = tss_get(_tssStateData);
+    }
+#endif
+    arg = coroutineResumeCallback(stateData, running, arg);
+  }
+
+  return arg;
+}
+
+/// @fn void* callCoroutineYieldCallback(Coroutine *running, void *arg)
+///
+/// @brief Call the set CoroutineYieldCallback if there is one.
+///
+/// @param running A pointer to the Coroutine currently running.
+/// @param arg The void* arg passed into coroutineYield.
+///
+/// @return This function returns no value.
+void* callCoroutineYieldCallback(Coroutine *running, void *arg) {
+  CoroutineYieldCallback coroutineYieldCallback
+    = _globalCoroutineYieldCallback;
+#ifdef THREAD_SAFE_COROUTINES
+  if (_coroutineThreadingSupportEnabled) {
+    // No need to call coroutineSetupThreadMetadata or
+    // coroutineInitializeThreadMetadata this time since we did that above.
+    CoroutineYieldCallback *possibleCallback
+      = (CoroutineYieldCallback*) tss_get(_tssCoroutineYieldCallback);
+    if (possibleCallback != NULL) {
+      coroutineYieldCallback = *possibleCallback;
+    }
+  }
+#endif
+  if (coroutineYieldCallback != NULL) {
+    // coroutineYield is in the critical path of everything, so we only want to
+    // get the state data if there's a function to call.
+    void *stateData = _globalStateData;
+#ifdef THREAD_SAFE_COROUTINES
+    if (_coroutineThreadingSupportEnabled) {
+      stateData = tss_get(_tssStateData);
+    }
+#endif
+    arg = coroutineYieldCallback(stateData, running, arg);
+  }
+
+  return arg;
+}
+
 /// @fn void* coroutineYield_(void *arg, CoroutineState state)
 ///
 /// @brief Transfer control back to the coroutine that resumed this one.  A
@@ -713,30 +904,7 @@ void* coroutineYield_(void *arg, CoroutineState state) {
     return NULL;
   }
 
-  CoroutineYieldCallback coroutineYieldCallback
-    = _globalCoroutineYieldCallback;
-#ifdef THREAD_SAFE_COROUTINES
-  if (_coroutineThreadingSupportEnabled) {
-    // No need to call coroutineSetupThreadMetadata or
-    // coroutineInitializeThreadMetadata this time since we did that above.
-    CoroutineYieldCallback *possibleCallback
-      = (CoroutineYieldCallback*) tss_get(_tssCoroutineYieldCallback);
-    if (possibleCallback != NULL) {
-      coroutineYieldCallback = *possibleCallback;
-    }
-  }
-#endif
-  if (coroutineYieldCallback != NULL) {
-    // coroutineYield is in the critical path of everything, so we only want to
-    // get the state data if there's a function to call.
-    void *stateData = _globalStateData;
-#ifdef THREAD_SAFE_COROUTINES
-    if (_coroutineThreadingSupportEnabled) {
-      stateData = tss_get(_tssStateData);
-    }
-#endif
-    coroutineYieldCallback(stateData, running);
-  }
+  arg = callCoroutineYieldCallback(running, arg);
 
   if (state >= COROUTINE_STATE_NOT_RUNNING) {
     // This is not a state that's settable by the user.
@@ -750,6 +918,64 @@ void* coroutineYield_(void *arg, CoroutineState state) {
   funcData = coroutinePass(currentCoroutine, funcData);
   currentCoroutine->state = COROUTINE_STATE_RUNNING;
   returnValue = funcData.data;
+  returnValue = callCoroutineResumeCallback(running, returnValue);
+
+  return returnValue;
+}
+
+/// @fn void* coroutineYieldTo_(Coroutine *to, void *arg, CoroutineState state)
+///
+/// @brief Transfer control to a specified Coroutine on the running stack.  A
+/// coroutine that is blocked inside coroutineYieldTo() may be resumed by any
+/// other coroutine.
+///
+/// @param to A pointer to the Coroutine to transfer control to.
+/// @param arg Value that will be returned by coroutineResume().
+/// @param state The state to set the coroutine to before control is returned
+///   to the caller.
+///
+/// @note This function is wrapped by a function macro of the same name (minus
+/// the trailing underscore) that automatically casts the state parameter to
+/// a CoroutineState so that integers may be used for the parameter.
+///
+/// @return Returns the value passed into the next call to coroutineResume()
+/// for this coroutine.
+void* coroutineYieldTo_(Coroutine *to, void *arg, CoroutineState state) {
+  void *returnValue = NULL;
+  Coroutine* first = _globalFirst;
+#ifdef THREAD_SAFE_COROUTINES
+  if (_coroutineThreadingSupportEnabled) {
+    call_once(&_threadMetadataSetup, coroutineSetupThreadMetadata);
+    if (!coroutineInitializeThreadMetadata(NULL)) {
+      return NULL;
+    }
+    first = (Coroutine*) tss_get(_tssFirst);
+  }
+#endif
+
+  Coroutine *running = getRunningCoroutine();
+  if (running == first) {
+    // Can't yield from the main coroutine.  Return NULL.
+    return NULL;
+  } else if (running == NULL) {
+    // The running stack hasn't been setup yet.  Bail.
+    return NULL;
+  }
+
+  arg = callCoroutineYieldCallback(running, arg);
+
+  if (state >= COROUTINE_STATE_NOT_RUNNING) {
+    // This is not a state that's settable by the user.
+    state = COROUTINE_STATE_BLOCKED;
+  }
+
+  Coroutine *currentCoroutine = coroutinePopRunningAndReplace(to);
+  CoroutineFuncData funcData;
+  funcData.data = arg;
+  funcData = coroutinePass(currentCoroutine, funcData);
+  currentCoroutine->state = COROUTINE_STATE_RUNNING;
+  returnValue = funcData.data;
+  returnValue = callCoroutineResumeCallback(running, returnValue);
 
   return returnValue;
 }
@@ -833,9 +1059,9 @@ Coroutine* coroutineInit(Coroutine *userCoroutine,
     if (idle != userCoroutine) {
       // Go through the list until we find the couroutine and adjust
       // accordingly.
-      for (Coroutine *cur = idle; cur != NULL; cur = cur->nextInList) {
-        if (cur->nextInList == userCoroutine) {
-          cur->nextInList = userCoroutine->nextInList;
+      for (Coroutine *cur = idle; cur != NULL; cur = cur->nextInStack) {
+        if (cur->nextInStack == userCoroutine) {
+          cur->nextInStack = userCoroutine->nextInStack;
           found = true;
           break;
         }
@@ -1159,20 +1385,25 @@ void coroutineAllocateStack(int stackSize) {
   }
 }
 
-/// @fn int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes)
+/// @fn int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes,
+///   bool keepMessageQueue)
 ///
 /// @brief Kill a coroutine that's currently in progress.
 ///
 /// @param targetCoroutine A pointer to the Coroutine to terminate.
 /// @param mutextes A one-dimensional, NULL-terminated array of mutexes to check
 ///   and unlock if they're locked by the Coroutine.
+/// @param keepMessageQueue Whether or not the message queue should be left
+///   intact at the end of the termination.
 ///
 /// @note A Coroutine can only be blocked on a single Cocondition and the
 /// information for that Cocondition is contained in the Coroutine structure, so
 /// there's no need to pass in Coconditions to check.
 ///
 /// @return Returns coroutineSuccess on success, coroutineError on error.
-int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes) {
+int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes,
+  bool keepMessageQueue
+) {
   if (targetCoroutine == NULL) {
     return coroutineError;
   }
@@ -1191,10 +1422,10 @@ int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes) {
   }
 
   Coroutine* prev = NULL;
-  for (; running != NULL; running = running->nextInList) {
+  for (; running != NULL; running = running->nextInStack) {
     if (running == targetCoroutine) {
       if (prev != NULL) {
-        prev->nextInList = targetCoroutine->nextInList;
+        prev->nextInStack = targetCoroutine->nextInStack;
       } else {
         // The target coroutine is the top of the running stack.
         coroutinePopRunning();
@@ -1272,13 +1503,16 @@ int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes) {
   targetCoroutine->prevToLock = NULL;
   targetCoroutine->blockingComutex = NULL;
 
-  // Destroy any messages that were sent.
-  // NOTE:  This must be done after we've taken care of the signals and mutexes
-  // above because the coroutine may have been waiting on a message, in which
-  // case its message queue mutex and condition will have been in use.
-  comessageQueueDestroy(targetCoroutine);
-  // Re-initialize the queue.
-  comessageQueueCreate(targetCoroutine);
+  if (keepMessageQueue == false) {
+    // Destroy any messages that were sent.
+    // NOTE:  This must be done after we've taken care of the signals and
+    // mutexes above because the coroutine may have been waiting on a message,
+    // in which case its message queue mutex and condition will have been in
+    // use.
+    comessageQueueDestroy(targetCoroutine);
+    // Re-initialize the queue.
+    comessageQueueCreate(targetCoroutine);
+  }
 
   return coroutineSuccess;
 }
@@ -1363,7 +1597,7 @@ bool coroutineThreadingSupportEnabled() {
 
 #endif // THREAD_SAFE_COROUTINES
 
-/// @fn int coroutineConfig(Coroutine *first, CoroutineConfigOptions *options)
+/// @fn int coroutinesConfig(Coroutine *first, CoroutinesConfigOptions *options)
 ///
 /// @brief Configure the global or thread-specific defaults for all coroutines
 /// allocated by the current thread.
@@ -1375,9 +1609,9 @@ bool coroutineThreadingSupportEnabled() {
 ///   NULL.  See the Doxygen for the structure in Coroutines.h for more details.
 ///
 /// @return Returns coroutineSuccess on success, coroutineError on error.
-int coroutineConfig(Coroutine *first, CoroutineConfigOptions *options) {
+int coroutinesConfig(Coroutine *first, CoroutinesConfigOptions *options) {
   if (first == NULL) {
-    fprintf(stderr, "NULL first provided to coroutineConfig.\n");
+    fprintf(stderr, "NULL first provided to coroutinesConfig.\n");
     return coroutineError;
   }
   
@@ -1406,57 +1640,67 @@ int coroutineConfig(Coroutine *first, CoroutineConfigOptions *options) {
 #ifdef THREAD_SAFE_COROUTINES
   if (_coroutineThreadingSupportEnabled) {
     if (tss_get(_tssFirst) != NULL) {
-      // coroutineConfig was already called once.  Everything has already been
+      // coroutinesConfig was already called once.  Everything has already been
       // configured, so we just need to reset _tssFirst and _tssRunning.
       if (first != NULL) {
         int status = tss_set(_tssFirst, first);
         if (status != thrd_success) {
           fprintf(stderr,
-            "Could not set _tssFirst to first in coroutineConfig.\n");
+            "Could not set _tssFirst to first in coroutinesConfig.\n");
           return coroutineError;
         }
         status = tss_set(_tssRunning, first);
         if (status != thrd_success) {
           fprintf(stderr,
-            "Could not set _tssRunning to first in coroutineConfig.\n");
+            "Could not set _tssRunning to first in coroutinesConfig.\n");
           return coroutineError;
         }
       }
     } else if (!coroutineInitializeThreadMetadata(first)) {
       fprintf(stderr,
-        "Could not initialize thread metadata in coroutineConfig.\n");
+        "Could not initialize thread metadata in coroutinesConfig.\n");
         return coroutineError;
     }
 
     tss_set(_tssStackSize, (void*) ((intptr_t) stackSize));
     if (options != NULL) {
       tss_set(_tssStateData, options->stateData);
-      if (options->coroutineYieldCallback != NULL) {
+      if (options->resumeCallback != NULL) {
+        free(tss_get(_tssCoroutineResumeCallback));
+        CoroutineResumeCallback *coroutineResumeCallbackPointer
+          = (CoroutineResumeCallback*) malloc(sizeof(CoroutineResumeCallback));
+        *coroutineResumeCallbackPointer = options->resumeCallback;
+        tss_set(_tssCoroutineResumeCallback, coroutineResumeCallbackPointer);
+      } else {
+        tss_set(_tssCoroutineResumeCallback, NULL);
+      }
+
+      if (options->yieldCallback != NULL) {
         free(tss_get(_tssCoroutineYieldCallback));
         CoroutineYieldCallback *coroutineYieldCallbackPointer
           = (CoroutineYieldCallback*) malloc(sizeof(CoroutineYieldCallback));
-        *coroutineYieldCallbackPointer = options->coroutineYieldCallback;
+        *coroutineYieldCallbackPointer = options->yieldCallback;
         tss_set(_tssCoroutineYieldCallback, coroutineYieldCallbackPointer);
       } else {
         tss_set(_tssCoroutineYieldCallback, NULL);
       }
 
-      if (options->comutexUnlockCallback != NULL) {
+      if (options->unlockCallback != NULL) {
         free(tss_get(_tssComutexUnlockCallback));
         ComutexUnlockCallback *comutexUnlockCallbackPointer
           = (ComutexUnlockCallback*) malloc(sizeof(ComutexUnlockCallback));
-        *comutexUnlockCallbackPointer = options->comutexUnlockCallback;
+        *comutexUnlockCallbackPointer = options->unlockCallback;
         tss_set(_tssComutexUnlockCallback, comutexUnlockCallbackPointer);
       } else {
         tss_set(_tssComutexUnlockCallback, NULL);
       }
 
-      if (options->coconditionSignalCallback != NULL) {
+      if (options->signalCallback != NULL) {
         free(tss_get(_tssCoconditionSignalCallback));
         CoconditionSignalCallback *coconditionSignalCallbackPointer
           = (CoconditionSignalCallback*)
             malloc(sizeof(CoconditionSignalCallback));
-        *coconditionSignalCallbackPointer = options->coconditionSignalCallback;
+        *coconditionSignalCallbackPointer = options->signalCallback;
         tss_set(_tssCoconditionSignalCallback,
           coconditionSignalCallbackPointer);
       } else {
@@ -1496,11 +1740,13 @@ int coroutineConfig(Coroutine *first, CoroutineConfigOptions *options) {
   _globalStackSize = stackSize;
   if (options != NULL) {
     _globalStateData = options->stateData;
-    _globalCoroutineYieldCallback = options->coroutineYieldCallback;
-    _globalComutexUnlockCallback = options->comutexUnlockCallback;
-    _globalCoconditionSignalCallback = options->coconditionSignalCallback;
+    _globalCoroutineResumeCallback = options->resumeCallback;
+    _globalCoroutineYieldCallback = options->yieldCallback;
+    _globalComutexUnlockCallback = options->unlockCallback;
+    _globalCoconditionSignalCallback = options->signalCallback;
   } else {
     _globalStateData = NULL;
+    _globalCoroutineResumeCallback = NULL;
     _globalCoroutineYieldCallback = NULL;
     _globalComutexUnlockCallback = NULL;
     _globalCoconditionSignalCallback = NULL;
