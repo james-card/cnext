@@ -1176,6 +1176,12 @@ int coroutineCreate(Coroutine **coroutine, CoroutineFunction func, void *arg) {
 ///
 /// @return This function returns no value and, in fact, never returns.
 void coroutineMain(void *stack) {
+  uint64_t stackEnd = COROUTINE_STACK_END_VALUE;
+  Coroutine *running = getRunningCoroutine();
+  if (running->stackEnd == NULL) {
+    running->stackEnd = &stackEnd;
+  }
+
   ZEROINIT(Coroutine me);
   me.guard1 = COROUTINE_GUARD_VALUE;
   me.guard2 = COROUTINE_GUARD_VALUE;
@@ -1207,7 +1213,7 @@ void coroutineMain(void *stack) {
   // we're about to set is for ourself.  The call to coroutineAllocateStack here
   // will allocate the next Coroutine on the idle list to be used in the next
   // call to the constructor.
-  Coroutine *running = getRunningCoroutine();
+  running = getRunningCoroutine();
   int stackSize = _globalStackSize;
 #ifdef THREAD_SAFE_COROUTINES
   if (_coroutineThreadingSupportEnabled) {
@@ -1733,6 +1739,8 @@ int coroutinesConfig(Coroutine *first, CoroutinesConfigOptions *options) {
   // to by the first pointer), so by definition, it's running.  Mark it as
   // such.
   first->state = COROUTINE_STATE_RUNNING;
+  first->guard1 = COROUTINE_GUARD_VALUE;
+  first->guard2 = COROUTINE_GUARD_VALUE;
 
   _globalFirst = first;
   _globalRunning = first;
@@ -2439,6 +2447,62 @@ bool coroutineDeadlocked(Coroutine *coroutine) {
       break;
     }
   }
+
+  return returnValue;
+}
+
+/// @fn bool coroutineStackOverflowed(Coroutine *coroutine)
+///
+/// @brief Determine whether or not a coroutine has overflowed its stack.
+///
+/// @param coroutine A pointer to the coroutine to examine.
+///
+/// @return Returns true if stack overflow is detected, false if not.
+bool coroutineStackOverflowed(Coroutine *coroutine) {
+  if ((coroutine == NULL) || (coroutine->stackEnd == NULL)) {
+    return false;
+  }
+
+  return *coroutine->stackEnd != COROUTINE_STACK_END_VALUE;
+}
+
+/// @fn const uint64_t *coroutineStackEnd(Coroutine *coroutine)
+///
+/// @brief Get the address of the end of a coroutine's stack.
+///
+/// @param coroutine A pointer to the coroutine to inquisition.
+///
+/// @return Returns a pointer to the end of the coroutine's stack on success,
+/// NULL on failure.
+const uint64_t *coroutineStackEnd(Coroutine *coroutine) {
+  if (coroutine == NULL) {
+    return NULL;
+  }
+
+  return coroutine->stackEnd;
+}
+
+/// @fn int coroutineSetStackEnd(Coroutine *coroutine, const uint64_t *stackEnd)
+///
+/// @brief Set the end address of a coroutine's stack.  This is to be used when
+/// joining two contiguous coroutines to form one stack.
+///
+/// @param coroutine The pointer of the coroutine whose stack end is to be set.
+/// @param stackEnd The pointer to the end of the stack of an adjoining
+///   coroutine to use as the end of the stack for the provided coroutine.
+///
+/// @return Returns coroutineSuccess on success, coroutineError on failure.
+int coroutineSetStackEnd(Coroutine *coroutine, const uint64_t *stackEnd) {
+  int returnValue = coroutineError;
+
+  if ((coroutine == NULL)
+    || (stackEnd == NULL) || (*stackEnd != COROUTINE_STACK_END_VALUE)
+  ) {
+    return returnValue; // coroutineError
+  }
+
+  coroutine->stackEnd = stackEnd;
+  returnValue = coroutineSuccess;
 
   return returnValue;
 }
