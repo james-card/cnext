@@ -403,6 +403,7 @@ int msg_wait_for_done(msg_t *msg, const struct timespec *ts) {
       // Either we timed out or there's a problem with the lock.  Either way, we
       // don't want to continue and we're going to exit with an error since we
       // never received the done flag.
+      return_value = lock_status;
       return return_value; // msg_error
     }
     
@@ -417,6 +418,7 @@ int msg_wait_for_done(msg_t *msg, const struct timespec *ts) {
       if (wait_status != msg_success) {
         // Either we timed out or there's a problem with the condition.  Again,
         // we don't want to proceed like this.
+        return_value = wait_status;
         break;
       }
     }
@@ -899,7 +901,7 @@ msg_t* msg_q_wait_for_type_(msg_q_t *queue, int64_t *type,
   msg_t **prev_next = &queue->head;
   int lock_status = msg_success;
   int wait_status = msg_success;
-  int search_type = 0;
+  int64_t search_type = 0;
 
   if (queue == NULL) {
     return return_value; // NULL
