@@ -69,12 +69,17 @@ extern "C"
 ///
 /// @brief Indicator of what level of safety to employ with message operations
 /// (process, thread, or coroutine).
-typedef enum msg_safety_t {
+///
+/// @note ISO C forbids forward references to an enum.  That means that if
+/// something else can't directly include this header, it wouldn't be able to
+/// define the msg_safety_t type without also defining all the values, which
+/// we don't want.  Because of that, we will define it to be a uint8_t here and
+/// use define constants for the values.
+typedef uint8_t msg_safety_t;
+#define MSG_CORO_SAFE ((msg_safety_t) 0)
 #ifdef THREAD_SAFE_COROUTINES
-  MSG_THRD_SAFE,
+#define MSG_THRD_SAFE ((msg_safety_t) 1)
 #endif // THREAD_SAFE_COROUTINES
-  MSG_CORO_SAFE,
-} msg_safety_t;
 
 // Forward declarations so that the function pointer typedefs will work.
 typedef struct msg_t msg_t;
@@ -209,17 +214,22 @@ typedef struct msg_q_t {
 /// @enum msg_element_t
 ///
 /// @brief Enumeration of member elements of msg_t that are user-accessible.
-typedef enum msg_element_t {
-  MSG_ELEMENT_TYPE,
-  MSG_ELEMENT_DATA,
-  MSG_ELEMENT_SIZE,
-  MSG_ELEMENT_WAITING,
-  MSG_ELEMENT_DONE,
-  MSG_ELEMENT_IN_USE,
-  MSG_ELEMENT_FROM,
-  MSG_ELEMENT_TO,
-  NUM_MSG_ELEMENTS
-} msg_element_t;
+///
+/// @note ISO C forbids forward references to an enum.  That means that if
+/// something else can't directly include this header, it wouldn't be able to
+/// define the msg_element_t type without also defining all the values, which
+/// we don't want.  Because of that, we will define it to be a uint8_t here and
+/// use define constants for the values.
+typedef uint8_t msg_element_t;
+#define MSG_ELEMENT_TYPE    ((msg_element_t) 0)
+#define MSG_ELEMENT_DATA    ((msg_element_t) 1)
+#define MSG_ELEMENT_SIZE    ((msg_element_t) 2)
+#define MSG_ELEMENT_WAITING ((msg_element_t) 3)
+#define MSG_ELEMENT_DONE    ((msg_element_t) 4)
+#define MSG_ELEMENT_IN_USE  ((msg_element_t) 5)
+#define MSG_ELEMENT_FROM    ((msg_element_t) 6)
+#define MSG_ELEMENT_TO      ((msg_element_t) 7)
+#define NUM_MSG_ELEMENTS    ((msg_element_t) 8)
 
 // Message functions
 msg_t* msg_create(msg_safety_t msg_safety);

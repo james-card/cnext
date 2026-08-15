@@ -866,7 +866,7 @@ void* callCoroutineYieldCallback(Coroutine *running, void *arg) {
   return arg;
 }
 
-/// @fn void* coroutineYield_(void *arg, CoroutineState state)
+/// @fn void* coroutineYield(void *arg, CoroutineState state)
 ///
 /// @brief Transfer control back to the coroutine that resumed this one.  A
 /// coroutine that is blocked inside coroutineYield() may be resumed by any
@@ -882,7 +882,7 @@ void* callCoroutineYieldCallback(Coroutine *running, void *arg) {
 ///
 /// @return Returns the value passed into the next call to coroutineResume()
 /// for this coroutine.
-void* coroutineYield_(void *arg, CoroutineState state) {
+void* coroutineYield(void *arg, CoroutineState state) {
   void *returnValue = NULL;
   Coroutine* first = _globalFirst;
 #ifdef THREAD_SAFE_COROUTINES
@@ -923,7 +923,7 @@ void* coroutineYield_(void *arg, CoroutineState state) {
   return returnValue;
 }
 
-/// @fn void* coroutineYieldTo_(Coroutine *to, void *arg, CoroutineState state)
+/// @fn void* coroutineYieldTo(Coroutine *to, void *arg, CoroutineState state)
 ///
 /// @brief Transfer control to a specified Coroutine on the running stack.  A
 /// coroutine that is blocked inside coroutineYieldTo() may be resumed by any
@@ -940,7 +940,7 @@ void* coroutineYield_(void *arg, CoroutineState state) {
 ///
 /// @return Returns the value passed into the next call to coroutineResume()
 /// for this coroutine.
-void* coroutineYieldTo_(Coroutine *to, void *arg, CoroutineState state) {
+void* coroutineYieldTo(Coroutine *to, void *arg, CoroutineState state) {
   void *returnValue = NULL;
   Coroutine* first = _globalFirst;
 #ifdef THREAD_SAFE_COROUTINES
@@ -1230,6 +1230,21 @@ void coroutineMain(void *stack) {
     // manually pull the data that was provided from coroutinePass since the
     // constructor will be thinking that it just provided us with the function
     // we should call.
+    //
+    // NOTE:  It should absolutely, 100% *NOT* be required to set the value of
+    // the running pointer here.  It was just captured a few lines ago.  If the
+    // pointer was saved to the stack -OR- if it was saved to a register that
+    // setjmp captured, then it would still be the same value here.  One of
+    // those two things *MUST* be true for a compliant C compiler.  However,
+    // NanoOs runs on embedded targets and I have discovered that some of the
+    // compilers for those targets don't comply with the C standard the way they
+    // should.  I've found instances where the pointer was saved to a register
+    // and that register was not preserved in the jmp_buf captured by setjmp,
+    // which means that it's some unknown garbage value by the time we get to
+    // this section of code.  Because of that, we'll grab the value again here.
+    //
+    // JBC 2026-08-15
+    running = getRunningCoroutine();
     funcData = running->passed;
     func = funcData.func;
   }
@@ -1759,6 +1774,60 @@ int coroutinesConfig(Coroutine *first, CoroutinesConfigOptions *options) {
     _globalComutexUnlockCallback = NULL;
     _globalCoconditionSignalCallback = NULL;
   }
+
+  return coroutineSuccess;
+}
+
+/// @fn int coroutinesDeconfig(void)
+///
+/// @brief Deconfigure the global or thread-specific defaults for all coroutines
+/// allocated by the current thread.
+///
+/// @return Returns coroutineSuccess on success, coroutineError on error.
+int coroutinesDeconfig(void) {
+  // Reset the idle and running stacks.
+#ifdef THREAD_SAFE_COROUTINES
+  if (!_coroutineThreadingSupportEnabled) {
+    _globalIdle = NULL;
+    _globalRunning = NULL;
+  } else {
+    call_once(&_threadMetadataSetup, coroutineSetupThreadMetadata);
+    tss_set(_tssIdle, NULL);
+    tss_set(_tssRunning, NULL);
+  }
+#else
+  _globalIdle = NULL;
+  _globalRunning = NULL;
+#endif // THREAD_SAFE_COROUTINES
+
+#ifdef THREAD_SAFE_COROUTINES
+  if (_coroutineThreadingSupportEnabled) {
+    if (!coroutineInitializeThreadMetadata(NULL)) {
+      fprintf(stderr,
+        "Could not initialize thread metadata in coroutinesConfig.\n");
+        return coroutineError;
+    }
+
+    tss_set(_tssStackSize, (void*) ((intptr_t) 0));
+    tss_set(_tssStateData, NULL);
+
+    free(tss_get(_tssCoroutineYieldCallback));
+    tss_set(_tssCoroutineYieldCallback, NULL);
+
+    free(tss_get(_tssComutexUnlockCallback));
+    tss_set(_tssComutexUnlockCallback, NULL);
+
+    free(tss_get(_tssCoconditionSignalCallback));
+    tss_set(_tssCoconditionSignalCallback, NULL);
+  }
+#endif // THREAD_SAFE_COROUTINES
+
+  _globalStackSize = 0;
+  _globalStateData = NULL;
+  _globalCoroutineResumeCallback = NULL;
+  _globalCoroutineYieldCallback = NULL;
+  _globalComutexUnlockCallback = NULL;
+  _globalCoconditionSignalCallback = NULL;
 
   return coroutineSuccess;
 }
@@ -2466,7 +2535,7 @@ bool coroutineStackOverflowed(Coroutine *coroutine) {
   return *coroutine->stackEnd != COROUTINE_STACK_END_VALUE;
 }
 
-/// @fn const uint64_t *coroutineStackEnd(Coroutine *coroutine)
+/// @fn uint64_t* coroutineStackEnd(Coroutine *coroutine)
 ///
 /// @brief Get the address of the end of a coroutine's stack.
 ///
@@ -2474,7 +2543,7 @@ bool coroutineStackOverflowed(Coroutine *coroutine) {
 ///
 /// @return Returns a pointer to the end of the coroutine's stack on success,
 /// NULL on failure.
-const uint64_t *coroutineStackEnd(Coroutine *coroutine) {
+uint64_t* coroutineStackEnd(Coroutine *coroutine) {
   if (coroutine == NULL) {
     return NULL;
   }
@@ -2482,17 +2551,18 @@ const uint64_t *coroutineStackEnd(Coroutine *coroutine) {
   return coroutine->stackEnd;
 }
 
-/// @fn int coroutineSetStackEnd(Coroutine *coroutine, const uint64_t *stackEnd)
+/// @fn int coroutineSetStackEnd(Coroutine *coroutine, uint64_t *stackEnd)
 ///
 /// @brief Set the end address of a coroutine's stack.  This is to be used when
-/// joining two contiguous coroutines to form one stack.
+/// joining two contiguous coroutines to form one stack, or when shrinking a
+/// process's stack.
 ///
 /// @param coroutine The pointer of the coroutine whose stack end is to be set.
 /// @param stackEnd The pointer to the end of the stack of an adjoining
 ///   coroutine to use as the end of the stack for the provided coroutine.
 ///
 /// @return Returns coroutineSuccess on success, coroutineError on failure.
-int coroutineSetStackEnd(Coroutine *coroutine, const uint64_t *stackEnd) {
+int coroutineSetStackEnd(Coroutine *coroutine, uint64_t *stackEnd) {
   int returnValue = coroutineError;
 
   if ((coroutine == NULL)

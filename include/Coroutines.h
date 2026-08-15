@@ -106,14 +106,19 @@ extern "C"
 /// @enum CoroutineState
 ///
 /// @brief States that a Coroutine can be in.
-typedef enum CoroutineState {
-  COROUTINE_STATE_BLOCKED = 0,
-  COROUTINE_STATE_TIMEDWAIT,
-  COROUTINE_STATE_WAIT,
-  COROUTINE_STATE_NOT_RUNNING,
-  COROUTINE_STATE_RUNNING,
-  NUM_COROUTINE_STATES
-} CoroutineState;
+///
+/// @note ISO C forbids forward references to an enum.  That means that if
+/// something else can't directly include this header, it wouldn't be able to
+/// define the CoroutineState type without also defining all the values, which
+/// we don't want.  Because of that, we will define it to be a uint8_t here and
+/// use define constants for the values.
+typedef uint8_t CoroutineState;
+#define COROUTINE_STATE_BLOCKED     ((CoroutineState) 0)
+#define COROUTINE_STATE_TIMEDWAIT   ((CoroutineState) 1)
+#define COROUTINE_STATE_WAIT        ((CoroutineState) 2)
+#define COROUTINE_STATE_NOT_RUNNING ((CoroutineState) 3)
+#define COROUTINE_STATE_RUNNING     ((CoroutineState) 4)
+#define NUM_COROUTINE_STATES        ((CoroutineState) 5)
 
 /// @typedef CoroutineFunction
 ///
@@ -209,7 +214,7 @@ typedef struct Coroutine {
   msg_q_t messageQueue;
   Comutex *blockingComutex;
   Cocondition *blockingCocondition;
-  const uint64_t *stackEnd;
+  uint64_t *stackEnd;
   uint32_t guard2;
 } Coroutine, coro_s, *coro_t;
 
@@ -305,15 +310,13 @@ int64_t coroutineGetNanoseconds(const struct timespec *ts);
 
 // Coroutine function prototypes.  Doxygen inline in source file.
 int coroutinesConfig(Coroutine *first, CoroutinesConfigOptions *options);
+int coroutinesDeconfig(void);
 Coroutine* coroutineInit(Coroutine *userCoroutine,
   CoroutineFunction func, void *arg);
 int coroutineCreate(Coroutine **coroutine, CoroutineFunction func, void *arg);
 void* coroutineResume(Coroutine *targetCoroutine, void *arg);
-void* coroutineYield_(void *arg, CoroutineState state);
-#define coroutineYield(arg, state) coroutineYield_(arg, (CoroutineState) state)
-void* coroutineYieldTo_(Coroutine *to, void *arg, CoroutineState state);
-#define coroutineYieldTo(to, arg, state) \
-  coroutineYieldTo_(to, arg, (CoroutineState) state)
+void* coroutineYield(void *arg, CoroutineState state);
+void* coroutineYieldTo(Coroutine *to, void *arg, CoroutineState state);
 int coroutineSetContext(Coroutine *coroutine, void *context);
 void* coroutineContext(Coroutine *coroutine);
 CoroutineState coroutineState(Coroutine *coroutine);
@@ -326,8 +329,8 @@ int coroutineTerminate(Coroutine *targetCoroutine, Comutex **mutexes,
 Coroutine* getRunningCoroutine(void);
 bool coroutineDeadlocked(Coroutine *coroutine);
 bool coroutineStackOverflowed(Coroutine *coroutine);
-const uint64_t *coroutineStackEnd(Coroutine *coroutine);
-int coroutineSetStackEnd(Coroutine *coroutine, const uint64_t *stackEnd);
+uint64_t* coroutineStackEnd(Coroutine *coroutine);
+int coroutineSetStackEnd(Coroutine *coroutine, uint64_t *stackEnd);
 
 
 // Message queue functions
